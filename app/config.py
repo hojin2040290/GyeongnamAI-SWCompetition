@@ -35,6 +35,10 @@ LAW_OC = os.getenv("LAW_OC", "")
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
 
+# 출퇴근 실수 막기 (법 기준값이 아닌 화면 동작 설정)
+PUNCH_CONFIRM_SEC = int(os.getenv("PUNCH_CONFIRM_SEC", "60"))       # 출근 뒤 이 시간 안에 퇴근하면 한 번 더 확인
+OPEN_RECORD_ALERT_HOURS = int(os.getenv("OPEN_RECORD_ALERT_HOURS", "16"))  # 퇴근 없이 이 시간이 지나면 알림
+
 # 정기 점검 시각 (매일 이 시각에 에이전트가 스스로 시작)
 SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "9"))
 

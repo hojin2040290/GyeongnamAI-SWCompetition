@@ -59,6 +59,9 @@ class WorkRecord(SQLModel, table=True):
     in_lng: Optional[float] = None
     out_lat: Optional[float] = None
     out_lng: Optional[float] = None
+    # 실수로 누른 기록: 시각은 고치거나 지우지 않고 표시만 한다 (급여 계산과 점검에서 제외)
+    void_at: Optional[datetime] = None
+    void_reason: str = ""
 
 
 class Evidence(SQLModel, table=True):

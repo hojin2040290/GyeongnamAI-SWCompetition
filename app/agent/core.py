@@ -130,6 +130,19 @@ def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "
     return st
 
 
+def run_open_check(session: Session, user_id: int, job_id: int, limit_hours: int, trigger: str = "schedule") -> dict:
+    """퇴근을 잊은 기록 찾기: 출근한 지 오래됐는데 퇴근이 없으면 알린다."""
+    r = Run(session, user_id, job_id, "open_check", trigger)
+    rec = r.call("find_open_record")
+    if not rec or rec["hours"] < limit_hours:
+        return r.done({"open": rec}, "오래된 출근 기록 없음")
+    r.log("판단", f"출근 뒤 {rec['hours']}시간 동안 퇴근 기록 없음")
+    day = rec["clock_in"][:16].replace("T", " ")
+    r.call("notify", "퇴근을 누르지 않은 것 같아요",
+           f"{day} 출근 뒤 퇴근 기록이 없어요. 일을 마쳤다면 퇴근을 누르고, 잘못 누른 출근이면 홈에서 실수로 표시해 주세요.")
+    return r.done({"open": rec}, "퇴근 잊음 알림")
+
+
 # ---------- 상담 ----------
 def run_report(session: Session, user_id: int, job_id: int) -> dict:
     r = Run(session, user_id, job_id, "report")
