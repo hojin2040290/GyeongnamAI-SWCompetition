@@ -25,6 +25,15 @@ def fake_post(payload: dict) -> dict:
         assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
         text = content[0]["text"]
         answer = "```json\n" + json.dumps(PAYSLIP if "급여명세서" in text else CONTRACT, ensure_ascii=False) + "\n```"
+    elif "보복 금지 안내" in msgs[0]["content"]:
+        answer = json.dumps({"message": "AI가 쓴 안내 문구", "laws": ["근로기준법 제104조 제2항"]}, ensure_ascii=False)
+    elif "보복성 게시물" in msgs[0]["content"]:  # 첫 줄은 사업장 정보, 다음 줄부터 게시물
+        posts = [json.loads(x) for x in content.splitlines()[1:]]
+        answer = json.dumps([{"i": p["i"], "status": "suspect" if "신고" in p["제목"] else "ok",
+                              "reason": "테스트 판별"} for p in posts], ensure_ascii=False)
+    elif "사건 요약" in msgs[0]["content"]:
+        answer = json.dumps({"summary": "AI가 쓴 사건 요약", "points": ["물어볼 점"],
+                             "basis": ["근로기준법 제70조"]}, ensure_ascii=False)
     else:  # 조항 판단: 모든 항목을 정상이라고 답해 검증 장치가 되돌리는지 본다
         n = len(content.splitlines())
         answer = json.dumps([{"i": i, "status": "ok", "reason": "테스트"} for i in range(n)])
@@ -101,6 +110,57 @@ def test_model_error_keeps_pending(c, monkeypatch):
     monkeypatch.setattr(client, "_post", boom)
     items = c.post(f"/api/jobs/{job_id(c)}/check").json()["items"]
     assert {i["status"] for i in items} <= {"pending", "warn"} and items[0].get("ai_error")
+
+
+def test_guard_without_model_waits(c):
+    jid = job_id(c)
+    g = c.post(f"/api/jobs/{jid}/guard", json={"reported": True}).json()
+    assert g["message_source"] == "waiting" and "제104조" in g["message"]
+    assert any("AI 응답 대기 중" in t["detail"] for t in g["trace"])
+    p = c.post(f"/api/jobs/{jid}/guard/posts", json={"url": "https://example.com/wait", "title": "신고한 알바 이야기"}).json()
+    assert p["classify"]["judged"] == 0 and "AI 응답 대기 중" in p["classify"]["reason"]
+    post = [x for x in c.get(f"/api/jobs/{jid}/guard").json()["posts"] if x["url"].endswith("/wait")][0]
+    assert post["status"] == "pending" and post["ai_reason"] == ""
+    html = c.get(c.post(f"/api/jobs/{jid}/report").json()["url"]).text
+    assert "사건 요약 (AI 작성)" in html and "AI 응답 대기 중" in html
+    c.post(f"/api/jobs/{jid}/guard", json={"reported": False})  # 다른 테스트의 매일 점검 수에 끼지 않도록
+
+
+def test_guard_with_model(c, ai):
+    jid = job_id(c)
+    g = c.post(f"/api/jobs/{jid}/guard", json={"reported": True}).json()
+    assert g["message_source"] == "ai" and g["message"] == "AI가 쓴 안내 문구"
+    c.put(f"/api/jobs/{jid}/guard/message", json={"message": "직접 고침"})
+    assert c.get(f"/api/jobs/{jid}/guard").json()["message_source"] == "custom"
+    g = c.put(f"/api/jobs/{jid}/guard/message", json={"message": ""}).json()
+    assert g["message_source"] == "ai" and g["message"] == "AI가 쓴 안내 문구"  # 되돌리면 AI 문구로
+    p = c.post(f"/api/jobs/{jid}/guard/posts", json={"url": "https://example.com/ok", "title": "맛집 후기"}).json()
+    assert p["classify"]["judged"] >= 1  # 전에 대기 중이던 게시물도 함께 판별
+    posts = {x["url"]: x for x in c.get(f"/api/jobs/{jid}/guard").json()["posts"]}
+    assert posts["https://example.com/wait"]["status"] == "suspect"
+    assert posts["https://example.com/ok"]["status"] == "ok" and posts["https://example.com/ok"]["ai_reason"] == "테스트 판별"
+    notes = c.get("/api/notifications").json()
+    assert any("보복이 의심되는" in n["title"] for n in notes)
+    c.post(f"/api/jobs/{jid}/guard", json={"reported": False})
+
+
+def test_report_summary_by_model(c, ai):
+    r = c.post(f"/api/jobs/{job_id(c)}/report").json()
+    assert r["summary_ai"] is True
+    html = c.get(r["url"]).text
+    assert "AI가 쓴 사건 요약" in html and "물어볼 점" in html and "근로기준법 제70조" in html
+
+
+def test_model_error_falls_back_to_waiting(c, monkeypatch):
+    monkeypatch.setattr(client, "LLM_ENABLED", True)
+    monkeypatch.setattr(client, "LLM_MODEL", "fake-vl")
+
+    def boom(payload):
+        raise client.LLMError("AI 모델에 연결하지 못했어요 (ConnectError)")
+    monkeypatch.setattr(client, "_post", boom)
+    r = c.post(f"/api/jobs/{job_id(c)}/report").json()
+    assert r["summary_ai"] is False
+    assert "AI 응답 대기 중" in c.get(r["url"]).text
 
 
 def test_parse_json_variants():

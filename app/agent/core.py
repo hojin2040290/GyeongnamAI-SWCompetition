@@ -160,9 +160,11 @@ def run_report(session: Session, user_id: int, job_id: int) -> dict:
     r.log("입력", "상담 사전 자료 만들기")
     counsel = r.call("counsel_for_age")
     r.log("판단", "만 나이에 맞는 상담 기관: " + ", ".join(c["name"] for c in counsel))
-    rep = r.call("build_report")
+    summary = r.call("summarize_case")
+    r.log("판단", "AI가 사건 요약 작성" if summary["ai"] else summary["reason"])
+    rep = r.call("build_report", summary)
     r.call("notify", "상담 사전 자료를 만들었어요", "자료 탭에서 다시 열어 볼 수 있어요. 상담 기관에 낼 때 함께 보여 주세요.")
-    return r.done({**rep, "counsel": counsel}, "상담 사전 자료 작성 완료")
+    return r.done({**rep, "counsel": counsel, "summary_ai": summary["ai"]}, "상담 사전 자료 작성 완료")
 
 
 # ---------- 신고 후 보호 ----------
@@ -172,21 +174,31 @@ def run_guard_toggle(session: Session, user_id: int, job_id: int, on: bool) -> d
     r.call("set_reported", on)
     if not on:
         return r.done({"message": ""}, "보복 대응을 멈췄어요")
+    wrote = r.call("write_warning_message")
+    r.log("판단", "AI가 불리한 처우 금지 조항을 근거로 안내 문구 작성" if wrote["ai"] else wrote["reason"])
     msg = r.call("warning_message")
-    r.log("판단", "신고를 이유로 한 불리한 처우 금지 조항을 담은 안내 문구 작성")
     r.call("notify", "보복 대응을 시작했어요", "사업주에게 보낼 안내 문구를 준비했고, 매일 공개 게시물을 확인해요.")
     return r.done({"message": msg}, "안내 문구 준비, 매일 게시물 확인 예약")
 
 
 def run_guard_search(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "guard_search", trigger)
+    if not r.tools["get_job"]().guard_ai_message:  # 전에 AI 응답이 없었다면 안내 문구를 다시 맡긴다
+        r.call("write_warning_message")
     res = r.call("search_posts")
+    judged = r.call("classify_posts")  # 검색을 건너뛰어도 판별 대기 게시물은 판별한다
+    _notify_posts(r, res.get("added", 0), judged)
     if res.get("skipped"):
-        return r.done(res, res["reason"])
-    judged = r.call("classify_posts")
-    if res["added"]:
-        r.call("notify", "새 공개 게시물을 찾았어요", f"게시물 {res['added']}건을 보존했어요. 보호 탭에서 확인해 보세요.")
+        return r.done({**res, "classify": judged}, res["reason"])
     return r.done({**res, "classify": judged}, f"새 게시물 {res['added']}건")
+
+
+def _notify_posts(r: Run, added: int, judged: dict) -> None:
+    if judged.get("suspect"):
+        r.call("notify", "보복이 의심되는 게시물이 있어요",
+               f"AI가 게시물 {judged['suspect']}건을 보복 의심으로 판별했어요. 보호 탭에서 확인하고 상담 사전 자료를 만들어 보세요.")
+    elif added:
+        r.call("notify", "새 공개 게시물을 찾았어요", f"게시물 {added}건을 보존했어요. 보호 탭에서 확인해 보세요.")
 
 
 def run_guard_preserve(session: Session, user_id: int, job_id: int, url: str, title: str = "") -> dict:
@@ -194,4 +206,5 @@ def run_guard_preserve(session: Session, user_id: int, job_id: int, url: str, ti
     r.log("입력", f"게시물 주소 {url[:120]}")
     res = r.call("preserve_post", url, title)
     judged = r.call("classify_posts")
+    _notify_posts(r, 0, judged)
     return r.done({**res, "classify": judged}, "주소, 확인 시각" + (", 화면 캡처" if res["captured"] else "") + " 보존")

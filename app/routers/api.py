@@ -574,7 +574,7 @@ class ReportedIn(BaseModel):
 
 def post_out(p: GuardPost) -> dict:
     return {"id": p.id, "url": p.url, "title": p.title, "source": p.source, "status": p.status,
-            "evidence_id": p.evidence_id, "found_at": p.found_at.isoformat()}
+            "ai_reason": p.ai_reason, "evidence_id": p.evidence_id, "found_at": p.found_at.isoformat()}
 
 
 @router.get("/jobs/{job_id}/guard")
@@ -582,7 +582,7 @@ def guard_state(job_id: int, u: User = Depends(current_user), s: Session = Depen
     job = own_job(s, u, job_id)
     posts = s.exec(select(GuardPost).where(GuardPost.job_id == job_id).order_by(GuardPost.id.desc())).all()
     return {"reported": job.reported, "message": guard.current_message(job) if job.reported else "",
-            "custom_message": bool(job.guard_message.strip()),
+            "custom_message": bool(job.guard_message.strip()), "message_source": guard.message_source(job),
             "keywords": keywords_of(job), "queries": guard.search_queries(job, keywords_of(job)),
             "posts": [post_out(p) for p in posts]}
 
@@ -600,7 +600,7 @@ class MessageIn(BaseModel):
 
 @router.put("/jobs/{job_id}/guard/message")
 def set_message(job_id: int, data: MessageIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
-    """고친 안내 문구 저장. 빈 문구를 보내면 기본 문구로 돌아간다."""
+    """고친 안내 문구 저장. 빈 문구를 보내면 AI가 쓴 문구(없으면 기본 문구)로 돌아간다."""
     job = own_job(s, u, job_id)
     job.guard_message = data.message.strip()[:2000]
     s.add(job)
