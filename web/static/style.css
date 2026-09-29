@@ -338,3 +338,15 @@ em.hint.bad{color:var(--bad)}
 .ref:first-of-type{border-top:0}
 .ref-head{font-size:13.5px}
 .ref-sum{margin:4px 0 0;font-size:13px;color:var(--ink-soft);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+
+/* 사건 진행 상황과 에이전트 조언 */
+.case-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.case-steps li{background:#f2f4f8;border-radius:10px;padding:8px;min-width:0}
+.case-steps li strong{display:block;font-size:13.5px;color:var(--ink-soft)}
+.case-steps li span{display:block;font-size:11.5px;color:var(--ink-soft);line-height:1.35;margin-top:2px;word-break:keep-all}
+.case-steps li.done{background:var(--ok-bg)}
+.case-steps li.done strong{color:var(--ok)}
+.advice{margin-top:12px;border-left:3px solid var(--blue);padding:2px 0 2px 12px}
+.advice-head{font-size:13px;font-weight:700;color:var(--blue)}
+.advice p{margin:4px 0 8px}
+.case-card .ai-note{margin-bottom:0}

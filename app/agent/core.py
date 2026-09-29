@@ -5,12 +5,14 @@ AI가 도구를 고르고 결과를 보며 다음 행동을 정한다 (app/agent
 AI가 없거나 응답하지 않으면 정해 둔 순서로 사실만 정리하고, 판단할 부분은 'AI 응답 대기 중'으로 둔다.
 모든 흐름은 입력, AI 판단, 도구 실행, 결과를 동작 기록(AgentLog)에 남기고 화면에도 돌려준다.
 """
+import dataclasses
 import json
 import uuid
 from datetime import date
 
 from sqlmodel import Session
 
+from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
 from app.agent.tools import agent_tools, for_ai, make_tools
 from app.calc.timeutil import now_kst, today_kst
@@ -35,7 +37,7 @@ class Run:
         self.s, self.user_id, self.job_id, self.event = session, user_id, job_id, event
         self.run_id = uuid.uuid4().hex[:8]
         self.tools = make_tools(session, user_id, job_id)
-        self.state: dict = {}  # AI가 도구로 만든 결과 (검토 항목, 급여 비교, 저장한 문구 등)
+        self.state: dict = {"event": event, "run_id": self.run_id}  # AI가 도구로 만든 결과 (검토 항목, 급여 비교 등)
         self.steps = 0
         self.ai_used = False
         self.ai_tried = False  # AI에게 맡기려 했는지 (결과 기록에 AI 몫이 빠졌는지 적기 위해)
@@ -59,6 +61,10 @@ class Run:
         tools = agent_tools(self.s, self.user_id, self.job_id, self.state)
         for t in extra or []:
             tools[t.name] = t
+        if self.job_id is not None:  # 사건 기억과 진행 상황을 넘기고, 기억 남기기와 조언을 쓸 수 있게 한다
+            context = {**context, "사건 진행 상황": case.progress(self.s, self.tools["get_job"]()),
+                       "사건 기억": case.memories(self.s, self.job_id) or "아직 없음"}
+            goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice"])
         out = run_agent(self, goal, tools, context)
         self.ai_tried, self.ai_used = True, out is not None
         if not self.ai_used:
