@@ -214,6 +214,7 @@ function fillCard(card, j){
   const n=card.node, q=s=>n.querySelector(s);
   setSeg(n,'status',j.status); q('.f-quit').value=j.quit_date||'';
   q('.f-name').value=j.name; q('.f-name').dispatchEvent(new Event('input'));
+  q('.f-bizno').value=j.biz_no||'';
   q('.f-type').value=j.industry||''; q('.f-work').value=j.work_desc||''; q('.f-wage').value=j.wage??'';
   q('.f-start').value=j.start_date||''; q('.f-end').value=j.end_date||'';
   q('.f-noend').checked=!!j.no_end; q('.f-end').disabled=!!j.no_end;
@@ -263,6 +264,19 @@ function checkMinor(card){
     ? `생년월일 기준 지금 만 ${now}세예요. 만 18세 미만은 이 서류가 필요해서 함께 확인해요.`
     : `일을 시작한 날 만 ${atStart}세였어요. 만 18세 전 근무 기간에 필요한 서류라 함께 확인해요.`;
 }
+// 사업자등록번호: 숫자만 받아 000-00-00000으로 보여 주고, 마지막 검증 번호가 맞는지 바로 알려 준다
+const BIZ_W=[1,3,7,1,3,7,1,3,5];
+function bizValid(n){ if(n.length!==10) return false; const d=[...n].map(Number);
+  const t=BIZ_W.reduce((a,w,i)=>a+d[i]*w,0)+Math.floor(d[8]*5/10); return (10-t%10)%10===d[9]; }
+function bizFormat(v){ const n=v.replace(/\D/g,'').slice(0,10); return n.length>5?`${n.slice(0,3)}-${n.slice(3,5)}-${n.slice(5)}`:(n.length>3?`${n.slice(0,3)}-${n.slice(3)}`:n); }
+const BIZ_HINT='계약서, 급여명세서, 가게 영수증에 적혀 있어요. 모르면 비워 두세요.';
+document.addEventListener('input',e=>{
+  if(!e.target.matches('.f-bizno')) return;
+  const el=e.target; el.value=bizFormat(el.value);
+  const n=el.value.replace(/\D/g,''), hint=el.parentElement.querySelector('.bizno-hint');
+  const bad=n.length===10&&!bizValid(n);
+  hint.textContent=bad?'번호가 맞지 않아요. 계약서나 영수증에서 다시 확인해 주세요.':BIZ_HINT; hint.classList.toggle('bad',bad);
+});
 function yn(v){ return v==='yes'?true:(v==='no'?false:null); }
 function collect(card){
   const n=card.node, q=s=>n.querySelector(s);
@@ -276,6 +290,7 @@ function collect(card){
     schedule:card.schedule, size:segVal(n,'size')||'unknown', pay_cycle:segVal(n,'paytype')||'',
     payday:payday?Number(payday):null, pay_method:segVal(n,'paymethod')||'', deduction:segVal(n,'deduct')||'',
     consent:segVal(n,'consent')||'', address:q('.f-addr').value.trim(), owner:q('.f-owner').value.trim(),
+    biz_no:q('.f-bizno').value.trim(),
   };
 }
 $('#addJobBtn').onclick=()=>{ const c=addCard(); c.node.scrollIntoView({block:'start'}); };
@@ -362,7 +377,8 @@ $('#seekFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
   try{ await api('POST','/api/evidence',fd,true); toast('공고 사진을 원본으로 보관했어요'); }catch(err){ toast(err.message); } e.target.value=''; };
 function seekInput(){ const n=seek.node, w=n.querySelector('.f-wage').value;
   return { name:n.querySelector('.f-name').value.trim(), industry:n.querySelector('.f-type').value, work_desc:n.querySelector('.f-work').value.trim(),
-    wage:w?Number(w):null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule }; }
+    wage:w?Number(w):null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule,
+    biz_no:n.querySelector('.f-bizno').value.trim() }; }
 function articleHTML(a){
   if(!a) return '';
   if(!a.built) return `<p class="basis"><span class="chip muted">법 기준표 미구축</span> 법제처 API로 조문을 불러오면 원문이 붙어요.</p>`;
@@ -391,6 +407,7 @@ $('#seekRun').onclick=async()=>{
   }catch(e){ $('#seekErr').textContent=e.message; }
 };
 function seekReset(){ const n=seek.node; n.querySelectorAll('input').forEach(i=>i.value=''); n.querySelector('.f-type').value='';
+  const bh=n.querySelector('.bizno-hint'); bh.textContent=BIZ_HINT; bh.classList.remove('bad');
   n.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed','false')); seek.schedule={};
   n.querySelector('.sched-sum').textContent='요일과 시간을 선택해 주세요'; n.querySelector('.sched-go').textContent='선택';
   seekBackToForm(); }
@@ -402,6 +419,7 @@ $('#seekToWork').onclick=()=>{
   const d=seekInput(); state.adding=state.inApp; state.seekFromApp=false;
   clearCards(); prepJobForm(state.inApp?'add':false); show('ob2'); const c=addCard(), n=c.node;
   n.querySelector('.f-name').value=d.name; n.querySelector('.f-name').dispatchEvent(new Event('input'));
+  n.querySelector('.f-bizno').value=d.biz_no;
   n.querySelector('.f-type').value=d.industry; n.querySelector('.f-work').value=d.work_desc; n.querySelector('.f-wage').value=d.wage??'';
   c.schedule=JSON.parse(JSON.stringify(d.schedule));
   if(DAY_KEYS.some(k=>c.schedule[k])){ n.querySelector('.sched-sum').textContent=schedSummary(c.schedule); n.querySelector('.sched-go').textContent='수정'; }

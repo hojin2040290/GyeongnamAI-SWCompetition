@@ -12,6 +12,7 @@ from app import guard
 from app.agent import core
 from app.agent.tools import keywords_of, make_tools
 from app.auth import check_password, current_user, hash_password
+from app.calc import bizno
 from app.calc.age import age_on
 from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
@@ -137,6 +138,7 @@ class JobIn(BaseModel):
     consent: str = ""
     address: str = ""
     owner: str = ""
+    biz_no: str = ""
 
 
 def own_job(s: Session, u: User, job_id: int) -> Job:
@@ -166,6 +168,10 @@ def apply_job(job: Job, data: JobIn) -> None:
         else:
             setattr(job, k, v)
     job.name = name
+    try:
+        job.biz_no = bizno.normalize(data.biz_no)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     if job.status != "quit":
         job.quit_date = None
 
@@ -441,10 +447,15 @@ class SeekIn(BaseModel):
     wage: Optional[int] = None
     probation: str = "unknown"
     schedule: dict = {}
+    biz_no: str = ""
 
 
 @router.post("/seek/check")
 def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    try:
+        data.biz_no = bizno.normalize(data.biz_no)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     return core.run_seek_check(s, u.id, data.model_dump())
 
 

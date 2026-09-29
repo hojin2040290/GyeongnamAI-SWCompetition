@@ -195,3 +195,14 @@ def test_notifications_per_job_and_delete(c):
     assert c.delete(f"/api/notifications?job_id={a}").json()["deleted"] >= 1
     assert c.get(f"/api/notifications?job_id={a}").json() == []
     assert len(c.get(f"/api/notifications?job_id={b}").json()) == b_before  # 다른 곳 알림은 남음
+
+
+def test_business_number_saved_and_checked(c):
+    jid = c.post("/api/jobs", json={**JOB, "name": "가상번호점", "biz_no": "1234567891"}).json()["id"]
+    assert c.get("/api/jobs").json()[-1]["biz_no"] == "123-45-67891"
+    r = c.put(f"/api/jobs/{jid}", json={**JOB, "name": "가상번호점", "biz_no": "123-45-67890"})
+    assert r.status_code == 400 and "맞지 않아요" in r.json()["detail"]
+    assert c.put(f"/api/jobs/{jid}", json={**JOB, "name": "가상번호점", "biz_no": ""}).json()["biz_no"] == ""
+    assert c.post("/api/seek/check", json={"biz_no": "123-45"}).status_code == 400
+    html = c.get(c.post(f"/api/jobs/{jid}/report").json()["url"]).text
+    assert "사업자등록번호" in html

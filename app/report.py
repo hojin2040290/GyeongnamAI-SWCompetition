@@ -35,6 +35,7 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     rows.append("<h2>1. 기본 정보</h2><table>")
     rows.append(f"<tr><th>만 나이</th><td>{age_on(user.birth_date, today_kst())}세</td></tr>")
     rows.append(f"<tr><th>사업장</th><td>{e(job.name)}</td></tr><tr><th>주소</th><td>{e(job.address or '미입력')}</td></tr>")
+    rows.append(f"<tr><th>사업자등록번호</th><td>{e(job.biz_no or '미입력')}</td></tr>")
     rows.append(f"<tr><th>사업주</th><td>{e(job.owner or '미입력')}</td></tr><tr><th>업종, 하는 일</th><td>{e(job.industry)} / {e(job.work_desc)}</td></tr>")
     rows.append(f"<tr><th>근무 기간</th><td>{job.start_date or '미입력'} ~ {job.quit_date or job.end_date or '현재'}</td></tr>")
     rows.append(f"<tr><th>약속한 시급</th><td>{f'{job.wage:,}원' if job.wage else '미입력'}</td></tr>")
