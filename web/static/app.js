@@ -396,7 +396,7 @@ function itemHTML(it){
   const extra=[]; if(it.basis?.length) extra.push(`근거로 쓴 사실: ${esc(it.basis.join(', '))}`);
   if(it.needed?.length) extra.push(`필요한 정보: ${esc(it.needed.join(', '))}`);
   if(it.ai_reason) extra.push(`AI 판단 근거: ${esc(it.ai_reason)}`);
-  else if(it.status==='pending') extra.push(it.ai_error?`AI 판단 실패: ${esc(it.ai_error)}`:'법 조항 해당 여부는 AI가 판단해요. 지금은 AI 연결 전이라 확인 중이에요.');
+  else if(it.status==='pending') extra.push(it.ai_error?`<span class="wait-note">AI 응답 대기 중 (${esc(it.ai_error)})</span>`:'<span class="wait-note">AI 응답 대기 중</span> 법 조항 해당 여부는 AI가 판단해요.');
   const src=it.source==='records'?'<span class="chip">근무 기록</span>':'';
   return `<div class="result ${it.status}"><div class="head"><span class="law">${esc(it.law)} ${src}</span><span class="tag ${it.status}">${LABEL[it.status]}</span></div>
     <p>${esc(it.text)}</p>${extra.map(x=>`<p class="basis">${x}</p>`).join('')}${articleHTML(it.article)}${refsHTML(it.refs)}</div>`;
@@ -759,7 +759,7 @@ function renderGuard(g){
 }
 const MSG_SOURCE={ai:'AI가 이번 상황에 맞게 작성한 문구예요. 고쳐 써도 돼요.',
   waiting:'AI 응답 대기 중이라 기본 문구를 보여 드려요. AI가 응답하면 상황에 맞는 문구로 바뀌어요.',custom:'직접 고친 문구예요.'};
-function msgSource(src){ const n=$('#msgSource'); n.textContent=MSG_SOURCE[src]||''; }
+function msgSource(src){ const n=$('#msgSource'); n.textContent=MSG_SOURCE[src]||''; n.classList.toggle('wait',src==='waiting'); }
 $('#reported').onchange=async e=>{ try{ const g=await api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked}); renderGuard(g); $('#guardTrace').innerHTML=traceHTML(g.trace); }catch(err){ toast(err.message); } };
 async function saveKeywords(list){ try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/keywords`,{keywords:list})); }catch(e){ toast(e.message); } }
 $('#kwAdd').onclick=()=>{ const v=$('#kwInput').value.trim(); if(!v){ toast('검색어를 넣어 주세요'); return; }
