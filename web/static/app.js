@@ -4,7 +4,7 @@ const $$ = s => [...document.querySelectorAll(s)];
 const DAY_KEYS = ['월','화','수','목','금','토','일'];
 const TIMES = []; for (let h=0; h<24; h++) { TIMES.push(pad(h)+':00'); TIMES.push(pad(h)+':30'); }
 const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
-const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심'};
+const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심', pending:'확인 중'};  // 확인 중: AI 판단 전
 const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
   report:'상담 자료', guard_on:'보복 대응 시작', guard_off:'보복 대응 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존'};
 const KIND = {contract:'근로계약서', payslip:'급여명세서', message:'사업주 메시지', schedule:'근무표', deposit:'입금 내역', post:'게시물 화면', notice:'채용공고', other:'기타'};
@@ -380,13 +380,15 @@ function seekInput(){ const n=seek.node, w=n.querySelector('.f-wage').value;
     wage:w?Number(w):null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule,
     biz_no:n.querySelector('.f-bizno').value.trim() }; }
 function articleHTML(a){
-  if(!a) return '';
+  if(!a || a.na) return '';
   if(!a.built) return `<p class="basis"><span class="chip muted">법 기준표 미구축</span> 법제처 API로 조문을 불러오면 원문이 붙어요.</p>`;
   return `<details class="law-text"><summary>조문 원문 보기${a.title?` (${esc(a.title)})`:''}</summary><pre>${esc(a.text)}</pre></details>`;
 }
 function itemHTML(it){
   const extra=[]; if(it.basis?.length) extra.push(`근거로 쓴 사실: ${esc(it.basis.join(', '))}`);
   if(it.needed?.length) extra.push(`필요한 정보: ${esc(it.needed.join(', '))}`);
+  if(it.ai_reason) extra.push(`AI 판단 근거: ${esc(it.ai_reason)}`);
+  else if(it.status==='pending') extra.push(it.ai_error?`AI 판단 실패: ${esc(it.ai_error)}`:'법 조항 해당 여부는 AI가 판단해요. 지금은 AI 연결 전이라 확인 중이에요.');
   const src=it.source==='records'?'<span class="chip">근무 기록</span>':'';
   return `<div class="result ${it.status}"><div class="head"><span class="law">${esc(it.law)} ${src}</span><span class="tag ${it.status}">${LABEL[it.status]}</span></div>
     <p>${esc(it.text)}</p>${extra.map(x=>`<p class="basis">${x}</p>`).join('')}${articleHTML(it.article)}</div>`;
@@ -644,10 +646,23 @@ async function loadPayslips(){
 }
 $('#payMonth').onchange=()=>{ $('#payTrace').innerHTML=''; loadPay().catch(e=>toast(e.message)); };
 $('#payRun').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/agent/payday?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); toast('에이전트가 급여를 점검했어요'); }catch(e){ toast(e.message); } };
+// 명세서 사진: 고르면 바로 원본 저장 후 AI가 읽어 금액과 달을 채운다. 사용자가 확인하고 저장한다.
+let payslipEv=null;
+$('#payFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f);
+  payslipEv=null; $('#payOcr').textContent='명세서를 저장하고 읽는 중이에요…';
+  try{ const r=await api('POST',`/api/jobs/${state.current}/payslip/read`,fd,true); payslipEv=r.evidence_id;
+    if(r.ai){
+      if(r.month) $('#payMonth').value=r.month; if(r.net_pay!=null) $('#payAmount').value=r.net_pay;
+      const parts=[r.month&&`${r.month}분`, r.net_pay!=null&&`실지급액 ${won(r.net_pay)}`, r.base_pay!=null&&`기본급 ${won(r.base_pay)}`,
+        r.weekly_holiday_pay!=null&&`주휴수당 ${won(r.weekly_holiday_pay)}`, r.deduction!=null&&`공제 ${won(r.deduction)}`].filter(Boolean);
+      $('#payOcr').textContent=`AI가 읽은 내용: ${parts.join(', ')||'읽은 항목이 없어요'}. 명세서와 같은지 확인하고 저장해 주세요.`;
+    } else $('#payOcr').textContent=`명세서 원본을 저장했어요. ${r.reason}`;
+  }catch(err){ $('#payOcr').textContent=''; toast(err.message); } };
 $('#paySave').onclick=async()=>{
   const amt=$('#payAmount').value; if(!amt){ toast('받은 금액을 입력해 주세요'); return; }
-  const fd=new FormData(); fd.append('month',$('#payMonth').value); fd.append('amount',amt); const f=$('#payFile').files[0]; if(f) fd.append('file',f);
-  try{ const r=await api('POST',`/api/jobs/${state.current}/payslip`,fd,true); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); $('#payAmount').value=''; $('#payFile').value=''; await loadPayslips(); toast('저장하고 비교했어요'); }catch(e){ toast(e.message); }
+  const fd=new FormData(); fd.append('month',$('#payMonth').value); fd.append('amount',amt); if(payslipEv) fd.append('evidence_id',payslipEv);
+  try{ const r=await api('POST',`/api/jobs/${state.current}/payslip`,fd,true); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace);
+    $('#payAmount').value=''; $('#payFile').value=''; $('#payOcr').textContent=''; payslipEv=null; await loadPayslips(); toast('저장하고 비교했어요'); }catch(e){ toast(e.message); }
 };
 
 // 점검
@@ -666,13 +681,25 @@ async function loadCheck(){
 function renderCheck(items){
   if(!items){ $('#checkSummary').innerHTML=''; $('#checkItems').innerHTML='<p class="sub">아직 점검하지 않았어요. 계약서 내용을 확인하고 점검해 보세요.</p>'; return; }
   const c=s=>items.filter(i=>i.status===s).length;
-  $('#checkSummary').innerHTML=`<div class="ok"><strong>${c('ok')}</strong>정상</div><div class="warn"><strong>${c('warn')}</strong>확인 필요</div><div class="bad"><strong>${c('bad')}</strong>위반 의심</div>`;
-  const order={bad:0,warn:1,ok:2}; $('#checkItems').innerHTML=[...items].sort((a,b)=>order[a.status]-order[b.status]).map(itemHTML).join('');
+  // AI 판단 전에는 확인 중과 확인 필요만, AI가 판단하면 정상과 위반 의심도 보여 준다
+  const keys=['bad','warn','pending','ok'].filter(k=>c(k));
+  $('#checkSummary').innerHTML=keys.map(k=>`<div class="${k}"><strong>${c(k)}</strong>${LABEL[k]}</div>`).join('');
+  const order={bad:0,warn:1,pending:2,ok:3}; $('#checkItems').innerHTML=[...items].sort((a,b)=>order[a.status]-order[b.status]).map(itemHTML).join('');
 }
 async function loadLog(){ const logs=await api('GET',`/api/jobs/${state.current}/agent/log`);
   $('#agentLog').innerHTML=logs.length?logs.map(l=>`<div class="log"><b>${esc(EVENT[l.event]||l.event)} ${esc(l.step)}</b> ${esc(l.detail)}</div>`).join(''):'<p class="sub">기록이 없어요</p>'; }
+// 계약서 사진: 원본 저장 후 AI(비전 모델)가 읽은 값을 칸에 채운다. 저장은 사용자가 확인한 내용으로.
 $('#contractFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f);
-  try{ await api('POST',`/api/jobs/${state.current}/contract`,fd,true); toast('계약서 원본을 저장했어요. 아래 칸을 채워 주세요'); }catch(err){ toast(err.message); } e.target.value=''; };
+  $('#ocrNote').textContent='계약서를 저장하고 읽는 중이에요…';
+  try{ const r=await api('POST',`/api/jobs/${state.current}/contract`,fd,true);
+    if(r.ai){
+      $$('#fieldsBox input').forEach(i=>{ const v=r.fields[i.dataset.k]; if(v) i.value=v; });
+      fieldsCache[state.current]=readFields(); autosave(`fields-${state.current}`,()=>saveFields(state.current),'#fieldsSaved',0);
+      $('#ocrNote').textContent=`AI가 ${r.total}개 항목 중 ${r.found}개를 읽었어요. 사진과 비교해 틀린 곳을 고쳐 주세요. 빈 칸은 계약서에 없거나 읽지 못한 항목이에요.`;
+      toast('계약서를 읽어 칸을 채웠어요');
+    } else { $('#ocrNote').textContent=`계약서 원본을 저장했어요. ${r.reason}`; toast('계약서 원본을 저장했어요'); }
+    $('#checkTrace').innerHTML=traceHTML(r.trace);
+  }catch(err){ $('#ocrNote').textContent=''; toast(err.message); } e.target.value=''; };
 function readFields(){ const fields={}; $$('#fieldsBox input').forEach(i=>fields[i.dataset.k]=i.value.trim()); return fields; }
 // 입력하던 사업장 번호를 고정해 두어, 저장 전에 다른 곳으로 바꿔도 섞이지 않게 한다
 const fieldsCache={};

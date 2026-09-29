@@ -23,9 +23,11 @@ def c():
         yield client
 
 
-def events(user_id: int = 1) -> set[str]:
+def events() -> set[str]:
+    from app.models import User
     with Session(engine) as s:
-        return {a.event for a in s.exec(select(AgentLog).where(AgentLog.user_id == user_id))}
+        uid = s.exec(select(User).where(User.email == "flow@example.com")).first().id
+        return {a.event for a in s.exec(select(AgentLog).where(AgentLog.user_id == uid))}
 
 
 def test_edit_me_and_job(c):
@@ -200,9 +202,33 @@ def test_notifications_per_job_and_delete(c):
 def test_business_number_saved_and_checked(c):
     jid = c.post("/api/jobs", json={**JOB, "name": "가상번호점", "biz_no": "1234567891"}).json()["id"]
     assert c.get("/api/jobs").json()[-1]["biz_no"] == "123-45-67891"
-    r = c.put(f"/api/jobs/{jid}", json={**JOB, "name": "가상번호점", "biz_no": "123-45-67890"})
-    assert r.status_code == 400 and "맞지 않아요" in r.json()["detail"]
+    # 검증 번호가 틀려도 저장은 되고, 점검에서 확인 필요로 안내한다
+    assert c.put(f"/api/jobs/{jid}", json={**JOB, "name": "가상번호점", "biz_no": "123-45-67890"}).json()["biz_no"] == "123-45-67890"
+    biz = [i for i in c.post(f"/api/jobs/{jid}/check").json()["items"] if i["law"] == "사업자 정보"][0]
+    assert biz["status"] == "warn" and "검증 번호" in biz["text"] and biz["article"].get("na")
     assert c.put(f"/api/jobs/{jid}", json={**JOB, "name": "가상번호점", "biz_no": ""}).json()["biz_no"] == ""
-    assert c.post("/api/seek/check", json={"biz_no": "123-45"}).status_code == 400
+    assert c.post("/api/seek/check", json={"biz_no": "123-45"}).status_code == 400  # 자리 수가 틀리면 막음
     html = c.get(c.post(f"/api/jobs/{jid}/report").json()["url"]).text
     assert "사업자등록번호" in html
+
+
+def test_judgments_wait_for_ai_without_model(c):
+    """AI 연결 전: 코드가 정상/위반 의심을 정하지 않고, 정보가 없는 항목만 확인 필요로 둔다."""
+    jid = c.get("/api/jobs").json()[0]["id"]
+    items = c.post(f"/api/jobs/{jid}/check").json()["items"]
+    assert {i["status"] for i in items} <= {"pending", "warn"}
+    assert all("rule_status" in i for i in items)  # 규칙 결과는 검증 장치로 남는다
+    assert c.get("/api/ai/status").json()["judge"] is False
+
+
+def test_pay_compare_facts_only(c):
+    from app.agent.tools import make_tools
+    from app.db import engine as db_engine
+    with Session(db_engine) as s:
+        t = make_tools(s, 1, c.get("/api/jobs").json()[0]["id"])
+        none = t["compare_pay"]({"total": 0, "work_min": 0}, 550000)
+        more = t["compare_pay"]({"total": 100000, "work_min": 600}, 550000)
+        less = t["compare_pay"]({"total": 100000, "work_min": 600}, 50000)
+    assert none["status"] == "warn" and "근무 기록이 없어" in none["text"]  # 0원인데 '거의 같아요'가 나오던 문제
+    assert more["status"] == "pending" and "450,000원 더 받았어요" in more["text"] and not more["short"]
+    assert less["status"] == "pending" and "50,000원 적게" in less["text"] and less["short"]

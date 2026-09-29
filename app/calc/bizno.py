@@ -21,12 +21,11 @@ def is_valid(value: str) -> bool:
 
 
 def normalize(value: str) -> str:
-    """빈 값은 그대로, 올바른 번호는 000-00-00000 형태로. 틀리면 ValueError."""
+    """빈 값은 그대로, 10자리는 000-00-00000 형태로. 자리 수가 틀리면 ValueError.
+    검증 번호가 틀려도 저장은 막지 않는다 (점검 결과에서 확인 필요로 안내)."""
     n = digits(value)
     if not n:
         return ""
     if len(n) != 10:
         raise ValueError("사업자등록번호는 숫자 10자리예요")
-    if not is_valid(n):
-        raise ValueError("사업자등록번호가 맞지 않아요. 계약서나 영수증에서 다시 확인해 주세요")
     return f"{n[:3]}-{n[3:5]}-{n[5:]}"

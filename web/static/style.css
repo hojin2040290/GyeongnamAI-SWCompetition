@@ -318,3 +318,8 @@ details.trace{margin-top:12px}
 /* 입력 칸 아래 짧은 안내 (사업자등록번호) */
 em.hint{display:block;font-style:normal}
 em.hint.bad{color:var(--bad)}
+
+/* 확인 중 (AI 판단 전) */
+.tag.pending{color:var(--blue);background:var(--blue-soft)}
+.result.pending{border-color:#8fa3e3}
+.summary .pending strong{color:var(--blue)}

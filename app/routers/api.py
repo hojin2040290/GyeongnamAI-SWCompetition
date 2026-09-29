@@ -19,6 +19,7 @@ from app.calc.timeutil import now_kst, today_kst
 from app.config import OPEN_RECORD_ALERT_HOURS, PUNCH_CONFIRM_SEC
 from app.db import get_session
 from app.law.lookup import attach_articles, table_status
+from app.llm import client as llm_client
 from app.models import (AgentLog, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
                         User, WorkRecord)
 from app.storage import save_original
@@ -397,8 +398,11 @@ async def upload_contract(job_id: int, file: UploadFile = File(...), u: User = D
                           s: Session = Depends(get_session)):
     own_job(s, u, job_id)
     ev = await store_upload(s, u, job_id, "contract", file)
-    # AI 연결 전: 사진을 읽지 않으므로 빈 칸을 돌려주고 사용자가 직접 입력한다.
-    return {"evidence": ev_out(ev), "fields": {k: "" for k in P()["written_terms"]["items"]}, "ai": False}
+    # 비전 모델이 읽은 값은 화면에 채우기만 하고, 사용자가 확인한 뒤 저장한다 (연결 전이면 직접 입력)
+    res = core.run_read_image(s, u.id, job_id, ev.id, "contract")
+    fields = res.get("fields") or {k: "" for k in P()["written_terms"]["items"]}
+    return {"evidence": ev_out(ev), "fields": fields, "ai": res.get("ai", False), "found": res.get("found", 0),
+            "total": len(fields), "reason": res.get("reason", ""), "trace": res["trace"]}
 
 
 class FieldsIn(BaseModel):
@@ -462,14 +466,30 @@ def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depen
 # ---------- 급여 ----------
 @router.post("/jobs/{job_id}/payslip")
 async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(...), file: Optional[UploadFile] = File(None),
+                      evidence_id: Optional[int] = Form(None),
                       u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
     ev_id = None
     if file is not None and file.filename:
         ev_id = (await store_upload(s, u, job_id, "payslip", file, f"{month} 급여")).id
+    elif evidence_id:  # 먼저 올려 AI가 읽은 명세서
+        ev = s.get(Evidence, evidence_id)
+        if not ev or ev.user_id != u.id or ev.job_id != job_id:
+            raise HTTPException(404, "명세서 자료를 찾을 수 없어요")
+        ev_id = ev.id
     s.add(Payslip(job_id=job_id, month=month, amount=amount, evidence_id=ev_id, created_at=now_kst()))
     s.commit()
     return core.run_payday(s, u.id, job_id, month)
+
+
+@router.post("/jobs/{job_id}/payslip/read")
+async def read_payslip(job_id: int, file: UploadFile = File(...), u: User = Depends(current_user),
+                       s: Session = Depends(get_session)):
+    """명세서 사진을 원본으로 저장하고 AI가 읽는다. 읽은 금액은 화면에 채우기만 하고 저장은 사용자가 한다."""
+    own_job(s, u, job_id)
+    ev = await store_upload(s, u, job_id, "payslip", file, "급여명세서")
+    res = core.run_read_image(s, u.id, job_id, ev.id, "payslip")
+    return {**res, "evidence_id": ev.id}
 
 
 @router.get("/jobs/{job_id}/payslips")
@@ -620,6 +640,12 @@ def add_post(job_id: int, data: PostIn, u: User = Depends(current_user), s: Sess
 def guard_search(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
     return core.run_guard_search(s, u.id, job_id)
+
+
+# ---------- AI 연결 상태 ----------
+@router.get("/ai/status")
+def ai_status(u: User = Depends(current_user)):
+    return llm_client.status()
 
 
 # ---------- 알림 ----------

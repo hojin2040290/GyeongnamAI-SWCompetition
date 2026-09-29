@@ -14,7 +14,9 @@ from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
 from app.law.lookup import attach_articles
-from app.models import CheckRun, ContractFields, GuardPost, Job, Notification, Payslip, User, WorkRecord
+from app import ocr, storage
+from app.llm import client
+from app.models import CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User, WorkRecord
 
 NOTIFY_DEDUP_HOURS = 24  # 같은 알림을 다시 보내지 않는 시간
 
@@ -25,8 +27,25 @@ def facts_from_job(user: User, job: Job, fields: dict | None, on: date | None = 
         probation_months=job.probation_months, start_date=job.start_date, end_date=job.end_date,
         no_end=job.no_end, schedule=sch.parse(job.schedule_json), size=job.size, industry=job.industry,
         work_desc=job.work_desc, contract_written=job.contract_written, copy_received=job.copy_received,
-        consent=job.consent, contract_fields=fields or {},
+        consent=job.consent, contract_fields=fields or {}, biz_no=job.biz_no or "",
     )
+
+
+AI_JUDGE_SYSTEM = (
+    "당신은 청소년 아르바이트 근로권익 점검을 돕는 보조자입니다. 법적 판단을 확정하지 않고 참고 의견만 냅니다. "
+    "각 항목의 사실(근거)과 조문만 보고 해당 조항 위반이 의심되면 bad, 문제가 없으면 ok, "
+    "판단에 필요한 정보가 없으면 warn으로 답하세요. 숫자를 새로 계산하지 말고 주어진 값만 쓰세요. "
+    '설명 없이 JSON 배열 [{"i": 항목 번호, "status": "ok|warn|bad", "reason": "근거로 쓴 조항과 사실 한 문장"}]만 답하세요.')
+
+
+def _judge_prompt(items: list[dict]) -> str:
+    lines = []
+    for i, it in enumerate(items):
+        art = it.get("article") or {}
+        lines.append(json.dumps({"i": i, "조항": it["law"], "내용": it["text"], "사실": it.get("basis", []),
+                                 "부족한 정보": it.get("needed", []), "조문": (art.get("text") or "")[:800]},
+                                ensure_ascii=False))
+    return "\n".join(lines)
 
 
 def keywords_of(job: Job) -> list[str]:
@@ -101,6 +120,46 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         """판단 결과마다 법 기준표의 조문 원문을 붙인다. 없으면 '법 기준표 미구축'."""
         return attach_articles(session, items)
 
+    def ai_judge(items: list[dict]) -> list[dict]:
+        """조항 해당 여부 판단 (AI). 연결 전이면 '확인 중'으로 두고, 연결 후에는 AI 판단을 검증 장치로 다시 확인한다."""
+        items = engine.await_ai(items)
+        if not client.available() or not items:
+            return items
+        try:
+            answers = client.ask_json(AI_JUDGE_SYSTEM, _judge_prompt(items))
+        except client.LLMError as exc:
+            for it in items:
+                it["ai_error"] = str(exc)
+            return items
+        for a in answers if isinstance(answers, list) else []:
+            i = a.get("i") if isinstance(a, dict) else None
+            if isinstance(i, int) and 0 <= i < len(items) and a.get("status") in (engine.OK, engine.WARN, engine.BAD):
+                items[i]["status"], items[i]["ai_reason"] = a["status"], str(a.get("reason", ""))[:300]
+                items[i]["ai_pending"] = False
+        return engine.cross_check(items)
+
+    def read_contract_image(evidence_id: int) -> dict:
+        """계약서 사진 읽기 (비전 모델). 읽은 값은 사용자가 확인한 뒤 저장한다."""
+        return _read_image(evidence_id, ocr.read_contract)
+
+    def read_payslip_image(evidence_id: int) -> dict:
+        """급여명세서 사진 읽기 (비전 모델)."""
+        return _read_image(evidence_id, ocr.read_payslip)
+
+    def _read_image(evidence_id: int, reader) -> dict:
+        ev = session.get(Evidence, evidence_id)
+        if not ev or ev.user_id != user_id:
+            raise PermissionError("다른 사용자의 자료예요")
+        mime = ocr.image_mime(ev.filename, None)
+        if not mime:
+            return {"ai": False, "reason": "사진 파일(png, jpg)만 읽을 수 있어요. 내용을 직접 입력해 주세요."}
+        if not client.vision_available():
+            return {"ai": False, "reason": "사진을 읽을 AI 모델이 아직 연결되지 않았어요. 내용을 직접 입력해 주세요."}
+        try:
+            return {"ai": True, **reader(storage.read(ev.stored_path), mime)}
+        except client.LLMError as exc:
+            return {"ai": False, "reason": f"{exc}. 내용을 직접 입력해 주세요."}
+
     # ----- 급여, 퇴직 -----
     def calc_pay(month: str) -> dict:
         user, job = get_user(), get_job()
@@ -115,22 +174,33 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         return row.amount if row else None
 
     def compare_pay(expected: dict, paid) -> dict:
+        """계산한 금액과 받은 금액의 차이 (숫자만). 체불인지 판단은 AI가 한다."""
         if "error" in expected:
-            return {"status": "warn", "text": expected["error"]}
+            return {"status": engine.WARN, "text": expected["error"]}
         if paid is None:
-            return {"status": "warn", "text": "명세서나 받은 금액이 아직 없어요. 올리면 비교해 드려요."}
+            return {"status": engine.WARN, "text": "명세서나 받은 금액이 아직 없어요. 올리면 비교해 드려요."}
+        if not expected.get("work_min"):
+            return {"status": engine.WARN, "diff": -paid,
+                    "text": f"이 달에 계산할 근무 기록이 없어 받은 금액 {paid:,}원과 비교하지 못했어요. "
+                            "출퇴근 기록이 없거나 모두 실수로 표시됐는지 확인해 주세요."}
         diff = expected["total"] - paid
         tol = max(100, round(expected["total"] * 0.01))
         if diff > tol:
-            return {"status": "bad", "diff": diff,
-                    "text": f"계산한 금액보다 {diff:,}원 적게 받았어요. 공제 항목이 있다면 명세서로 확인해 보세요."}
-        return {"status": "ok", "diff": diff, "text": "계산한 금액과 받은 금액이 거의 같아요."}
+            fact = f"계산한 금액보다 {diff:,}원 적게 받았어요."
+        elif diff < -tol:
+            fact = f"계산한 금액보다 {-diff:,}원 더 받았어요. 계산에 빠진 근무나 수당이 있는지 확인해 보세요."
+        else:
+            fact = f"계산한 금액과 받은 금액의 차이가 {abs(diff):,}원이에요."
+        return {"status": engine.PENDING, "rule_status": engine.BAD if diff > tol else engine.OK, "diff": diff,
+                "short": diff > tol, "text": fact + " 체불인지는 AI 판단 전이에요."}
 
     def settlement() -> dict | None:
         job = get_job()
         if job.status != "quit" or not job.quit_date:
             return None
-        return paycalc.settlement_status(job.quit_date, today_kst(), job.paid_after_quit)
+        st = paycalc.settlement_status(job.quit_date, today_kst(), job.paid_after_quit)
+        st["rule_status"], st["status"] = st["status"], engine.PENDING  # 기한 계산은 코드, 위반 판단은 AI
+        return st
 
     # ----- 기록, 알림 -----
     def save_check(kind: str, results) -> int:
@@ -200,5 +270,6 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         "get_payslip": get_payslip, "compare_pay": compare_pay, "settlement": settlement, "save_check": save_check,
         "notify": notify, "counsel_for_age": counsel_for_age, "build_report": build_report,
         "set_reported": set_reported, "warning_message": warning_message, "search_posts": search_posts,
-        "preserve_post": preserve_post, "classify_posts": classify_posts,
+        "preserve_post": preserve_post, "classify_posts": classify_posts, "ai_judge": ai_judge,
+        "read_contract_image": read_contract_image, "read_payslip_image": read_payslip_image,
     }

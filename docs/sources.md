@@ -11,6 +11,7 @@
 |---|---|---|
 | 법제처 국가법령정보 공동활용 OPEN API | 조문 원문 | https://open.law.go.kr |
 | 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com |
+| vLLM OpenAI 호환 API (/v1/chat/completions) | 조항 판단, 계약서와 급여명세서 사진 읽기 (비전 모델 하나가 글자 인식과 항목 정리를 함께 함) | https://docs.vllm.ai | 모델 이름과 라이선스는 선정 후 기록 |
 
 ## 라이브러리
 fastapi, uvicorn, sqlmodel, itsdangerous, python-multipart, jinja2, apscheduler, httpx, pytest, (선택) playwright

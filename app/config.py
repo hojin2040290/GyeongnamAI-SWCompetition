@@ -29,6 +29,9 @@ TIMEZONE = "Asia/Seoul"
 LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "")
+LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL", "")  # 사진 읽기용 모델 (비우면 LLM_MODEL 사용)
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")            # vLLM에 키를 걸었을 때만
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 
 # 외부 API 키 (없으면 해당 기능은 건너뜀)
 LAW_OC = os.getenv("LAW_OC", "")

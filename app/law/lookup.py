@@ -32,6 +32,8 @@ def find_article(session: Session, label: str) -> LawArticle | None:
 
 def article_info(session: Session, label: str) -> dict:
     """화면과 상담 자료에 쓰는 조문 정보. 없으면 built=False."""
+    if not parse_label(label):
+        return {"built": False, "na": True, "label": label, "text": "", "note": "법 조문 항목 아님"}
     art = find_article(session, label)
     if not art:
         return {"built": False, "label": label, "text": "", "note": "법 기준표 미구축"}

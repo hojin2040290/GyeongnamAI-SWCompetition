@@ -21,5 +21,4 @@ def test_normalize():
     assert normalize("") == ""
     with pytest.raises(ValueError, match="10자리"):
         normalize("123-45-678")
-    with pytest.raises(ValueError, match="맞지 않아요"):
-        normalize("123-45-67890")
+    assert normalize("123-45-67890") == "123-45-67890"  # 검증 번호가 틀려도 저장은 된다

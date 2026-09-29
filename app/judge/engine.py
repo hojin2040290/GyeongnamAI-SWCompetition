@@ -1,19 +1,22 @@
 """법 기준표 대조.
 
-지금은 AI를 연결하지 않았으므로, 숫자로 확인할 수 있는 조항은 법 기준값(law_params.json)과
-코드 계산으로 판단하고, 업종이나 업무처럼 문장을 해석해야 하는 조항은 'AI 판단 연결 전'으로
-확인 필요 처리한다. AI 연결 후에는 LLMJudge가 같은 형식(Item)으로 결과를 돌려주면 된다.
+역할 분담: 법 조항 해당 여부 판단은 AI가, 시간과 금액 계산은 코드가 한다.
+- 이 파일의 규칙(judge, judge_records)은 법 기준값과 코드 계산으로 '검토할 항목'과 근거가 되는 사실을 만든다.
+  규칙이 낸 결과(rule_status)는 화면에 보여 주지 않고, AI 판단을 검증하는 장치와 목표 성능 측정에만 쓴다.
+- await_ai(): AI가 판단하기 전 상태로 바꾼다. 필요한 정보가 없는 항목만 '확인 필요', 나머지는 '확인 중'.
+- cross_check(): AI 판단이 코드 계산과 맞지 않으면 '확인 필요'로 되돌린다.
 """
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from typing import Optional
 
+from app.calc import bizno
 from app.calc import records as rec
 from app.calc import schedule as sch
 from app.calc.age import age_on, is_youth_protection
 from app.calc.params import P
 
-OK, WARN, BAD = "ok", "warn", "bad"
+OK, WARN, BAD, PENDING = "ok", "warn", "bad", "pending"  # PENDING: AI 판단 전 (확인 중)
 
 
 @dataclass
@@ -46,6 +49,7 @@ class Facts:
     copy_received: Optional[bool] = None
     consent: str = ""
     contract_fields: dict = field(default_factory=dict)
+    biz_no: Optional[str] = None  # None이면 확인하지 않음 (지원 전 확인)
 
 
 def verify(items: list[Item], facts: Facts) -> list[Item]:
@@ -85,9 +89,9 @@ def judge(facts: Facts, stage: str) -> list[Item]:
             items.append(Item(wt["law"], WARN, "근로계약서를 썼는지 알려 주세요.", needed=["계약서 작성 여부"]))
         if facts.contract_fields:
             missing = [k for k in wt["items"] if not str(facts.contract_fields.get(k, "")).strip()]
-            if missing:
-                items.append(Item(wt["law"], WARN, f"계약서에서 {', '.join(missing)} 항목을 찾지 못했어요.",
-                                  basis=["확인한 계약서 내용"], needed=missing))
+            if missing:  # 빈 칸 자체가 근거 (정보 부족이 아님)
+                items.append(Item(wt["law"], BAD, f"계약서에 {', '.join(missing)} 항목이 적혀 있지 않아요.",
+                                  basis=[f"계약서 {k} 칸 비어 있음" for k in missing]))
             else:
                 items.append(Item(wt["law"], OK, "계약서에 필수 항목이 모두 적혀 있어요.", basis=["확인한 계약서 내용"]))
 
@@ -152,9 +156,9 @@ def judge(facts: Facts, stage: str) -> list[Item]:
                               basis=[f"주 {wk // 60}시간 {wk % 60}분"], needed=["연장 합의 여부"]))
         night_days = [d for d, s in facts.schedule.items() if sch.slot_has_night(s, minor["night_start"], minor["night_end"])]
         if night_days:
-            items.append(Item(minor["law_night"], BAD, "만 18세 미만은 밤 10시부터 오전 6시 사이 근무에 본인 동의와 고용노동부 인가가 필요해요.",
-                              basis=[f"{d}요일 {facts.schedule[d]['start']}~{facts.schedule[d]['end']}" for d in night_days],
-                              needed=["고용노동부 인가 여부"] if stage == "contract" else []))
+            items.append(Item(minor["law_night"], BAD, "만 18세 미만은 밤 10시부터 오전 6시 사이 근무에 본인 동의와 고용노동부 인가가 필요해요. "
+                              "인가를 받았는지 사업장에 확인해 보세요.",
+                              basis=[f"{d}요일 {facts.schedule[d]['start']}~{facts.schedule[d]['end']}" for d in night_days]))
         if stage == "contract":
             if facts.consent == "안 냈어요":
                 items.append(Item(minor["law_docs"], BAD, "만 18세 미만은 보호자 동의서와 가족관계증명서를 사업장에 갖춰야 해요.",
@@ -171,6 +175,18 @@ def judge(facts: Facts, stage: str) -> list[Item]:
         items.append(Item(yp["law"], WARN, "청소년 고용이 금지된 업소인지 업종과 업무를 법 조항과 대조해 확인해야 해요.",
                           basis=[f"업종: {facts.industry or '미입력'}", f"하는 일: {facts.work_desc or '미입력'}"],
                           needed=["업소 해당 여부 (AI 판단 연결 전)"], ai_pending=True))
+
+    # 사업자 정보: 번호 모양만 코드로 확인하고, 실제 등록 상태는 국세청 조회(연결 전)가 필요
+    if facts.biz_no is not None:
+        if not facts.biz_no:
+            items.append(Item("사업자 정보", WARN, "사업자등록번호가 없어 사업자 상태를 확인하지 못했어요.",
+                              needed=["사업자등록번호"]))
+        elif not bizno.is_valid(facts.biz_no):
+            items.append(Item("사업자 정보", WARN, "사업자등록번호의 검증 번호가 맞지 않아요. 번호를 다시 확인해 주세요.",
+                              basis=[f"사업자등록번호 {facts.biz_no}"], needed=["올바른 사업자등록번호"]))
+        else:
+            items.append(Item("사업자 정보", WARN, "번호 모양은 맞지만, 실제로 등록된 사업자인지는 국세청 조회가 필요해요.",
+                              basis=[f"사업자등록번호 {facts.biz_no}"], needed=["국세청 사업자 상태 조회 (API 연결 전)"]))
 
     # 가산수당 적용 여부
     pr = P()["premium"]
@@ -220,8 +236,8 @@ def judge_records(birth: date, records: list, schedule: dict, focus: date | None
     night = [f.when() for f in minor_daily if f.night_min > 0]
     if night:
         items.append(Item(minor["law_night"], BAD, "만 18세 미만인 날 밤 10시부터 오전 6시 사이에 실제로 일한 기록이 있어요. "
-                          "본인 동의와 고용노동부 인가가 있어야 해요.",
-                          basis=_dates(night), needed=["고용노동부 인가 여부"], source="records"))
+                          "본인 동의와 고용노동부 인가가 있어야 해요. 인가를 받았는지 사업장에 확인해 보세요.",
+                          basis=_dates(night), source="records"))
     over, long = [], []
     for d, fs in rec.by_day(minor_daily).items():
         total = sum(f.work_min for f in fs)
@@ -244,6 +260,32 @@ def judge_records(birth: date, records: list, schedule: dict, focus: date | None
         items.append(Item(minor["law_hours"], WARN, "실제 근무 기록이 하루 7시간 또는 주 35시간을 넘어요. 연장 합의가 있었는지 확인해야 해요.",
                           basis=_dates(long), needed=["연장 합의 여부"], source="records"))
     return verify(items, None)
+
+
+def await_ai(items: list[dict]) -> list[dict]:
+    """AI가 판단하기 전: 규칙 결과는 rule_status로 숨기고, 정보가 부족한 항목만 확인 필요로 둔다."""
+    for it in items:
+        it.setdefault("rule_status", it["status"])
+        user_info_missing = [n for n in it.get("needed", []) if "AI" not in n]
+        if user_info_missing and not it.get("ai_pending"):
+            it["status"] = WARN  # 판단에 필요한 정보가 없으면 추측하지 않고 확인 필요
+        else:
+            it["status"] = PENDING
+    return items
+
+
+def cross_check(items: list[dict]) -> list[dict]:
+    """검증 장치: AI 판단을 코드 계산과 필요한 정보 여부로 다시 확인한다."""
+    for it in items:
+        rule = it.get("rule_status")
+        if it["status"] == OK and rule == BAD:
+            it["status"] = WARN
+            it.setdefault("needed", []).append("AI 판단과 코드 계산 결과가 달라요")
+        if it["status"] in (OK, BAD) and [n for n in it.get("needed", []) if "AI" not in n]:
+            it["status"] = WARN
+        if it["status"] not in (OK, WARN, BAD):
+            it["status"] = PENDING
+    return items
 
 
 def questions(facts: Facts, items: list[Item]) -> list[str]:
