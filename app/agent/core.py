@@ -11,7 +11,7 @@ import uuid
 from contextvars import ContextVar
 from datetime import date
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
@@ -19,7 +19,7 @@ from app.agent.tools import agent_tools, for_ai, make_tools
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
 from app.law.lookup import known_law
-from app.models import AgentLog
+from app.models import AgentLog, CaseNote
 
 MAX_STEPS = 10  # AI 응답이 없을 때 정해 둔 순서의 도구 호출 수 제한
 FOLLOWUP_NOTE: ContextVar[str] = ContextVar("followup_note", default="")  # 예약한 확인을 실행할 때 그 이유
@@ -373,6 +373,33 @@ def run_guard_preserve(session: Session, user_id: int, job_id: int, url: str, ti
     res = r.call("preserve_post", url, title)
     judged = run_guard_review(session, user_id, job_id, r=r)
     return r.done({**res, "classify": judged}, "주소, 확인 시각" + (", 화면 캡처" if res["captured"] else "") + " 보존")
+
+
+# ---------- 매일 종합 조언 ----------
+ADVICE_TOOLS = ["get_profile", "get_contract", "get_saved_checks", "calc_work_days", "settlement", "list_evidence",
+                "list_posts", "get_answers", "counsel_for_age", "get_article", "find_refs"]
+
+
+def run_advice(session: Session, user_id: int, job_id: int, trigger: str = "schedule") -> dict:
+    """사용자에게서 얻은 기록과 에이전트가 만든 기록을 종합해 조언한다 (매일 한 번).
+    지난 종합 조언 뒤로 달라진 기록이 없으면 AI를 부르지 않는다."""
+    from app.llm import client
+    r = Run(session, user_id, job_id, "advice", trigger)
+    key = case.data_key(session, r.tools["get_job"]())
+    last = session.exec(select(CaseNote).where(CaseNote.job_id == job_id, CaseNote.kind == "advice",
+                                               CaseNote.event == "advice").order_by(CaseNote.id.desc())).first()
+    if last and last.basis_key == key:
+        return r.done({"advised": False}, "지난 종합 조언 뒤로 달라진 기록이 없어 새로 조언하지 않아요")
+    if not client.available():  # 조언은 AI 몫이라 대신 쓰지 않는다
+        return r.done({"advised": False}, f"종합 조언은 {AI_WAITING}")
+    r.state["basis_key"] = key
+    goal = Goal("매일 종합 조언 시간이에요. 상황의 진행 상황, 지난 메모, 질문과 답, 예약한 확인을 보고, 필요하면 도구로 점검 결과와 "
+                "기록을 확인해, 이 사용자에게 지금 가장 도움이 될 조언을 give_advice로 남긴 뒤 finish로 끝내 주세요. "
+                "조언은 기록에 있는 사실에 근거하고, 법적 판단을 단정하지 마세요.",
+                ADVICE_TOOLS, DONE, check=r.need("advice", "먼저 give_advice로 조언을 남겨 주세요"))
+    r.agent(goal, {})
+    return r.done({"advised": bool(r.state.get("advice"))}, "종합 조언을 남겼어요" if r.state.get("advice")
+                  else "종합 조언을 남기지 못했어요")
 
 
 # ---------- 매일 자동 점검 ----------

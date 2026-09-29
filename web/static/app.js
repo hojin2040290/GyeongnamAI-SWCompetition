@@ -7,7 +7,7 @@ const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
 const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심', pending:'확인 중'};  // 확인 중: AI 판단 전
 const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
   report:'상담 자료', guard_on:'보복 대응 시작', guard_off:'보복 대응 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존',
-  guard_review:'게시물 판별', daily:'매일 자동 점검'};
+  guard_review:'게시물 판별', daily:'매일 자동 점검', advice:'매일 종합 조언'};
 const KIND = {contract:'근로계약서', payslip:'급여명세서', message:'사업주 메시지', schedule:'근무표', deposit:'입금 내역', post:'게시물 화면', notice:'채용공고', other:'기타'};
 
 const state = { me:null, jobs:[], current:null, mode:null, cards:[], adding:false, seekFromApp:false,
@@ -559,7 +559,7 @@ async function loadCase(){
   const a=c.advice;
   $('#caseAdvice').innerHTML=a?`<div class="advice"><div class="advice-head">에이전트 조언</div><p>${esc(a.text)}</p>
       ${a.next_tab&&NEXT_TAB[a.next_tab]?`<button class="btn ghost small" data-go="${esc(a.next_tab)}">${NEXT_TAB[a.next_tab]}</button>`:''}
-      <div class="sub note-at">${esc(EVENT[a.event]||a.event)} 뒤 ${fmtDT(a.created_at)}</div></div>`
+      <div class="sub note-at">${a.event==='advice'?'매일 종합 조언':`${esc(EVENT[a.event]||a.event)} 뒤`} ${fmtDT(a.created_at)}</div></div>`
     :'<p class="ai-note wait">AI 응답 대기 중: 에이전트가 점검을 마치면 조언해 드려요.</p>';
   $$('#caseAdvice [data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
   const fdt=t=>{ const d=new Date(t.replace(' ','T')); return `${d.getMonth()+1}월 ${d.getDate()}일 ${d.getHours()}시`; };

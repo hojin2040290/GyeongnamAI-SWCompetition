@@ -496,7 +496,8 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
 
     def _note(kind: str, text: str, next_tab: str = "") -> None:
         session.add(CaseNote(user_id=user_id, job_id=job_id, kind=kind, text=text, next_tab=next_tab,
-                             event=state.get("event", ""), run_id=state.get("run_id", ""), created_at=now_kst()))
+                             event=state.get("event", ""), run_id=state.get("run_id", ""),
+                             basis_key=state.get("basis_key", "") if kind == "advice" else "", created_at=now_kst()))
         session.commit()
 
     def remember(note: str) -> str:

@@ -415,3 +415,51 @@ def test_followup_scheduled_run_and_cancel(env, monkeypatch):
     assert b.delete(f"/api/followups/{tid}").status_code == 404
     assert a.delete(f"/api/followups/{tid}").json()["ok"]
     assert a.get(f"/api/jobs/{ja}/case").json()["followups"] == []
+
+
+def test_daily_combined_advice(env, monkeypatch):
+    """매일 종합 조언: 기록을 모두 넘기고 조언을 남겨야 끝나며, 달라진 기록이 없으면 AI를 다시 부르지 않는다."""
+    from app.models import CaseNote
+    a, ja, *_ = env
+    with Session(engine) as s:
+        uid = s.get(Job, ja).user_id
+    monkeypatch.setattr(client, "LLM_ENABLED", False)
+    with Session(engine) as s:
+        out = core.run_advice(s, uid, ja)
+    assert out["advised"] is False and "AI 응답 대기 중" in out["trace"][-1]["detail"]
+
+    def policy(goal, done, tools):
+        names = [n for n, _ in done]
+        if "finish" not in names:  # 조언 없이 끝내려 하면 돌려보내는지 본다
+            return reply([("finish", {"note": "조언 없이 끝냄"})])
+        if "give_advice" not in names:
+            return reply([("give_advice", {"advice": "근무 기록과 받은 급여를 보면 기록을 꾸준히 남기는 게 좋아요"})])
+        return reply([("finish", {"note": "조언 남김"})])
+    agent = use(monkeypatch, policy)
+    with Session(engine) as s:
+        out = core.run_advice(s, uid, ja)
+    assert out["advised"] and "give_advice" in results(agent.payloads[2], "finish")[0]["error"]
+    first = agent.payloads[0]["messages"][1]["content"]
+    assert all(k in first for k in ("진행 상황", "지난 메모", "질문과 답", "예약한 확인"))
+    with Session(engine) as s:
+        note = s.exec(select(CaseNote).where(CaseNote.job_id == ja, CaseNote.kind == "advice")
+                      .order_by(CaseNote.id.desc())).first()
+        assert note.event == "advice" and note.basis_key
+    # 달라진 기록이 없으면 AI를 부르지 않는다
+    n = len(agent.payloads)
+    with Session(engine) as s:
+        out = core.run_advice(s, uid, ja)
+    assert out["advised"] is False and len(agent.payloads) == n
+    # 사용자 기록이 생기면 다시 조언한다
+    a.post(f"/api/jobs/{ja}/payslip", data={"month": "2026-07", "amount": "30000"})
+    agent.payloads.clear()
+    with Session(engine) as s:
+        assert core.run_advice(s, uid, ja)["advised"]
+    assert agent.payloads
+
+
+def test_daily_check_counts_advice(env, monkeypatch):
+    from app import scheduler
+    monkeypatch.setattr(client, "LLM_ENABLED", False)
+    monkeypatch.setattr(scheduler, "refresh_law_table", lambda: "건너뜀")
+    assert scheduler.daily_check()["advice"] == 0  # AI가 없으면 종합 조언은 대기
