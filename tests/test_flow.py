@@ -178,3 +178,20 @@ def test_forgotten_punch_out(c):
     assert recs["working"] is False and recs["records"][0]["void_reason"] == "실수로 누름"
     assert c.post(f"/api/jobs/{jid}/punch", json={}).json()["action"] == "in"  # 새 출근 가능
     assert c.delete(f"/api/jobs/{jid}/records/{rec['id']}/void").status_code == 400  # 출근 중이면 취소 불가
+
+
+def test_notifications_per_job_and_delete(c):
+    jobs = c.get("/api/jobs").json()
+    a, b = jobs[0]["id"], jobs[1]["id"]
+    c.post(f"/api/jobs/{a}/agent/payday?month=2026-07")
+    c.post(f"/api/jobs/{b}/agent/payday?month=2026-07")
+    ta = [n["title"] for n in c.get(f"/api/notifications?job_id={a}").json()]
+    tb = c.get(f"/api/notifications?job_id={b}").json()
+    assert ta.count("2026-07 급여 점검") == 1 and all(n["job_id"] in (b, None) for n in tb)
+    c.delete(f"/api/notifications/{tb[0]['id']}")
+    assert tb[0]["id"] not in [n["id"] for n in c.get(f"/api/notifications?job_id={b}").json()]
+    c.post(f"/api/jobs/{b}/agent/payday?month=2026-06")
+    b_before = len(c.get(f"/api/notifications?job_id={b}").json())
+    assert c.delete(f"/api/notifications?job_id={a}").json()["deleted"] >= 1
+    assert c.get(f"/api/notifications?job_id={a}").json() == []
+    assert len(c.get(f"/api/notifications?job_id={b}").json()) == b_before  # 다른 곳 알림은 남음

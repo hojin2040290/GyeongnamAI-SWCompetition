@@ -612,17 +612,45 @@ def guard_search(job_id: int, u: User = Depends(current_user), s: Session = Depe
 
 
 # ---------- 알림 ----------
+def _notes(s: Session, u: User, job_id: Optional[int]):
+    """이 사업장 알림과 사업장과 상관없는 알림 (job_id가 없으면 전체)."""
+    q = select(Notification).where(Notification.user_id == u.id)
+    if job_id is not None:
+        q = q.where((Notification.job_id == job_id) | (Notification.job_id == None))  # noqa: E711
+    return q
+
+
 @router.get("/notifications")
-def notifications(u: User = Depends(current_user), s: Session = Depends(get_session)):
-    rows = s.exec(select(Notification).where(Notification.user_id == u.id).order_by(Notification.id.desc()).limit(20)).all()
+def notifications(job_id: Optional[int] = None, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    rows = s.exec(_notes(s, u, job_id).order_by(Notification.id.desc()).limit(20)).all()
     return [{"id": n.id, "job_id": n.job_id, "title": n.title, "body": n.body, "read": n.read,
              "at": n.created_at.isoformat()} for n in rows]
 
 
 @router.post("/notifications/read")
-def read_all(u: User = Depends(current_user), s: Session = Depends(get_session)):
-    for n in s.exec(select(Notification).where(Notification.user_id == u.id, Notification.read == False)):  # noqa: E712
+def read_all(job_id: Optional[int] = None, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    for n in s.exec(_notes(s, u, job_id).where(Notification.read == False)):  # noqa: E712
         n.read = True
         s.add(n)
     s.commit()
     return {"ok": True}
+
+
+@router.delete("/notifications/{note_id}")
+def delete_note(note_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    n = s.get(Notification, note_id)
+    if not n or n.user_id != u.id:
+        raise HTTPException(404, "알림을 찾을 수 없어요")
+    s.delete(n)
+    s.commit()
+    return {"ok": True}
+
+
+@router.delete("/notifications")
+def clear_notes(job_id: Optional[int] = None, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """알림 모두 지우기 (알림만 지우고 점검 결과와 동작 기록은 남는다)."""
+    rows = s.exec(_notes(s, u, job_id)).all()
+    for n in rows:
+        s.delete(n)
+    s.commit()
+    return {"deleted": len(rows)}

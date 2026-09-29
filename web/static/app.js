@@ -481,11 +481,26 @@ async function loadHome(){
   await refreshRecords();
   if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
   await renderQuit();
-  const ns=await api('GET','/api/notifications');
-  $('#alerts').innerHTML=ns.length?ns.map(n=>`<div class="alert"><span class="dot ${n.read?'read':''}"></span><div><strong>${esc(n.title)}</strong><div class="sub">${esc(n.body)}</div></div></div>`).join('')
-    :'<p class="sub" style="margin:0">아직 알림이 없어요. 점검 결과가 생기면 여기에 알려드려요.</p>';
-  if(ns.some(n=>!n.read)) api('POST','/api/notifications/read');
+  await loadAlerts();
 }
+// 알림: 지금 보고 있는 일하는 곳의 알림만 보여 준다
+async function loadAlerts(){
+  const jid=state.current, ns=await api('GET',`/api/notifications?job_id=${jid}`);
+  $('#alertsClear').classList.toggle('hidden',!ns.length);
+  $('#alerts').innerHTML=ns.length?ns.map(n=>`<div class="alert"><span class="dot ${n.read?'read':''}"></span>
+      <div class="main"><strong>${esc(n.title)}</strong><div class="sub">${esc(n.body)}</div><div class="sub note-at">${fmtDT(n.at)}</div></div>
+      <button class="note-x" data-note="${n.id}" aria-label="${esc(n.title)} 알림 지우기">×</button></div>`).join('')
+    :'<p class="sub" style="margin:0">아직 알림이 없어요. 점검 결과가 생기면 여기에 알려드려요.</p>';
+  if(ns.some(n=>!n.read)) api('POST',`/api/notifications/read?job_id=${jid}`);
+}
+$('#alerts').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-note]'); if(!b) return;
+  try{ await api('DELETE',`/api/notifications/${b.dataset.note}`); await loadAlerts(); }catch(err){ toast(err.message); }
+});
+$('#alertsClear').onclick=async()=>{
+  if(!confirm('이곳 알림을 모두 지울까요? 점검 결과와 기록은 그대로 남아요.')) return;
+  try{ await api('DELETE',`/api/notifications?job_id=${state.current}`); await loadAlerts(); toast('알림을 지웠어요'); }catch(e){ toast(e.message); }
+};
 $('#gpsOn').onchange=async e=>{
   try{ state.me=await api('PUT','/api/me/prefs',{gps_consent:e.target.checked}); toast(e.target.checked?'위치 기록에 동의했어요':'위치를 기록하지 않아요'); }
   catch(err){ e.target.checked=!e.target.checked; toast(err.message); }
