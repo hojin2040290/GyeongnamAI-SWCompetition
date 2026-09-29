@@ -68,7 +68,7 @@ def run_contract_check(session: Session, user_id: int, job_id: int) -> dict:
     items = r.call("attach_law", items + rec_items)
     bad, warn = _count(items)
     check_id = r.call("save_check", "contract", items)
-    r.call("notify", "계약서와 근무 기록 점검 완료",
+    r.call("notify", "계약서 점검 완료",
            f"위반 의심 {bad}건, 확인 필요 {warn}건이 있어요." if bad or warn else "확인한 항목은 모두 정상이에요.")
     return r.done({"check_id": check_id, "items": items}, f"위반 의심 {bad}건, 확인 필요 {warn}건")
 
@@ -85,7 +85,7 @@ def run_shift_check(session: Session, user_id: int, job_id: int, record_id: int)
     items = r.call("attach_law", items)
     bad, warn = _count(items)
     r.call("save_check", "shift", {"day": day, "items": items})
-    r.call("notify", "오늘 근무 점검 결과", f"위반 의심 {bad}건, 확인 필요 {warn}건. 점검 탭에서 확인해 보세요.")
+    r.call("notify", "오늘 근무 점검 결과", f"위반 의심 {bad}건, 확인 필요 {warn}건. 계약서 탭에서 확인해 보세요.")
     return r.done({"day": day, "items": items}, f"위반 의심 {bad}건, 확인 필요 {warn}건")
 
 
