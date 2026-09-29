@@ -94,9 +94,6 @@ label.field span{display:block;font-weight:500;margin-bottom:4px}
 textarea.input{min-height:120px;resize:vertical;line-height:1.6}
 .row{display:flex;gap:10px}
 .row > *{flex:1}
-.btn{display:inline-block;border:0;border-radius:10px;padding:11px 16px;font-weight:600;cursor:pointer;background:var(--blue);color:#fff}
-.btn.ghost{background:var(--blue-soft);color:var(--blue)}
-.btn.block{width:100%}
 .upload{border:2px dashed var(--line);border-radius:14px;padding:20px;text-align:center;color:var(--ink-soft);cursor:pointer;background:#fbfcfe}
 .upload strong{display:block;color:var(--ink)}
 .hint{font-size:13px;color:var(--ink-soft);margin:6px 0 0}
@@ -143,8 +140,6 @@ nav.tabs button[aria-current="page"]{color:var(--blue);font-weight:600}
 .job{background:var(--paper);border-radius:var(--radius-lg);padding:18px;margin-bottom:12px}
 .job-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .job-title{font-size:16px}
-.link-btn{border:0;background:none;color:var(--bad);font-size:14px;cursor:pointer;padding:4px}
-.add-job{border:2px dashed #b9c6ee;background:transparent}
 .suffix{position:relative}
 .suffix em{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-style:normal;color:var(--ink-soft)}
 .suffix .input{padding-right:36px}
@@ -159,7 +154,7 @@ div.field{margin-bottom:12px}
 
 .schedule-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;border:2px solid var(--blue);background:var(--blue-soft);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left}
 .sched-sum{font-size:14px}
-.sched-go{flex:none;background:var(--blue);color:#fff;border-radius:8px;padding:4px 12px;font-weight:600;font-size:13px}
+.sched-go{flex:none;background:var(--blue);color:#fff;border-radius:8px;padding:6px 12px;font-weight:600;font-size:13px}
 
 /* 떠 있는 시트 */
 .sheet-backdrop{position:fixed;inset:0;z-index:40;background:rgba(24,34,58,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center}
@@ -168,7 +163,6 @@ div.field{margin-bottom:12px}
 .grabber{width:44px;height:5px;border-radius:5px;background:var(--line);margin:4px auto 10px}
 .sheet-head{display:flex;justify-content:space-between;align-items:center}
 .sheet-head h2{margin:0}
-.close{border:0;background:var(--bg);border-radius:999px;padding:6px 14px;cursor:pointer;font-size:14px}
 .sheet-label{font-weight:700;font-size:15px;margin:18px 0 10px}
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .day{border:2px solid var(--line);background:#fff;border-radius:12px;padding:14px 0;font-size:16px;font-weight:700;cursor:pointer;position:relative}
@@ -221,7 +215,6 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 .mode span{font-size:14px;color:var(--ink-soft)}
 .mode span strong{color:var(--ink)}
 .mode[aria-checked="true"]{border-color:var(--blue);background:var(--blue-soft)}
-.btn:disabled{background:#aab5cf;cursor:not-allowed}
 .qs{margin:0;padding-left:20px}
 .qs li{margin-bottom:8px}
 .quit-panel{border:2px solid #d9a21b}
@@ -230,17 +223,15 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 .seek-entry{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:1.5px solid var(--line);background:var(--paper);border-radius:14px;padding:12px 14px;margin-bottom:14px;cursor:pointer}
 .seek-entry span{font-size:13.5px;color:var(--ink-soft)}
 .seek-entry strong{display:block;color:var(--ink);font-size:15px}
-.seek-entry .sched-go{color:#fff;font-size:13px}
-.link-quit{border:0;background:none;color:var(--ink-soft);text-decoration:underline;font-size:13.5px;cursor:pointer;padding:0;margin:0 0 14px}
 
 @media (prefers-reduced-motion:reduce){*{transition:none !important}}
 
 /* 서버 연결 버전 추가 */
 .err{color:var(--bad);font-size:13.5px;margin:6px 0 0;min-height:1em}
-.link{border:0;background:none;color:var(--blue);text-decoration:underline;cursor:pointer;padding:0;font-size:14px}
 .row-actions{display:flex;gap:8px;margin-top:10px}
 .row-actions .btn{flex:1}
-.ev-link{color:var(--blue);font-size:13px}
+.ev-link{color:var(--blue);font-size:13px;font-weight:600;text-decoration:none}
+.ev-link:hover{text-decoration:underline}
 .log{font-size:12.5px;color:var(--ink-soft);border-top:1px solid var(--line);padding:6px 0}
 .log b{color:var(--ink)}
 .kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px}
@@ -254,7 +245,7 @@ label.upload{display:block}
 
 /* 뒤로 가기 */
 .top-left{display:flex;align-items:center;gap:6px;min-width:0}
-.back-btn{display:inline-flex;align-items:center;gap:2px;border:0;background:var(--paper);color:var(--ink);border-radius:999px;padding:6px 10px 6px 6px;cursor:pointer;font-size:14px;font-weight:600}
+.back-btn{display:inline-flex;align-items:center;gap:2px;border:0;background:var(--paper);color:var(--ink);border-radius:10px;padding:6px 10px 6px 6px;cursor:pointer;font-size:14px;font-weight:600}
 #backBtn{padding:6px}
 .ob-back{margin:0 0 10px -4px;background:transparent}
 
@@ -262,8 +253,6 @@ label.upload{display:block}
 .job-card{margin-top:4px}
 .job-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .job-card-head h2{margin:10px 0 4px}
-.btn.small{padding:6px 12px;font-size:13px;flex:none}
-.btn.danger{color:var(--bad);background:var(--bad-bg)}
 
 /* 목록 버튼, 일하는 곳 선택 */
 .row-btns{display:flex;gap:6px;flex:none}
@@ -287,7 +276,6 @@ details.trace{margin-top:12px}
 
 /* 실수로 표시한 출퇴근 기록 */
 .rec-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
-.small-link{font-size:12.5px;color:var(--ink-soft)}
 .list li.void strong,.list li.void .rec-time{text-decoration:line-through;color:var(--ink-soft)}
 .void-note{color:var(--warn)}
 .open-alert{border:2px solid #d9a21b}
@@ -297,3 +285,21 @@ details.trace{margin-top:12px}
 .alert .main{flex:1;min-width:0}
 .note-at{font-size:12px}
 .note-x{flex:none;border:0;background:none;color:var(--ink-soft);font-size:20px;line-height:1;cursor:pointer;padding:2px 6px;align-self:flex-start}
+
+/* ===== 버튼: 세 종류만 쓴다 =====
+   .btn          주 버튼 (파란색) - 화면의 핵심 동작
+   .btn.ghost    보조 버튼 (연한 파란색), .danger는 지우기처럼 되돌리기 어려운 동작
+   .link         글자 버튼 - 작은 부가 동작, .muted는 덜 중요한 것 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:11px 16px;
+  font-size:15px;font-weight:600;line-height:1.3;cursor:pointer;background:var(--blue);color:#fff;text-decoration:none}
+.btn.ghost{background:var(--blue-soft);color:var(--blue)}
+.btn.danger{background:var(--bad-bg);color:var(--bad)}
+.btn.small{padding:7px 12px;font-size:13px;border-radius:8px;flex:none}
+.btn.block{display:flex;width:100%}
+.btn:hover{filter:brightness(.96)}
+.btn:disabled{background:#c4cbdb;color:#fff;cursor:not-allowed;filter:none}
+.link{border:0;background:none;padding:0;cursor:pointer;color:var(--blue);font-size:14px;font-weight:600;text-decoration:none}
+.link:hover{text-decoration:underline}
+.link.muted{color:var(--ink-soft);font-weight:500}
+.link.small{font-size:13px}
+#quitOpen{display:block;margin:0 0 14px}
