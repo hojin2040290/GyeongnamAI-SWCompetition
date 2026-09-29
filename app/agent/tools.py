@@ -4,7 +4,7 @@
 AI(나중에 연결)는 이 값을 입력하지 않으므로 다른 사용자의 기록에 접근할 수 없다.
 """
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from sqlmodel import Session, select
 
@@ -15,6 +15,8 @@ from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
 from app.law.lookup import attach_articles
 from app.models import CheckRun, ContractFields, GuardPost, Job, Notification, Payslip, User, WorkRecord
+
+NOTIFY_DEDUP_HOURS = 24  # 같은 알림을 다시 보내지 않는 시간
 
 
 def facts_from_job(user: User, job: Job, fields: dict | None, on: date | None = None) -> engine.Facts:
@@ -126,9 +128,17 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         session.commit()
         return run.id
 
-    def notify(title: str, body: str) -> None:
+    def notify(title: str, body: str) -> str:
+        """알림 보내기. 같은 알림이 하루 안에 이미 있으면 다시 보내지 않는다 (점검을 여러 번 눌러도 한 번만)."""
+        since = now_kst() - timedelta(hours=NOTIFY_DEDUP_HOURS)
+        dup = session.exec(select(Notification).where(
+            Notification.user_id == user_id, Notification.job_id == job_id, Notification.title == title,
+            Notification.body == body, Notification.created_at >= since)).first()
+        if dup:
+            return "같은 알림이 이미 있어 보내지 않음"
         session.add(Notification(user_id=user_id, job_id=job_id, title=title, body=body, created_at=now_kst()))
         session.commit()
+        return "보냄"
 
     # ----- 상담 -----
     def counsel_for_age() -> list[dict]:

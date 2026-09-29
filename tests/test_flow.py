@@ -125,3 +125,12 @@ def test_contract_fields_saved_without_check(c):
     job_id = c.get("/api/jobs").json()[0]["id"]
     c.put(f"/api/jobs/{job_id}/contract/fields", json={"fields": {"임금": "시급 11,000원"}})
     assert c.get(f"/api/jobs/{job_id}/contract/fields").json()["fields"]["임금"] == "시급 11,000원"
+
+
+def test_same_notification_is_not_repeated(c):
+    job_id = c.get("/api/jobs").json()[0]["id"]
+    before = len(c.get("/api/notifications").json())
+    c.post(f"/api/jobs/{job_id}/agent/payday?month=2026-08")
+    c.post(f"/api/jobs/{job_id}/agent/payday?month=2026-08")
+    titles = [n["title"] for n in c.get("/api/notifications").json()]
+    assert titles.count("2026-08 급여 점검") == 1 and len(titles) == before + 1
