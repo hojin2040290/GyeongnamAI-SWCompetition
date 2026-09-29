@@ -1,11 +1,16 @@
 """정해진 시점에 에이전트를 스스로 시작시키는 예약 작업."""
+import json
+from datetime import timedelta
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlmodel import Session, select
 
 from app.agent import core
-from app.config import LAW_OC, OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
+from app.calc.timeutil import now_kst
+from app.config import AI_RETRY_MIN, AI_RETRY_PER_DAY, LAW_OC, OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
 from app.db import engine
-from app.models import Job, WorkRecord
+from app.llm import client as llm_client
+from app.models import AgentLog, CheckRun, GuardPost, Job, Report, WorkRecord
 
 scheduler = BackgroundScheduler(timezone=TIMEZONE)
 
@@ -49,10 +54,69 @@ def open_record_check() -> dict:
     return {"open": done}
 
 
+RETRY_LABEL = "AI 응답 대기 중이던 일 다시 맡김"
+
+
+def _retries_today(s: Session, job_id: int, event: str) -> int:
+    since = now_kst() - timedelta(days=1)
+    return len(s.exec(select(AgentLog).where(AgentLog.job_id == job_id, AgentLog.event == event, AgentLog.step == "시작",
+                                             AgentLog.detail == RETRY_LABEL, AgentLog.created_at >= since)).all())
+
+
+def _latest(s: Session, job_id: int, kind: str) -> list[CheckRun]:
+    return list(s.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == kind)
+                       .order_by(CheckRun.id.desc())))
+
+
+def waiting_work(s: Session, job: Job) -> list[tuple[str, str]]:
+    """이 사업장에서 AI 응답 대기 중인 일: (사건, 달)."""
+    work: list[tuple[str, str]] = []
+    check = next(iter(_latest(s, job.id, "contract")), None)
+    if check and any(it["status"] == "pending" for it in json.loads(check.results_json)):
+        work.append(("contract_check", ""))
+    seen: set[str] = set()
+    for p in _latest(s, job.id, "payday"):  # 달마다 가장 최근 비교만 본다
+        d = json.loads(p.results_json)
+        if d["month"] not in seen:
+            seen.add(d["month"])
+            if d["compare"]["status"] == "pending":
+                work.append(("payday", d["month"]))
+    quit_run = next(iter(_latest(s, job.id, "quit")), None)
+    if job.status == "quit" and quit_run and json.loads(quit_run.results_json)["status"] == "pending":
+        work.append(("quit_check", ""))
+    pending_post = s.exec(select(GuardPost).where(GuardPost.job_id == job.id, GuardPost.status == "pending")).first()
+    if pending_post or (job.reported and not job.guard_ai_message):
+        work.append(("guard_review", ""))
+    rep = s.exec(select(Report).where(Report.job_id == job.id).order_by(Report.id.desc())).first()
+    if rep and not rep.ai_summary:
+        work.append(("report", ""))
+    return work
+
+
+def retry_waiting() -> dict:
+    """AI가 연결돼 있으면 'AI 응답 대기 중'인 일을 다시 맡긴다 (같은 일은 하루 AI_RETRY_PER_DAY번까지)."""
+    if not llm_client.available():
+        return {"skipped": "AI 모델이 연결되지 않았어요"}
+    runs = {"contract_check": lambda s, j, m: core.run_contract_check(s, j.user_id, j.id, trigger="retry"),
+            "payday": lambda s, j, m: core.run_payday(s, j.user_id, j.id, m, trigger="retry"),
+            "quit_check": lambda s, j, m: core.run_quit_check(s, j.user_id, j.id, trigger="retry"),
+            "guard_review": lambda s, j, m: core.run_guard_review(s, j.user_id, j.id, trigger="retry"),
+            "report": lambda s, j, m: core.run_report(s, j.user_id, j.id, trigger="retry")}
+    done: list[str] = []
+    with Session(engine) as s:
+        for job in s.exec(select(Job)).all():
+            for event, month in waiting_work(s, job):
+                if _retries_today(s, job.id, event) < AI_RETRY_PER_DAY:
+                    runs[event](s, job, month)
+                    done.append(f"{job.id}:{event}{':' + month if month else ''}")
+    return {"retried": done}
+
+
 def start() -> None:
     if not scheduler.running:
         scheduler.add_job(daily_check, "cron", hour=SCHEDULE_HOUR, minute=0, id="daily_check", replace_existing=True)
         scheduler.add_job(open_record_check, "interval", minutes=30, id="open_record_check", replace_existing=True)
+        scheduler.add_job(retry_waiting, "interval", minutes=AI_RETRY_MIN, id="retry_waiting", replace_existing=True)
         scheduler.start()
 
 

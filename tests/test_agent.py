@@ -164,6 +164,10 @@ def test_payday_judged_by_agent(env, monkeypatch):
     assert r["ai_agent"] and r["compare"]["ai_law"] == "근로기준법 제36조"
     # 근무 기록이 없어 필요한 정보가 부족하므로 AI가 위반 의심이라 해도 확인 필요로 되돌린다
     assert r["compare"]["status"] == "warn"
+    # 급여 화면을 다시 열어도 AI를 다시 부르지 않고 저장된 판단을 보여 준다
+    monkeypatch.setattr(client, "LLM_ENABLED", False)
+    again = a.get(f"/api/jobs/{ja}/pay?month=2026-08").json()["compare"]
+    assert again.get("ai_law") == "근로기준법 제36조"
 
 
 def test_seek_adds_ai_questions(env, monkeypatch):
@@ -183,3 +187,40 @@ def test_daily_agent_picks_checks(env, monkeypatch):
         r = core.run_daily(s, job.user_id, ja)
     assert r["ai_agent"] and r["ran"] == ["guard"]
     a.post(f"/api/jobs/{ja}/guard", json={"reported": False})
+
+
+def test_retry_waiting_hands_work_back_to_ai(env, monkeypatch):
+    """AI 응답 대기 중이던 점검을 AI가 연결되면 다시 맡기고, 실패가 이어지면 하루 횟수까지만 맡긴다."""
+    from app import scheduler
+    a, ja, *_ = env
+    monkeypatch.setattr(client, "LLM_ENABLED", False)
+    assert any(i["status"] == "pending" for i in a.post(f"/api/jobs/{ja}/check").json()["items"])
+    assert "skipped" in scheduler.retry_waiting()
+
+    def down(payload):
+        raise client.LLMError("AI 모델에 연결하지 못했어요 (ConnectError)")
+    monkeypatch.setattr(client, "LLM_ENABLED", True)
+    monkeypatch.setattr(client, "LLM_MODEL", "fake")
+    monkeypatch.setattr(client, "_post", down)
+    tries = [scheduler.retry_waiting()["retried"] for _ in range(scheduler.AI_RETRY_PER_DAY + 1)]
+    mine = [sum(x.startswith(f"{ja}:contract_check") for x in t) for t in tries]
+    assert mine == [1] * scheduler.AI_RETRY_PER_DAY + [0]  # 하루 횟수를 넘으면 더 맡기지 않음
+
+
+def test_retry_waiting_completes_when_ai_answers(env, monkeypatch):
+    from app import scheduler
+    a, ja, b, jb = env
+    monkeypatch.setattr(client, "LLM_ENABLED", False)
+    b.post(f"/api/jobs/{jb}/check")  # 다른 사용자 사업장의 대기 중 점검
+    use(monkeypatch, smart_policy)
+    assert f"{jb}:contract_check" in scheduler.retry_waiting()["retried"]
+    items = b.get(f"/api/jobs/{jb}/check").json()["items"]
+    assert "pending" not in {i["status"] for i in items}
+
+
+def test_live_steps_while_agent_runs(env):
+    a, ja, *_ = env
+    last = a.get("/api/agent/last").json()["id"]
+    a.post(f"/api/jobs/{ja}/check")
+    rows = a.get(f"/api/agent/live?after={last}").json()
+    assert rows[0]["step"] == "시작" and rows[0]["event"] == "contract_check" and all(r["id"] > last for r in rows)

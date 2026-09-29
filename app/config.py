@@ -58,6 +58,10 @@ NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
 PUNCH_CONFIRM_SEC = int(os.getenv("PUNCH_CONFIRM_SEC", "60"))       # 출근 뒤 이 시간 안에 퇴근하면 한 번 더 확인
 OPEN_RECORD_ALERT_HOURS = int(os.getenv("OPEN_RECORD_ALERT_HOURS", "16"))  # 퇴근 없이 이 시간이 지나면 알림
 
+# AI 응답 대기 중인 일을 다시 맡기는 간격(분)과 하루 최대 횟수 (AI가 연결돼 있을 때만)
+AI_RETRY_MIN = int(os.getenv("AI_RETRY_MIN", "10"))
+AI_RETRY_PER_DAY = int(os.getenv("AI_RETRY_PER_DAY", "3"))
+
 # 정기 점검 시각 (매일 이 시각에 에이전트가 스스로 시작)
 SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "9"))
 

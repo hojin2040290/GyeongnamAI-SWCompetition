@@ -276,6 +276,9 @@ details.law-text{margin-top:8px;font-size:13px}
 details.law-text summary{cursor:pointer;color:var(--blue);font-weight:500}
 details.law-text pre{white-space:pre-wrap;font-family:inherit;background:var(--bg);border-radius:8px;padding:10px;margin:6px 0 0;max-height:240px;overflow:auto}
 details.trace{margin-top:12px}
+.live{margin-top:12px;background:var(--blue-soft);border-radius:10px;padding:8px 12px}
+.live-head{margin:0;font-size:13px;font-weight:600}
+.live .log:first-child{border-top:0}
 
 /* 실수로 표시한 출퇴근 기록 */
 /* 근무 기록 한 줄: 날짜와 시간 | 위치 기록 여부(가운데) | 실수로 누름(오른쪽) */
