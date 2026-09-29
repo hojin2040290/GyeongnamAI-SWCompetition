@@ -1,0 +1,42 @@
+"""환경 설정. .env 파일을 읽어 설정값을 제공한다 (외부 라이브러리 없이)."""
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_env(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+_load_env(BASE_DIR / ".env")
+
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
+DB_PATH = Path(os.getenv("DB_PATH", str(BASE_DIR / "data" / "app.db")))
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "data" / "uploads")))
+REPORT_DIR = Path(os.getenv("REPORT_DIR", str(BASE_DIR / "data" / "reports")))
+LAW_PARAMS_PATH = BASE_DIR / "data" / "law_params.json"
+TIMEZONE = "Asia/Seoul"
+
+# AI 모델 (아직 연결하지 않음. true로 바꾸면 llm/client.py가 vLLM을 호출)
+LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
+LLM_MODEL = os.getenv("LLM_MODEL", "")
+
+# 외부 API 키 (없으면 해당 기능은 건너뜀)
+LAW_OC = os.getenv("LAW_OC", "")
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
+
+# 정기 점검 시각 (매일 이 시각에 에이전트가 스스로 시작)
+SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "9"))
+
+for d in (UPLOAD_DIR, REPORT_DIR, DB_PATH.parent):
+    Path(d).mkdir(parents=True, exist_ok=True)

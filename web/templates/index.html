@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>알바지킴이</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ===== 처음 설정 ===== -->
+<section class="onboard hidden" id="onboard" aria-label="처음 설정">
+  <div class="wrap">
+
+    <div id="ob0" class="hidden">
+      <div class="brand-lg">알바지킴이</div>
+      <h1>지금 어떤 상황인가요</h1>
+      <p class="lead">상황에 맞는 점검부터 시작할게요.</p>
+      <div class="modes" role="radiogroup" aria-label="지금 상황">
+        <button type="button" class="mode" role="radio" aria-checked="false" data-mode="seek">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+          <span><strong>아르바이트를 구하고 있어요</strong>지원하기 전에 공고와 근무 조건이 법에 맞는지 확인해요</span>
+        </button>
+        <button type="button" class="mode" role="radio" aria-checked="false" data-mode="work">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span><strong>지금 아르바이트를 하고 있어요</strong>일하는 곳을 등록하고 근무 기록과 급여를 점검해요</span>
+        </button>
+        <button type="button" class="mode" role="radio" aria-checked="false" data-mode="quit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4H5v16h4"/><path d="M15 8l4 4-4 4M19 12H9"/></svg>
+          <span><strong>아르바이트를 그만뒀어요</strong>남은 임금을 제대로 받았는지 확인해요</span>
+        </button>
+      </div>
+      <button class="btn block" id="modeNext" disabled>다음</button>
+      <p style="text-align:center;margin-top:14px"><button class="link" id="toLogin">이미 가입했어요, 로그인하기</button></p>
+    </div>
+
+    <div id="ob1" class="hidden">
+      <div class="step">1 / 2 기본 정보</div>
+      <h1>나이에 맞는 법 기준을 적용하려면 생년월일이 필요해요</h1>
+      <p class="lead">근무일마다 만 나이를 계산해 적용할 조항을 고릅니다. 주민등록번호는 받지 않아요.</p>
+      <div class="panel">
+        <label class="field"><span>이메일</span><input class="input" type="email" id="regEmail" autocomplete="email"></label>
+        <label class="field"><span>비밀번호</span><input class="input" type="password" id="regPw" autocomplete="new-password"></label>
+        <label class="field"><span>생년월일</span><input class="input" type="date" id="birth"></label>
+        <p class="err" id="regErr"></p>
+      </div>
+      <button class="btn block" id="regBtn">다음</button>
+    </div>
+
+    <div id="obLogin" class="hidden">
+      <div class="brand-lg">알바지킴이</div>
+      <h1>로그인</h1>
+      <div class="panel">
+        <label class="field"><span>이메일</span><input class="input" type="email" id="logEmail" autocomplete="email"></label>
+        <label class="field"><span>비밀번호</span><input class="input" type="password" id="logPw" autocomplete="current-password"></label>
+        <p class="err" id="logErr"></p>
+      </div>
+      <button class="btn block" id="logBtn">로그인</button>
+      <p style="text-align:center;margin-top:14px"><button class="link" id="toStart">처음이에요, 시작하기</button></p>
+    </div>
+
+    <div id="obSeek" class="hidden">
+      <div class="step">지원 전 확인</div>
+      <h1>지원하려는 곳의 조건을 알려 주세요</h1>
+      <p class="lead">공고 사진은 원본으로 보관돼요. 공고 내용 자동 읽기는 AI 연결 후 제공되고, 지금은 직접 입력해 주세요.</p>
+      <label class="upload" id="seekUpload"><input type="file" accept="image/*,.pdf" hidden id="seekFile">
+        <strong>채용공고 사진 올리기</strong>캡처나 사진</label>
+      <div class="panel" style="margin-top:14px" id="seekForm">
+        <label class="field"><span>사업장 이름</span><input class="input f-name" placeholder="예: 해맑음 편의점 용호점"></label>
+        <label class="field"><span>업종</span>
+          <select class="input f-type">
+            <option value="">선택해 주세요</option>
+            <option>음식점, 카페</option><option>편의점</option><option>판매, 마트</option>
+            <option>배달</option><option>교육, 학원</option><option>물류, 택배</option>
+            <option>사무 보조</option><option>기타</option>
+          </select></label>
+        <label class="field"><span>하는 일</span><input class="input f-work" placeholder="공고에 적힌 업무"></label>
+        <label class="field"><span>공고에 적힌 시급</span>
+          <div class="suffix"><input class="input f-wage" type="number" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
+        <div class="field"><span>수습 기간</span>
+          <div class="seg" data-name="probation"><button type="button" data-v="yes">있어요</button><button type="button" data-v="no">없어요</button><button type="button" data-v="unknown">모름</button></div></div>
+        <div class="field"><span>근무 요일과 시간</span>
+          <button type="button" class="schedule-btn"><span class="sched-sum">요일과 시간을 선택해 주세요</span><span class="sched-go">선택</span></button></div>
+        <p class="err" id="seekErr"></p>
+        <button class="btn block" id="seekRun">지원 전 확인하기</button>
+      </div>
+      <div id="seekResult" class="hidden">
+        <h3>확인 결과</h3>
+        <div id="seekItems"></div>
+        <h3>지원하거나 면접 볼 때 물어보세요</h3>
+        <div class="panel"><ul class="qs" id="seekQs"></ul></div>
+        <p class="hint">결과는 법적 판단이 아닌 참고용이에요.</p>
+        <button class="btn block" id="seekToWork">이곳에서 일하게 됐어요, 등록하기</button>
+        <button class="btn ghost block" style="margin-top:8px" id="seekAgain">다른 공고 확인하기</button>
+        <button class="btn ghost block hidden" style="margin-top:8px" id="seekClose">닫기</button>
+      </div>
+    </div>
+
+    <div id="ob2" class="hidden">
+      <div class="step">2 / 2 아르바이트 정보</div>
+      <h1>일하는 곳을 등록해 주세요</h1>
+      <p class="lead">법 기준을 적용하는 데 필요한 정보예요. 모르는 항목은 모름을 고르면, 판단할 때 확인 필요로 안내해요.</p>
+      <div id="jobList"></div>
+      <button class="btn ghost block add-job" id="addJobBtn">+ 아르바이트 추가</button>
+      <p class="err" id="jobErr"></p>
+      <button class="btn block" style="margin-top:10px" id="saveJobsBtn">시작하기</button>
+      <button class="btn ghost block hidden" style="margin-top:8px" id="cancelJobsBtn">취소</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 앱 ===== -->
+<div class="app hidden" id="app">
+  <header class="top">
+    <div class="brand">알바지킴이</div>
+    <button class="job-switch" id="jobSwitch" aria-haspopup="dialog" aria-label="일하는 곳 바꾸기">
+      <strong class="cur-job">일하는 곳</strong>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <section class="view active" id="v-home" aria-label="출퇴근">
+      <div class="clock">
+        <div class="clock-place cur-job"></div>
+        <div class="date" id="today"></div>
+        <div class="time" id="now">--:--</div>
+        <p class="note">누른 순간 서버가 받은 시각으로 기록돼요</p>
+        <div class="state" id="clockState"></div>
+        <button class="punch" id="punchBtn">출근하기</button>
+        <div class="gps">
+          <span>근무지 위치 함께 기록</span>
+          <label class="switch"><input type="checkbox" id="gpsOn" aria-label="위치 기록 동의"><span></span></label>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 style="margin-top:0">알림</h3>
+        <div id="alerts"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-work" aria-label="근무 기록">
+      <h2 class="cur-job"></h2>
+      <p class="lead">출퇴근 버튼으로 남긴 근무 기록이에요. 급여 계산과 체불 증명의 근거가 돼요.</p>
+      <p class="sched-line" id="schedLine"></p>
+      <div class="panel quit-panel hidden" id="quitPanel">
+        <div class="quit-head"><strong>퇴직 후 임금 정산</strong><span class="tag" id="quitTag"></span></div>
+        <p id="quitText"></p>
+        <div class="seg" style="margin-top:10px">
+          <button type="button" id="paidYes">남은 임금 받았어요</button>
+          <button type="button" id="paidNo">아직 못 받았어요</button>
+        </div>
+        <p class="hint">퇴직 후 14일 안에 남은 임금을 지급해야 해요. 당사자가 합의해 기한을 늘린 경우는 예외예요. 받지 못한 임금은 3년 안에 청구할 수 있어요.</p>
+        <button class="btn block hidden" id="quitReport">상담 사전 자료 만들러 가기</button>
+      </div>
+      <button class="link-quit" id="quitOpen">이곳을 그만뒀어요</button>
+      <div class="panel hidden" id="quitForm">
+        <label class="field"><span>그만둔 날</span><input class="input" type="date" id="quitDateMain"></label>
+        <button class="btn block" id="quitSave">저장하기</button>
+      </div>
+      <div class="panel empty-state hidden" id="recordsEmpty">
+        <strong>아직 근무 기록이 없어요</strong>
+        <p>출퇴근 탭에서 출근하기를 누르면 이곳에 쌓여요.</p>
+      </div>
+      <div class="panel" id="recordsPanel"><ul class="list" id="records"></ul></div>
+
+      <h3>급여 점검</h3>
+      <div class="panel">
+        <div class="month-row"><input class="input" type="month" id="payMonth"><button class="btn ghost" id="payRun">지금 점검</button></div>
+        <div id="payBody"></div>
+        <h3 style="margin-top:18px">받은 급여 올리기</h3>
+        <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="number" id="payAmount" inputmode="numeric"><em>원</em></div></label>
+        <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf"></label>
+        <button class="btn block" id="paySave">저장하고 비교하기</button>
+      </div>
+    </section>
+
+    <section class="view" id="v-check" aria-label="계약서 점검">
+      <h2>계약서 점검</h2>
+      <p class="place-tag cur-job"></p>
+      <button class="seek-entry" id="seekEntry">
+        <span><strong>새 아르바이트에 지원하려고 하나요</strong>지원 전에 공고와 조건을 먼저 확인해요</span>
+        <span class="sched-go">확인</span>
+      </button>
+      <label class="upload"><input type="file" accept="image/*,.pdf" hidden id="contractFile">
+        <strong>근로계약서 사진 올리기</strong>원본은 그대로 저장돼요</label>
+      <div class="ai-note">계약서 자동 읽기는 AI 연결 후 제공돼요. 지금은 계약서를 보고 아래 칸을 직접 채워 주세요.</div>
+      <h3>계약서에 적힌 내용</h3>
+      <div class="panel fields-grid" id="fieldsBox"></div>
+      <button class="btn block" id="checkRun">이 내용으로 점검하기</button>
+      <h3>점검 결과</h3>
+      <div class="summary" id="checkSummary"></div>
+      <div id="checkItems"></div>
+      <p class="hint">결과는 법적 판단이 아닌 참고용이에요. 정확한 판단은 상담 기관에서 받으세요.</p>
+      <details class="more"><summary>에이전트 동작 기록</summary><div id="agentLog"></div></details>
+    </section>
+
+    <section class="view" id="v-docs" aria-label="증거 자료와 상담">
+      <h2>증거 자료</h2>
+      <p class="place-tag cur-job"></p>
+      <p class="lead">올린 자료는 원본 그대로, 올린 시각과 함께 보관돼요.</p>
+      <div class="panel">
+        <label class="field"><span>자료 종류</span>
+          <select class="input" id="evKind">
+            <option value="message">사업주 메시지 캡처</option><option value="schedule">근무표</option>
+            <option value="deposit">입금 내역</option><option value="payslip">급여명세서</option><option value="other">기타</option>
+          </select></label>
+        <label class="upload"><input type="file" hidden id="evFile"><strong>자료 올리기</strong>파일을 고르면 바로 저장돼요</label>
+      </div>
+      <div class="panel"><ul class="list" id="evList"></ul></div>
+      <h3>상담 사전 자료</h3>
+      <div class="panel">
+        <p style="margin-top:0">기본 정보, 점검 결과, 급여 비교, 근무 기록, 증거 자료를 한 문서로 정리해요. 상담 기관에 내면 처음부터 다시 설명하지 않아도 돼요.</p>
+        <button class="btn block" id="reportBtn">상담 사전 자료 만들기</button>
+      </div>
+      <div id="counsel"></div>
+    </section>
+
+    <section class="view" id="v-guard" aria-label="신고 후 보호">
+      <h2>신고 후 보호</h2>
+      <p class="place-tag cur-job"></p>
+      <p class="lead">신고했다면 켜 주세요. 보복을 미리 막고, 생기면 증거를 남겨요.</p>
+      <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <div><strong>신고했어요</strong><div class="sub">켜면 보복 대응이 시작돼요</div></div>
+        <label class="switch"><input type="checkbox" id="reported" aria-label="신고 여부"><span></span></label>
+      </div>
+      <div id="guardOn" class="hidden">
+        <h3>사업주에게 보낼 안내</h3>
+        <div class="panel">
+          <textarea class="input" id="warnMsg"></textarea>
+          <button class="btn ghost block" style="margin-top:10px" id="copyMsg">안내 문구 복사</button>
+        </div>
+        <h3>게시물 확인</h3>
+        <div class="panel">
+          <label class="field"><span>의심되는 게시물 주소</span><input class="input" id="postUrl" placeholder="https://"></label>
+          <div class="row-actions">
+            <button class="btn" id="postAdd">증거로 보존하기</button>
+            <button class="btn ghost" id="postSearch">공개 게시물 검색</button>
+          </div>
+          <p class="hint">보복성 여부 판별은 AI 연결 후 제공돼요. 지금은 주소, 확인 시각, 화면을 보존해요.</p>
+          <ul class="list" id="postList" style="margin-top:12px"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<nav class="tabs hidden" aria-label="메뉴" id="tabs">
+  <div class="inner">
+    <button aria-current="page" data-v="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>출퇴근</button>
+    <button data-v="work"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>근무</button>
+    <button data-v="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l3 3v15H6z"/><path d="M9 13l2 2 4-4"/></svg>점검</button>
+    <button data-v="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6l2 2h8v10H4z"/></svg>자료</button>
+    <button data-v="guard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>보호</button>
+  </div>
+</nav>
+
+<!-- 근무 시간대 선택 -->
+<div class="sheet-backdrop hidden" id="sheetBg">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="grabber" aria-hidden="true"></div>
+    <div class="sheet-head"><h2 id="sheetTitle">근무 요일과 시간</h2><button class="close" id="sheetClose">닫기</button></div>
+    <p class="lead" id="sheetJobName"></p>
+    <div class="sheet-label">1. 일하는 요일을 모두 눌러 주세요</div>
+    <div class="days" id="dayPicker"></div>
+    <div class="sheet-label">2. 요일마다 시작, 끝, 쉬는 시간을 골라 주세요</div>
+    <div id="slotList"></div>
+    <p class="empty" id="slotEmpty">위에서 요일을 누르면 여기에 시간 선택이 나타나요</p>
+    <button class="btn ghost block hidden" id="copyAll">첫 요일 시간을 모든 요일에 똑같이 적용</button>
+    <div class="sheet-foot">
+      <div class="totals">
+        <div><span>주 근무시간</span><strong class="num" id="weekTotal">0시간</strong></div>
+        <div id="nightFlag" class="flag hidden">밤 10시~오전 6시 근무 포함</div>
+      </div>
+      <button class="btn block" id="sheetSave">이 시간으로 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 일하는 곳 선택 -->
+<div class="sheet-backdrop hidden" id="pickerBg">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+    <div class="grabber" aria-hidden="true"></div>
+    <div class="sheet-head"><h2 id="pickerTitle">일하는 곳</h2><button class="close" id="pickerClose">닫기</button></div>
+    <p class="lead">기록을 보고 싶은 곳을 골라 주세요</p>
+    <div id="placeList" class="place-list" role="radiogroup" aria-labelledby="pickerTitle"></div>
+    <div class="picker-foot">
+      <button class="btn ghost block" id="addPlace">+ 새 일하는 곳 등록</button>
+      <button class="link" id="logoutBtn" style="margin-top:14px">로그아웃</button>
+    </div>
+  </div>
+</div>
+
+<template id="jobTpl">
+  <article class="job">
+    <div class="job-head"><strong class="job-title">새 일하는 곳</strong><button class="link-btn remove" type="button">삭제</button></div>
+    <div class="field"><span>근무 상태</span>
+      <div class="seg" data-name="status"><button type="button" data-v="working">일하고 있어요</button><button type="button" data-v="quit">그만뒀어요</button></div></div>
+    <label class="field f-quit-wrap hidden"><span>그만둔 날</span><input class="input f-quit" type="date"></label>
+    <label class="field"><span>사업장 이름</span><input class="input f-name" placeholder="예: 푸른카페 상남점"></label>
+    <label class="field"><span>업종</span>
+      <select class="input f-type">
+        <option value="">선택해 주세요</option>
+        <option>음식점, 카페</option><option>편의점</option><option>판매, 마트</option>
+        <option>배달</option><option>교육, 학원</option><option>물류, 택배</option>
+        <option>사무 보조</option><option>기타</option>
+      </select></label>
+    <label class="field"><span>하는 일</span><input class="input f-work" placeholder="예: 음료 제조, 계산, 매장 정리"></label>
+    <label class="field"><span>약속한 시급</span><div class="suffix"><input class="input f-wage" type="number" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
+    <div class="row">
+      <label class="field"><span>근무 시작일</span><input class="input f-start" type="date"></label>
+      <label class="field"><span>계약 종료일</span><input class="input f-end" type="date"></label>
+    </div>
+    <label class="check-line"><input type="checkbox" class="f-noend"> 종료일을 정하지 않았어요</label>
+    <div class="field"><span>근로계약서를 썼나요</span>
+      <div class="seg" data-name="contract"><button type="button" data-v="yes">썼어요</button><button type="button" data-v="no">안 썼어요</button></div></div>
+    <div class="field f-copy hidden"><span>계약서 사본을 받았나요</span>
+      <div class="seg" data-name="copy"><button type="button" data-v="yes">받았어요</button><button type="button" data-v="no">못 받았어요</button></div></div>
+    <div class="field"><span>수습 기간</span>
+      <div class="seg" data-name="probation"><button type="button" data-v="yes">있어요</button><button type="button" data-v="no">없어요</button><button type="button" data-v="unknown">모름</button></div>
+      <select class="input f-probmonths hidden" style="margin-top:8px">
+        <option value="1">1개월</option><option value="2">2개월</option><option value="3" selected>3개월</option><option value="4">4개월</option><option value="5">5개월</option><option value="6">6개월</option><option value="">모름</option>
+      </select></div>
+    <div class="field"><span>근무 요일과 시간</span>
+      <button type="button" class="schedule-btn"><span class="sched-sum">요일과 시간을 선택해 주세요</span><span class="sched-go">선택</span></button></div>
+    <div class="field"><span>사업장 인원</span>
+      <div class="seg" data-name="size"><button type="button" data-v="5+">5명 이상</button><button type="button" data-v="lt5">5명 미만</button><button type="button" data-v="unknown">모름</button></div></div>
+    <div class="field"><span>임금 받는 주기</span>
+      <div class="seg" data-name="paytype"><button type="button" data-v="월급">월급</button><button type="button" data-v="주급">주급</button><button type="button" data-v="일급">일급</button></div></div>
+    <label class="field f-payday-wrap"><span>월급날</span><div class="suffix"><input class="input f-payday" type="number" min="1" max="31" placeholder="예: 10"><em>일</em></div></label>
+    <div class="field"><span>임금 받는 방법</span>
+      <div class="seg" data-name="paymethod"><button type="button" data-v="계좌 이체">계좌 이체</button><button type="button" data-v="현금">현금</button></div>
+      <p class="hint f-cash hidden">현금은 입금 내역이 남지 않아요. 받을 때마다 금액과 날짜를 기록해 두세요.</p></div>
+    <div class="field"><span>급여에서 떼는 돈</span>
+      <div class="seg wrap" data-name="deduct"><button type="button" data-v="없음">없음</button><button type="button" data-v="세금 3.3%">세금 3.3%</button><button type="button" data-v="4대보험">4대보험</button><button type="button" data-v="모름">모름</button></div></div>
+    <details class="more">
+      <summary>상담 자료에 들어갈 정보 (선택)</summary>
+      <label class="field"><span>사업장 주소</span><input class="input f-addr" placeholder="예: 경남 창원시 ○○구 ○○로"></label>
+      <label class="field"><span>사장님 이름</span><input class="input f-owner" placeholder="모르면 비워 두세요"></label>
+    </details>
+    <div class="field minor-only hidden"><span>보호자 동의서와 가족관계증명서를 가게에 냈나요</span>
+      <div class="seg" data-name="consent"><button type="button" data-v="냈어요">냈어요</button><button type="button" data-v="안 냈어요">안 냈어요</button><button type="button" data-v="모름">모름</button></div>
+      <p class="hint minor-why"></p></div>
+  </article>
+</template>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

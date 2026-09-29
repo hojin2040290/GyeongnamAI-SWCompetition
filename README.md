@@ -1,3 +1,59 @@
-# GyeongnamAI-SWCompetition
-알바지킴이: 청소년 중심 아르바이트 근로권익 점검 및 보호 에이전트
-(경남ai·sw경진대회 참가작)
+# 알바지킴이 (로컬 실행용)
+
+청소년 중심 아르바이트 근로권익 점검 및 보호 AI 에이전트. 지금 버전은 **AI 모델을 연결하지 않은 상태**로,
+기록, 계산, 법 기준값 대조, 자동 점검, 증거 보존, 상담 사전 자료가 실제로 동작한다.
+
+## 실행
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env               # 필요한 값만 채우기 (비워도 실행됨)
+uvicorn app.main:app --reload
+```
+브라우저에서 http://localhost:8000 을 연다. (vLLM을 8000번에 띄울 예정이면 `--port 8080`처럼 다른 포트로 실행)
+
+테스트: `pytest`
+
+## 구조
+```
+app/
+  main.py            FastAPI 진입점 (화면과 API를 함께 제공)
+  routers/api.py     화면이 부르는 API
+  agent/core.py      에이전트 판단 반복 (지금은 규칙 플래너, AI 연결 후 LLM 도구 호출로 교체)
+  agent/tools.py     에이전트 도구 (사용자 번호는 코드가 고정해 다른 사용자 기록에 접근 불가)
+  judge/engine.py    법 기준 대조와 검증 장치 (정상, 확인 필요, 위반 의심)
+  calc/              시간, 나이, 근무 시간표, 임금과 퇴직 정산 계산
+  law/fetch.py       법제처 API로 조문을 불러와 법 기준표(DB)에 저장
+  llm/client.py      AI 모델 호출 자리 (LLM_ENABLED=false면 사용 안 함)
+  guard.py           보복 금지 안내, 공개 게시물 검색, 화면 캡처 보존
+  report.py          상담 사전 자료 문서 만들기
+  scheduler.py       매일 정해진 시각에 월급날 점검, 퇴직 정산 점검
+  storage.py         업로드 원본 저장 (sha256 함께 기록)
+data/law_params.json 판단에 쓰는 법 기준값과 출처 (verified=false 항목은 원문 재확인)
+web/templates, web/static   화면
+tests/               계산과 판단 테스트
+```
+
+## AI 연결 전 동작 방식
+| 기능 | 지금 | AI 연결 후 |
+|---|---|---|
+| 계약서, 공고 읽기 | 원본 저장 후 사용자가 직접 입력 | 비전 모델이 읽어 채우고 사용자가 확인 |
+| 법 조항 판단 | 숫자로 확인 가능한 조항은 법 기준값으로 판단, 업종과 업무 해석은 확인 필요 | 법 기준표 조문과 대조해 AI가 판단, 검증 장치 통과 |
+| 에이전트 흐름 | 사건별로 정한 순서로 도구 실행 | LLM이 도구를 골라 실행 |
+| 보복성 게시물 | 주소, 시각, 화면 보존 후 판별 대기 | AI가 판별 |
+| 보복 금지 안내 | 정해진 문구 | 상황에 맞게 AI가 작성 |
+
+## 외부 API (없으면 해당 기능만 건너뜀)
+- `LAW_OC`: 법제처 국가법령정보 공동활용. `python -m app.law.fetch`로 조문 저장
+- `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`: 공개 게시물 검색
+- 게시물 화면 캡처: `pip install playwright && playwright install chromium`
+
+## 시연용
+- 근무 탭의 **지금 점검**: 월급날이 된 것처럼 에이전트를 바로 실행
+- `POST /api/dev/daily-check`: 매일 도는 자동 점검을 지금 실행
+- 점검 탭 아래 **에이전트 동작 기록**: 도구 호출과 판단 과정 확인
+
+## 계산 범위와 한계
+- 임금: 기본급, 주휴수당(계약상 요일을 모두 출근한 주), 5인 이상 사업장의 야간과 1일 연장 가산. 휴일 가산, 연차수당, 퇴직금, 세금과 보험 공제는 아직 계산하지 않는다.
+- 결과는 법적 판단이 아닌 참고용이다.

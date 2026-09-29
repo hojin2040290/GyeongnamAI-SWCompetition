@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlmodel
+itsdangerous
+python-multipart
+jinja2
+apscheduler<4
+httpx
+pytest
+# 선택: 게시물 화면 캡처 (설치 후 playwright install chromium)
+# playwright
+# AI 연결 시
+# openai
