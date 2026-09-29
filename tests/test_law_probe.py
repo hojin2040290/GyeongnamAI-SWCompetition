@@ -17,3 +17,12 @@ def test_error_message_is_shown():
     err = "<Response><result>실패</result><msg>사용자 정보 검증에 실패하였습니다.</msg></Response>"
     s = summarize(err)
     assert "<result> 실패" in s and "<msg> 사용자 정보 검증에 실패하였습니다." in s
+
+
+def test_outline_and_first_ids():
+    from app.law.probe import first_item_ids, outline
+    body = "<법령><기본정보><법령명_한글>근로기준법</법령명_한글></기본정보><조문><조문단위><조문번호>70</조문번호></조문단위><조문단위><조문번호>71</조문번호></조문단위></조문></법령>"
+    o = outline(body)
+    assert "/법령/조문/조문단위 x2" in o and "/법령/조문/조문단위/조문번호 x2 = 70" in o
+    lst = "<PrecSearch><totalCnt>1</totalCnt><prec id='1'><판례일련번호>123</판례일련번호><사건명>가상 사건</사건명></prec></PrecSearch>"
+    assert first_item_ids(lst) == {"id": "1", "판례일련번호": "123"}
