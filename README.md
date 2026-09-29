@@ -53,7 +53,7 @@ evaluation/          정답 사례 묶음(cases.json)과 목표 성능 측정
 연결 방법: `.env.example`을 `.env`로 복사하고 `LLM_ENABLED=true`, `LLM_BASE_URL`, `LLM_MODEL`(비전 모델이면 사진 읽기도 같은 모델)을 채운 뒤 서버를 다시 켠다.
 
 ## 외부 API (없으면 해당 기능만 건너뜀)
-- `LAW_OC`: 법제처 국가법령정보 공동활용. `python -m app.law.fetch`로 조문 저장
+- `LAW_OC`: 법제처 국가법령정보 공동활용. `python -m app.law.probe`로 신청한 API 응답 확인, `python -m app.law.fetch`로 조문 저장
 - `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`: 공개 게시물 검색
 - 게시물 화면 캡처: `pip install playwright && playwright install chromium`
 
