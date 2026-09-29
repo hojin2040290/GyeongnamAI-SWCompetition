@@ -68,6 +68,7 @@ h3{font-size:16px;margin:24px 0 10px}
 .list{list-style:none;margin:0;padding:0}
 .list li{padding:12px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .list li:first-child{border-top:0;padding-top:0}
+.list li:last-child{padding-bottom:0}
 .list .main{flex:1;min-width:0}
 .list .sub{color:var(--ink-soft);font-size:13px}
 .num{font-variant-numeric:tabular-nums}
