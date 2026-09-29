@@ -549,7 +549,7 @@ function renderRecords(recs){
     const when=`${fmtDT(x.clock_in).split(' ')[2]} 출근, ${x.clock_out?fmtDT(x.clock_out).split(' ')[2]+' 퇴근':(x.void?'퇴근 없음':'근무 중')}`;
     const side=x.void
       ? `<button class="btn ghost small" data-unvoid="${x.id}">표시 취소</button>`
-      : `<span class="rec-side"><span class="tag ${x.gps?'ok':'warn'}">${x.gps?'위치 기록':'위치 미기록'}</span><button class="link small-link" data-void="${x.id}">실수로 누름</button></span>`;
+      : `<span class="rec-side"><span class="tag ${x.gps?'ok':'warn'}">${x.gps?'위치 기록':'위치 미기록'}</span><button class="link muted small" data-void="${x.id}">실수로 누름</button></span>`;
     const note=x.void?`<div class="sub void-note">실수로 표시함 (${fmtDT(x.void_at)}), ${esc(x.void_reason)}. 급여 계산과 점검에서 빠져요</div>`:'';
     return `<li class="${x.void?'void':''}"><div class="main"><strong class="num">${fmtDT(x.clock_in).split(' ').slice(0,2).join(' ')}</strong>
       <div class="sub num rec-time">${when}</div>${note}</div>${side}</li>`;
