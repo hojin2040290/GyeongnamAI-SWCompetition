@@ -152,7 +152,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
 
     def warning_message() -> str:
         from app import guard
-        return guard.warning_message(get_job())
+        return guard.current_message(get_job())
 
     def search_posts() -> dict:
         from app import guard

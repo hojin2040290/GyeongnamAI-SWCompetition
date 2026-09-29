@@ -104,3 +104,24 @@ def test_payslip_edit(c):
     assert [(p["month"], p["amount"]) for p in ps] == [("2026-09", 20000)]
     c.delete(f"/api/jobs/{job_id}/payslips/2026-09")
     assert c.get(f"/api/jobs/{job_id}/payslips").json() == []
+
+
+def test_prefs_and_guard_message_are_saved(c):
+    jobs = c.get("/api/jobs").json()
+    second = jobs[1]["id"]
+    me = c.put("/api/me/prefs", json={"gps_consent": True, "last_job_id": second}).json()
+    assert me["gps_consent"] is True and me["last_job_id"] == second
+    assert c.get("/api/me").json()["last_job_id"] == second  # 다시 열어도 마지막으로 보던 곳
+    assert c.put("/api/me/prefs", json={"last_job_id": 99999}).status_code == 404
+    job_id = jobs[0]["id"]
+    g = c.put(f"/api/jobs/{job_id}/guard/message", json={"message": "고친 안내 문구"}).json()
+    assert g["message"] == "고친 안내 문구" and g["custom_message"] is True
+    assert c.get(f"/api/jobs/{job_id}/guard").json()["message"] == "고친 안내 문구"
+    g = c.put(f"/api/jobs/{job_id}/guard/message", json={"message": ""}).json()
+    assert "제104조" in g["message"] and g["custom_message"] is False
+
+
+def test_contract_fields_saved_without_check(c):
+    job_id = c.get("/api/jobs").json()[0]["id"]
+    c.put(f"/api/jobs/{job_id}/contract/fields", json={"fields": {"임금": "시급 11,000원"}})
+    assert c.get(f"/api/jobs/{job_id}/contract/fields").json()["fields"]["임금"] == "시급 11,000원"

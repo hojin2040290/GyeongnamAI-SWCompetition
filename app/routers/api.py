@@ -39,7 +39,7 @@ class LoginIn(BaseModel):
 
 def user_out(u: User) -> dict:
     return {"id": u.id, "email": u.email, "birth_date": u.birth_date.isoformat(), "mode": u.mode,
-            "age": age_on(u.birth_date, today_kst())}
+            "age": age_on(u.birth_date, today_kst()), "gps_consent": u.gps_consent, "last_job_id": u.last_job_id}
 
 
 @router.post("/auth/register")
@@ -89,6 +89,24 @@ def update_me(data: MeIn, u: User = Depends(current_user), s: Session = Depends(
     u.birth_date = data.birth_date
     if data.mode in ("seek", "work", "quit"):
         u.mode = data.mode
+    s.add(u)
+    s.commit()
+    return user_out(u)
+
+
+class PrefsIn(BaseModel):
+    gps_consent: Optional[bool] = None
+    last_job_id: Optional[int] = None
+
+
+@router.put("/me/prefs")
+def update_prefs(data: PrefsIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """화면 설정을 바로 저장: 위치 기록 동의, 마지막으로 보던 일하는 곳."""
+    if data.gps_consent is not None:
+        u.gps_consent = data.gps_consent
+    if data.last_job_id is not None:
+        own_job(s, u, data.last_job_id)
+        u.last_job_id = data.last_job_id
     s.add(u)
     s.commit()
     return user_out(u)
@@ -475,7 +493,8 @@ def post_out(p: GuardPost) -> dict:
 def guard_state(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     job = own_job(s, u, job_id)
     posts = s.exec(select(GuardPost).where(GuardPost.job_id == job_id).order_by(GuardPost.id.desc())).all()
-    return {"reported": job.reported, "message": guard.warning_message(job) if job.reported else "",
+    return {"reported": job.reported, "message": guard.current_message(job) if job.reported else "",
+            "custom_message": bool(job.guard_message.strip()),
             "keywords": keywords_of(job), "queries": guard.search_queries(job, keywords_of(job)),
             "posts": [post_out(p) for p in posts]}
 
@@ -485,6 +504,20 @@ def set_reported(job_id: int, data: ReportedIn, u: User = Depends(current_user),
     own_job(s, u, job_id)
     run = core.run_guard_toggle(s, u.id, job_id, data.reported)
     return {**guard_state(job_id, u, s), "trace": run["trace"]}
+
+
+class MessageIn(BaseModel):
+    message: str
+
+
+@router.put("/jobs/{job_id}/guard/message")
+def set_message(job_id: int, data: MessageIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """고친 안내 문구 저장. 빈 문구를 보내면 기본 문구로 돌아간다."""
+    job = own_job(s, u, job_id)
+    job.guard_message = data.message.strip()[:2000]
+    s.add(job)
+    s.commit()
+    return guard_state(job_id, u, s)
 
 
 class KeywordsIn(BaseModel):

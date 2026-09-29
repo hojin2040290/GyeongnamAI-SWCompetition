@@ -20,6 +20,11 @@ def warning_message(job: Job) -> str:
             "연락하는 것은 금지되어 있습니다. 원만하게 해결되기를 바랍니다.")
 
 
+def current_message(job: Job) -> str:
+    """사용자가 고친 안내 문구가 있으면 그것을, 없으면 기본 문구를 쓴다."""
+    return job.guard_message.strip() or warning_message(job)
+
+
 def search_queries(job: Job, keywords: list[str]) -> list[str]:
     """검색어: 사업장 이름과 사용자가 등록한 검색어(본인 이름, 별명 등)를 함께 넣는다."""
     if not keywords:
