@@ -321,6 +321,12 @@ em.hint.bad{color:var(--bad)}
 
 /* 확인 중 (AI 판단 전) */
 .tag.pending{color:var(--blue);background:var(--blue-soft)}
+/* AI 응답 대기 중: 도는 표시로 기다리는 중임을 알린다 */
+.tag.pending::before,.ai-note.wait::before,.wait-note::before{content:"";display:inline-block;width:.8em;height:.8em;margin-right:6px;vertical-align:-1px;
+  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.tag.pending::before,.ai-note.wait::before,.wait-note::before{animation-duration:2.4s}}
+.wait-note{color:var(--blue)}
 .result.pending{border-color:#8fa3e3}
 .summary .pending strong{color:var(--blue)}
 
