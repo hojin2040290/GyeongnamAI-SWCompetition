@@ -306,3 +306,5 @@ details.trace{margin-top:12px}
 .link:hover{filter:brightness(.96)}
 .link.muted{background:#e6e9f0;color:var(--ink-soft)}
 #quitOpen{margin:0 0 14px}
+/* 근무 기록 줄의 버튼(실수로 누름, 표시 취소)은 목록이 복잡해 보이지 않게 조금 작게 */
+#records .link,#records .btn.small{padding:4px 9px;font-size:12px;border-radius:6px}
