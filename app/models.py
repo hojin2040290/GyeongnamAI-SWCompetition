@@ -137,16 +137,34 @@ class GuardPost(SQLModel, table=True):
 
 
 class CaseNote(SQLModel, table=True):
-    """에이전트의 사건 기억과 조언. 다음 실행 때 사건 기억을 읽고, 조언은 홈에 보여 준다."""
+    """에이전트 메모와 조언. 다음 실행 때 메모를 읽고, 조언은 홈에 보여 준다."""
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     job_id: int = Field(index=True)
-    kind: str  # memory(사건 기억), advice(사용자에게 하는 조언)
+    kind: str  # memory(에이전트 메모), advice(사용자에게 하는 조언)
     text: str
     next_tab: str = ""  # 조언의 바로 가기: check, pay, docs, guard (없으면 빈 값)
     event: str = ""
     run_id: str = ""
     created_at: datetime
+
+
+class AgentQuestion(SQLModel, table=True):
+    """에이전트가 판단에 필요한 정보를 사용자에게 묻는 질문. 답하면 질문한 점검을 다시 시작한다."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    job_id: int = Field(index=True)
+    event: str  # 질문한 사건 (답하면 이 사건을 다시 시작)
+    run_id: str = ""
+    question: str
+    options_json: str = "[]"
+    why: str = ""  # 왜 묻는지
+    law: str = ""  # 관련 조항
+    context_json: str = "{}"  # 다시 시작할 때 필요한 값 (예: 급여 점검의 달)
+    status: str = "open"  # open(답 기다림), answered(답함), closed(닫음)
+    answer: str = ""
+    created_at: datetime
+    answered_at: Optional[datetime] = None
 
 
 class AgentLog(SQLModel, table=True):

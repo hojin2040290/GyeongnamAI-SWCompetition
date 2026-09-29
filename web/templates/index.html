@@ -194,8 +194,14 @@
         <p class="hint">출퇴근 시각은 증거로 쓰이기 때문에 고치거나 지울 수 없어요. 잘못 누른 기록은 실수로 누름을 눌러 표시하면 시각은 그대로 남고 급여 계산과 점검에서만 빠져요.</p>
       </div>
 
+      <div class="panel ask-card hidden" id="askCard" style="margin-top:14px">
+        <h3 style="margin:0 0 4px">에이전트가 물어봐요</h3>
+        <p class="sub" style="margin:0 0 6px">답하면 에이전트가 그 점검을 다시 판단해요.</p>
+        <div id="askList"></div>
+        <div id="askTrace"></div>
+      </div>
       <div class="panel case-card" style="margin-top:14px">
-        <h3 style="margin:0 0 10px">사건 진행 상황</h3>
+        <h3 style="margin:0 0 10px">AI 에이전트 진행 상황</h3>
         <ol class="case-steps" id="caseSteps"></ol>
         <div id="caseAdvice"></div>
         <details class="more hidden" id="caseMemWrap"><summary>에이전트가 기억하는 것</summary><div id="caseMem"></div></details>

@@ -1,14 +1,15 @@
-"""사건 진행 상황과 에이전트의 사건 기억.
+"""AI 에이전트 진행 상황과 에이전트 메모.
 
-진행 상황은 저장된 기록으로 코드가 정리하고(판단 없음), 사건 기억과 조언은 에이전트가 남긴다.
+진행 상황은 저장된 기록으로 코드가 정리하고(판단 없음), 메모와 조언은 에이전트가 남긴다.
+문제가 생기기 전에 미리 기록을 모으는 사용자도 있으므로 '사건'이라는 말은 쓰지 않는다.
 """
 import json
 
 from sqlmodel import Session, select
 
-from app.models import CaseNote, CheckRun, Evidence, GuardPost, Job, Report, WorkRecord
+from app.models import AgentQuestion, CaseNote, CheckRun, Evidence, GuardPost, Job, Report, WorkRecord
 
-MEMORY_LIMIT = 8  # 다음 실행에 넘기는 사건 기억 수
+MEMORY_LIMIT = 8  # 다음 실행에 넘기는 메모 수
 NEXT_TABS = {"check": "계약서 점검", "pay": "급여 점검", "docs": "상담 사전 자료", "guard": "신고 후 보호"}
 
 
@@ -17,7 +18,7 @@ def _count(rows: list[dict], status: str) -> int:
 
 
 def progress(s: Session, job: Job) -> list[dict]:
-    """사건 단계마다 한 일이 있는지와 숫자 (점검 → 기록 → 급여 → 상담 자료 → 신고 → 보호)."""
+    """단계마다 한 일이 있는지와 숫자 (점검, 기록, 급여, 상담 자료, 신고, 보호)."""
     check = s.exec(select(CheckRun).where(CheckRun.job_id == job.id, CheckRun.kind == "contract")
                    .order_by(CheckRun.id.desc())).first()
     items = json.loads(check.results_json) if check else []
@@ -53,3 +54,11 @@ def memories(s: Session, job_id: int, limit: int = MEMORY_LIMIT) -> list[dict]:
 def latest_advice(s: Session, job_id: int) -> CaseNote | None:
     return s.exec(select(CaseNote).where(CaseNote.job_id == job_id, CaseNote.kind == "advice")
                   .order_by(CaseNote.id.desc())).first()
+
+
+def questions(s: Session, job_id: int, limit: int = 10) -> list[dict]:
+    """에이전트가 물어본 질문과 답 (답을 기다리는 질문은 다시 묻지 않게 함께 넘긴다)."""
+    rows = s.exec(select(AgentQuestion).where(AgentQuestion.job_id == job_id, AgentQuestion.status != "closed")
+                  .order_by(AgentQuestion.id.desc()).limit(limit)).all()
+    return [{"answer_id": q.id, "질문": q.question, "관련 조항": q.law,
+             "답": q.answer if q.status == "answered" else "답 기다리는 중"} for q in reversed(rows)]

@@ -21,7 +21,7 @@ from app.judge import engine
 from app.law.lookup import article_info, attach_articles, attach_refs, known_law, refs_for
 from app import ocr, storage
 from app.llm import client
-from app.models import (CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User,
+from app.models import (AgentQuestion, CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User,
                         WorkRecord)
 
 NOTIFY_DEDUP_HOURS = 24  # 같은 알림을 다시 보내지 않는 시간
@@ -54,8 +54,13 @@ def user_info_missing(it: dict) -> list[str]:
     return [n for n in it.get("needed", []) if "AI" not in n]
 
 
-def judgment_problems(session: Session, it: dict, j: dict) -> list[str]:
-    """검증 장치: AI 판단 하나가 받아들일 수 없거나 다시 볼 필요가 있는 이유."""
+UNKNOWN_ANSWERS = ("모름", "몰라요", "모르겠어요")
+OPEN_QUESTION_MAX = 3  # 사업장마다 답을 기다리는 질문 수
+
+
+def judgment_problems(session: Session, it: dict, j: dict, answered: list | tuple = ()) -> list[str]:
+    """검증 장치: AI 판단 하나가 받아들일 수 없거나 다시 볼 필요가 있는 이유.
+    answered: 판단이 근거로 댄 사용자 답변 (있으면 부족했던 사용자 정보가 채워진 것으로 본다)."""
     status, law, fact = j.get("status"), str(j.get("law", "")).strip(), str(j.get("fact", "")).strip()
     out = []
     if status not in (engine.OK, engine.WARN, engine.BAD):
@@ -67,8 +72,9 @@ def judgment_problems(session: Session, it: dict, j: dict) -> list[str]:
     if status == engine.OK and it.get("rule_status") == engine.BAD:
         out.append("정상이라 했지만 코드 계산과 법 기준 대조로는 위반이 의심돼요. 사실: "
                    + ", ".join(map(str, it.get("basis", [])))[:200])
-    if status in (engine.OK, engine.BAD) and user_info_missing(it):
-        out.append(f"판단에 필요한 정보({', '.join(user_info_missing(it))})가 기록에 없어요. 추측하지 말고 warn으로 두세요")
+    if status in (engine.OK, engine.BAD) and user_info_missing(it) and not answered:
+        out.append(f"판단에 필요한 정보({', '.join(user_info_missing(it))})가 기록에 없어요. "
+                   "추측하지 말고 warn으로 두거나 ask_user로 물어보세요")
     return out
 
 
@@ -148,6 +154,16 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
                     it["ai_error"] = error
         return items
 
+    def answers_for(j: dict) -> list[AgentQuestion]:
+        """판단이 근거로 댄 사용자 답변 중 이 사업장에서 실제로 답한 것 ('모름'은 뺀다)."""
+        ids = [x for x in (j.get("answer_ids") or []) if isinstance(x, int)] if isinstance(j, dict) else []
+        if not ids or job_id is None:
+            return []
+        rows = session.exec(select(AgentQuestion).where(AgentQuestion.id.in_(ids), AgentQuestion.job_id == job_id,
+                                                        AgentQuestion.user_id == user_id,
+                                                        AgentQuestion.status == "answered")).all()
+        return [q for q in rows if q.answer.strip() not in UNKNOWN_ANSWERS]
+
     def apply_judgments(items: list[dict], judgments: list) -> list[dict]:
         """AI 판단을 항목에 붙이고 검증 장치로 다시 확인한다.
         근거 조항이 법 기준표에 없거나 근거 사실이 없는 판단은 받지 않는다 (그 항목은 대기로 남음)."""
@@ -161,6 +177,11 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
                 it["ai_error"] = (f"AI가 댄 근거 조항 '{law}'이 법 기준표에 없어 판단을 받지 않았어요" if not label_ok
                                   else "AI가 근거 사실을 내지 않아 판단을 받지 않았어요")
                 continue
+            answers = answers_for(j)
+            if answers:  # 사용자가 답한 정보로 부족했던 정보를 채운다
+                it["needed"] = [n for n in it.get("needed", []) if "AI" in n]
+                it["basis"] = [*it.get("basis", []), *(f"사용자 답변: {q.question} → {q.answer}" for q in answers)]
+                it["answer_ids"] = [q.id for q in answers]
             it["status"], it["ai_reason"] = j["status"], str(j.get("reason", ""))[:300]
             it["ai_law"], it["ai_fact"] = law, fact[:300]
             it.pop("ai_error", None)
@@ -178,7 +199,8 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
                 out.append({"i": i, "문제": "없는 항목 번호예요"})
                 continue
             seen.add(i)
-            out += [{"i": i, "조항": items[i]["law"], "문제": p} for p in judgment_problems(session, items[i], j)]
+            out += [{"i": i, "조항": items[i]["law"], "문제": p}
+                    for p in judgment_problems(session, items[i], j, answers_for(j))]
         out += [{"i": i, "조항": it["law"], "문제": "이 항목을 판단하지 않았어요"}
                 for i, it in enumerate(items) if i not in seen]
         return out
@@ -476,16 +498,50 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         session.commit()
 
     def remember(note: str) -> str:
-        """다음 실행 때 읽을 사건 기억을 남긴다 (한 번 실행에 3개까지)."""
+        """다음 실행 때 읽을 메모를 남긴다 (한 번 실행에 3개까지)."""
         t["get_job"]()
         note = str(note).strip()[:300]
         if not note:
             raise ValueError("기억할 내용이 비어 있어요")
         if state.get("remembered", 0) >= 3:
-            raise ValueError("한 번 실행에 사건 기억은 3개까지 남길 수 있어요")
+            raise ValueError("한 번 실행에 메모는 3개까지 남길 수 있어요")
         _note("memory", note)
         state["remembered"] = state.get("remembered", 0) + 1
         return "기억함"
+
+    def ask_user(question: str, options: list, why: str, law: str = "") -> dict:
+        """판단에 필요한 정보를 사용자에게 묻는다. 홈에 질문 카드가 뜨고 알림이 간다. 답하면 이 점검을 다시 시작한다."""
+        t["get_job"]()
+        question, why = str(question).strip()[:200], str(why).strip()[:200]
+        opts = [str(o).strip()[:40] for o in options or [] if str(o).strip()][:5]
+        if not question or not why:
+            raise ValueError("질문과 묻는 이유가 필요해요")
+        if "모름" not in opts:
+            opts.append("모름")
+        open_qs = session.exec(select(AgentQuestion).where(AgentQuestion.job_id == job_id,
+                                                           AgentQuestion.status == "open")).all()
+        if any(q.question == question for q in open_qs):
+            return {"안내": "같은 질문이 이미 답을 기다리고 있어요. 그 항목은 warn으로 두세요."}
+        if len(open_qs) >= OPEN_QUESTION_MAX:
+            raise ValueError(f"답을 기다리는 질문이 {OPEN_QUESTION_MAX}개예요. 그 항목은 warn으로 두세요")
+        q = AgentQuestion(user_id=user_id, job_id=job_id, event=state.get("event", ""), run_id=state.get("run_id", ""),
+                          question=question, options_json=json.dumps(opts, ensure_ascii=False), why=why,
+                          law=str(law).strip()[:60], context_json=json.dumps(state.get("resume", {}), ensure_ascii=False),
+                          created_at=now_kst())
+        session.add(q)
+        session.commit()
+        t["notify"]("에이전트가 물어볼 게 있어요", f"{question} 홈에서 답하면 다시 판단해요.")
+        state.setdefault("asked", []).append(q.id)
+        return {"question_id": q.id, "안내": "사용자가 답하면 이 점검을 다시 시작해요. 지금은 이 항목을 warn으로 두세요."}
+
+    def get_answers() -> list[dict]:
+        """사용자가 답한 질문과 답 (판단 근거로 쓸 때 judgments의 answer_ids에 번호를 넣는다)."""
+        t["get_job"]()
+        rows = session.exec(select(AgentQuestion).where(AgentQuestion.job_id == job_id, AgentQuestion.user_id == user_id,
+                                                        AgentQuestion.status == "answered")
+                            .order_by(AgentQuestion.id.desc()).limit(10)).all()
+        return [{"answer_id": q.id, "질문": q.question, "답": q.answer, "관련 조항": q.law,
+                 "답한 날": q.answered_at} for q in rows]
 
     def give_advice(advice: str, next_tab: str = "") -> str:
         """사용자에게 다음에 할 일을 조언한다. 홈에 보이고, next_tab이 있으면 그 화면 바로 가기가 붙는다."""
@@ -526,8 +582,12 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         Tool("set_post_status", "게시물 판별 결과를 저장한다. suspect(보복 의심), ok(문제 없음), unclear(확인 필요).",
              set_post_status, {"post_id": {"type": "integer"}, "status": {"type": "string", "enum": list(POST_STATUS)},
                                "reason": S}, ["post_id", "status", "reason"]),
-        Tool("remember", "다음 실행 때 읽을 사건 기억을 남긴다 (무엇을 판단했고, 무엇이 남았는지).", remember,
+        Tool("remember", "다음 실행 때 읽을 메모를 남긴다 (무엇을 판단했고, 무엇이 남았는지).", remember,
              {"note": S}, ["note"]),
+        Tool("ask_user", "판단에 필요한데 기록에 없는 정보를 사용자에게 묻는다 (선택지 포함). 답하면 이 점검이 다시 시작된다.",
+             ask_user, {"question": S, "options": {"type": "array", "items": S}, "why": S, "law": LAW_LABEL},
+             ["question", "options", "why"]),
+        Tool("get_answers", "사용자가 답한 질문과 답을 본다.", get_answers),
         Tool("give_advice", "사용자에게 다음에 할 일을 조언한다. next_tab은 check(계약서 점검), pay(급여 점검), "
              "docs(상담 사전 자료), guard(신고 후 보호) 중 바로 가기할 화면.", give_advice,
              {"advice": S, "next_tab": {"type": "string", "enum": ["", "check", "pay", "docs", "guard"]}}, ["advice"]),

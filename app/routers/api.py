@@ -20,7 +20,7 @@ from app.config import OPEN_RECORD_ALERT_HOURS, PUNCH_CONFIRM_SEC
 from app.db import get_session
 from app.law.lookup import attach_articles, attach_refs, table_status
 from app.llm import client as llm_client
-from app.models import (AgentLog, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
+from app.models import (AgentLog, AgentQuestion, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
                         User, WorkRecord)
 from app.storage import save_original
 
@@ -661,7 +661,7 @@ def guard_search(job_id: int, u: User = Depends(current_user), s: Session = Depe
     return core.run_guard_search(s, u.id, job_id)
 
 
-# ---------- 사건 진행 상황과 에이전트 조언 ----------
+# ---------- AI 에이전트 진행 상황과 조언 ----------
 @router.get("/jobs/{job_id}/case")
 def case_state(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     from app.agent import case
@@ -670,6 +670,57 @@ def case_state(job_id: int, u: User = Depends(current_user), s: Session = Depend
     return {"progress": case.progress(s, job), "memory": case.memories(s, job_id),
             "advice": {"text": adv.text, "next_tab": adv.next_tab, "event": adv.event,
                        "created_at": adv.created_at.isoformat()} if adv else None}
+
+
+# ---------- 에이전트의 질문 ----------
+def question_out(q: AgentQuestion) -> dict:
+    return {"id": q.id, "question": q.question, "options": json.loads(q.options_json), "why": q.why, "law": q.law,
+            "event": q.event, "status": q.status, "answer": q.answer, "created_at": q.created_at.isoformat()}
+
+
+@router.get("/jobs/{job_id}/questions")
+def list_questions(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    own_job(s, u, job_id)
+    rows = s.exec(select(AgentQuestion).where(AgentQuestion.job_id == job_id, AgentQuestion.user_id == u.id,
+                                              AgentQuestion.status == "open").order_by(AgentQuestion.id)).all()
+    return [question_out(q) for q in rows]
+
+
+def own_question(s: Session, u: User, qid: int) -> AgentQuestion:
+    q = s.get(AgentQuestion, qid)
+    if not q or q.user_id != u.id:
+        raise HTTPException(404, "질문을 찾을 수 없어요")
+    return q
+
+
+class AnswerIn(BaseModel):
+    answer: str
+
+
+@router.post("/questions/{qid}/answer")
+def answer_question(qid: int, data: AnswerIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """답을 저장하고, 질문했던 점검을 에이전트가 다시 시작한다."""
+    q = own_question(s, u, qid)
+    if q.status != "open":
+        raise HTTPException(400, "이미 답했거나 닫은 질문이에요")
+    answer = data.answer.strip()[:200]
+    if not answer:
+        raise HTTPException(400, "답을 골라 주거나 적어 주세요")
+    q.status, q.answer, q.answered_at = "answered", answer, now_kst()
+    s.add(q)
+    s.commit()
+    run = core.run_answer(s, u.id, q.job_id, q.event, json.loads(q.context_json or "{}"))
+    return {"question": question_out(q), "event": core.RESUME.get(q.event, "contract_check"), **run}
+
+
+@router.delete("/questions/{qid}")
+def close_question(qid: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    q = own_question(s, u, qid)
+    if q.status == "open":
+        q.status = "closed"
+        s.add(q)
+        s.commit()
+    return {"ok": True}
 
 
 # ---------- 에이전트 진행 상황 (화면에 단계별로 보여 주기) ----------
