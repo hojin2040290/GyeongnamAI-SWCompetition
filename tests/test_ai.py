@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.db import init_db
 from app.llm import client
 from app.main import app
+from tests.fake_agent import FakeAgent, smart_policy
 
 SAMPLE = Path(__file__).resolve().parent.parent / "테스트자료"
 
@@ -17,27 +18,18 @@ CONTRACT = {"임금": "시급 9,288원 (수습기간 중 최저임금의 90%)", 
 PAYSLIP = {"month": "2026-09", "net_pay": "557,280원", "base_pay": "557,280", "weekly_holiday_pay": "0", "deduction": "0"}
 
 
+AGENT = FakeAgent(smart_policy)
+
+
 def fake_post(payload: dict) -> dict:
-    """vLLM의 /chat/completions 응답 흉내."""
-    msgs = payload["messages"]
-    content = msgs[-1]["content"]
+    """vLLM의 /chat/completions 응답 흉내: 사진은 읽은 값을, 나머지는 에이전트의 도구 호출을 돌려준다."""
+    content = payload["messages"][-1]["content"]
     if isinstance(content, list):  # 사진
         assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
-        text = content[0]["text"]
-        answer = "```json\n" + json.dumps(PAYSLIP if "급여명세서" in text else CONTRACT, ensure_ascii=False) + "\n```"
-    elif "보복 금지 안내" in msgs[0]["content"]:
-        answer = json.dumps({"message": "AI가 쓴 안내 문구", "laws": ["근로기준법 제104조 제2항"]}, ensure_ascii=False)
-    elif "보복성 게시물" in msgs[0]["content"]:  # 첫 줄은 사업장 정보, 다음 줄부터 게시물
-        posts = [json.loads(x) for x in content.splitlines()[1:]]
-        answer = json.dumps([{"i": p["i"], "status": "suspect" if "신고" in p["제목"] else "ok",
-                              "reason": "테스트 판별"} for p in posts], ensure_ascii=False)
-    elif "사건 요약" in msgs[0]["content"]:
-        answer = json.dumps({"summary": "AI가 쓴 사건 요약", "points": ["물어볼 점"],
-                             "basis": ["근로기준법 제70조"]}, ensure_ascii=False)
-    else:  # 조항 판단: 모든 항목을 정상이라고 답해 검증 장치가 되돌리는지 본다
-        n = len(content.splitlines())
-        answer = json.dumps([{"i": i, "status": "ok", "reason": "테스트"} for i in range(n)])
-    return {"choices": [{"message": {"role": "assistant", "content": answer}}]}
+        answer = "```json\n" + json.dumps(PAYSLIP if "급여명세서" in content[0]["text"] else CONTRACT,
+                                          ensure_ascii=False) + "\n```"
+        return {"choices": [{"message": {"role": "assistant", "content": answer}}]}
+    return AGENT(payload)
 
 
 @pytest.fixture()
@@ -94,7 +86,11 @@ def test_payslip_photo_fills_amount_then_saved(c, ai):
 
 def test_ai_judgment_is_cross_checked(c, ai):
     """AI가 모두 정상이라고 해도, 코드 계산으로 위반 의심인 항목(야간근로, 최저임금)은 확인 필요로 되돌린다."""
-    items = c.post(f"/api/jobs/{job_id(c)}/check").json()["items"]
+    r = c.post(f"/api/jobs/{job_id(c)}/check").json()
+    assert r["ai_agent"] is True
+    steps = [t["step"] for t in r["trace"]]
+    assert steps.index("도구 check_rules") < steps.index("도구 get_article") < steps.index("AI 끝냄")
+    items = r["items"]
     night = [i for i in items if i["law"] == "근로기준법 제70조"][0]
     assert night["status"] == "warn" and night["rule_status"] in ("bad", "warn")
     assert any(i["status"] == "ok" and i.get("ai_reason") == "테스트" for i in items)
@@ -109,7 +105,8 @@ def test_model_error_keeps_pending(c, monkeypatch):
         raise client.LLMError("AI 모델에 연결하지 못했어요 (ConnectError)")
     monkeypatch.setattr(client, "_post", boom)
     items = c.post(f"/api/jobs/{job_id(c)}/check").json()["items"]
-    assert {i["status"] for i in items} <= {"pending", "warn"} and items[0].get("ai_error")
+    assert {i["status"] for i in items} <= {"pending", "warn"}
+    assert all("ConnectError" in i["ai_error"] for i in items if i["status"] == "pending")
 
 
 def test_guard_without_model_waits(c):

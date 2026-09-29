@@ -1,20 +1,33 @@
-"""에이전트 판단 반복.
+"""에이전트 실행.
 
-사건(사용자 입력 또는 정해진 시점)이 생기면 시작해서, 도구를 실행하고 결과를 보고 다음 행동을 정한다.
-지금은 AI가 연결되지 않아 사건별로 정해 둔 순서(규칙 플래너)로 도구를 부른다.
-AI 연결 후에는 planner 부분만 LLM의 도구 호출로 바꾸고, 도구와 기록 방식은 그대로 쓴다.
-모든 흐름은 입력, 판단, 도구 실행, 결과를 동작 기록(AgentLog)에 남기고 화면에도 돌려준다.
+사건(사용자 입력 또는 정해진 시점)이 생기면 시작한다. AI에게는 사건의 목표와 쓸 수 있는 도구만 주고,
+AI가 도구를 고르고 결과를 보며 다음 행동을 정한다 (app/agent/loop.py).
+AI가 없거나 응답하지 않으면 정해 둔 순서로 사실만 정리하고, 판단할 부분은 'AI 응답 대기 중'으로 둔다.
+모든 흐름은 입력, AI 판단, 도구 실행, 결과를 동작 기록(AgentLog)에 남기고 화면에도 돌려준다.
 """
 import json
 import uuid
+from datetime import date
 
 from sqlmodel import Session
 
-from app.agent.tools import make_tools
-from app.calc.timeutil import now_kst
+from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
+from app.agent.tools import agent_tools, for_ai, make_tools
+from app.calc.timeutil import now_kst, today_kst
+from app.judge import engine
+from app.law.lookup import known_law
 from app.models import AgentLog
 
-MAX_STEPS = 10
+MAX_STEPS = 10  # AI 응답이 없을 때 정해 둔 순서의 도구 호출 수 제한
+
+S = {"type": "string"}
+JUDGE_ONE = {"status": {"type": "string", "enum": ["ok", "warn", "bad"], "description": "정상, 확인 필요, 위반 의심"},
+             "law": {"type": "string", "description": "근거로 쓴 조항"}, "fact": {"type": "string", "description": "근거로 쓴 사실"},
+             "reason": {"type": "string", "description": "판단 이유 한두 문장"}}
+JUDGMENTS = {"judgments": {"type": "array", "description": "검토 항목마다 판단 하나", "items": {
+    "type": "object", "properties": {"i": {"type": "integer", "description": "check_rules 항목 번호"}, **JUDGE_ONE},
+    "required": ["i", "status", "law", "fact", "reason"]}}}
+DONE = {"note": {"type": "string", "description": "한 일 요약"}}
 
 
 class Run:
@@ -22,18 +35,45 @@ class Run:
         self.s, self.user_id, self.job_id, self.event = session, user_id, job_id, event
         self.run_id = uuid.uuid4().hex[:8]
         self.tools = make_tools(session, user_id, job_id)
+        self.state: dict = {}  # AI가 도구로 만든 결과 (검토 항목, 급여 비교, 저장한 문구 등)
         self.steps = 0
+        self.ai_used = False
+        self.ai_error = ""
         self.trace: list[dict] = []
-        self.log("시작", "사용자 입력" if trigger == "user" else "정해진 시점 (자동 점검)")
+        label = {"user": "사용자 입력", "schedule": "정해진 시점 (자동 점검)", "agent": "에이전트가 시작",
+                 "retry": "AI 응답 대기 중이던 일 다시 맡김"}
+        self.log("시작", label.get(trigger, trigger))
 
     def call(self, name: str, *args):
-        """도구 실행과 기록. 반복 횟수를 넘으면 멈춘다."""
+        """정해 둔 순서로 도구 실행 (AI 응답이 없을 때). 반복 횟수를 넘으면 멈춘다."""
         self.steps += 1
         if self.steps > MAX_STEPS:
             raise RuntimeError("에이전트 반복 횟수를 넘었어요")
         result = self.tools[name](*args)
         self.log(f"도구 {name}", _short(result))
         return result
+
+    def agent(self, goal: Goal, context: dict, extra: list[Tool] | None = None) -> dict | None:
+        """AI가 목표를 이룰 때까지 도구를 고르게 한다. 못 하면 None (대기)."""
+        tools = agent_tools(self.s, self.user_id, self.job_id, self.state)
+        for t in extra or []:
+            tools[t.name] = t
+        out = run_agent(self, goal, tools, context)
+        self.ai_used = out is not None
+        if not self.ai_used:
+            self.log("대기", f"{AI_WAITING}: 정해 둔 순서로 사실만 정리해요")
+        return out
+
+    def rules_tool(self, make_items, desc: str) -> Tool:
+        """법 기준표와 대조해 검토할 항목과 사실을 만드는 도구. 결과 판단은 AI가 한다."""
+        def check_rules() -> list[dict]:
+            self.state["items"] = self.tools["wait_ai"](make_items())
+            return for_ai(self.state["items"])
+        return Tool("check_rules", desc, check_rules)
+
+    def need(self, key: str, msg: str):
+        """finish 전에 꼭 거쳐야 할 도구를 확인한다."""
+        return lambda _args: None if self.state.get(key) is not None else msg
 
     def log(self, step: str, detail: str) -> None:
         self.trace.append({"step": step, "detail": detail[:300]})
@@ -43,7 +83,7 @@ class Run:
 
     def done(self, out: dict, summary: str) -> dict:
         self.log("결과", summary)
-        return {**out, "run_id": self.run_id, "trace": self.trace}
+        return {**out, "ai_agent": self.ai_used, "run_id": self.run_id, "trace": self.trace}
 
 
 def _short(v) -> str:
@@ -56,22 +96,50 @@ def _short(v) -> str:
 
 def _summary(items: list[dict]) -> str:
     """결과 개수 요약. AI 판단 전 항목은 '확인 중'으로 센다."""
-    names = [("bad", "위반 의심"), ("warn", "확인 필요"), ("pending", "확인 중(AI 판단 전)"), ("ok", "정상")]
+    names = [("bad", "위반 의심"), ("warn", "확인 필요"), ("pending", "확인 중(AI 응답 대기 중)"), ("ok", "정상")]
     parts = [f"{label} {n}건" for key, label in names if (n := sum(i["status"] == key for i in items))]
     return ", ".join(parts) or "점검할 항목이 없어요"
 
 
+def apply_one(s: Session, target: dict, out: dict | None, error: str = "") -> dict:
+    """AI의 판단 하나(급여, 퇴직 정산)를 붙이고 검증 장치로 확인한다. AI가 없으면 대기로 둔다."""
+    law, fact = str((out or {}).get("law", "")).strip(), str((out or {}).get("fact", "")).strip()
+    if out and out.get("status") in (engine.OK, engine.WARN, engine.BAD) and fact and known_law(s, law):
+        target.update(status=out["status"], ai_reason=str(out.get("reason", ""))[:300], ai_law=law, ai_fact=fact[:300])
+        target.pop("ai_error", None)
+        return engine.cross_check([target])[0]
+    if target.get("status") == engine.PENDING:
+        target["ai_error"] = (error or AI_WAITING) if not out else "AI가 댄 근거 조항이나 사실을 받을 수 없어 판단하지 않았어요"
+    return target
+
+
+def _judge_items(r: Run, goal_text: str, tools: list[str], make_items, context: dict, finish_extra: dict | None = None):
+    """검토 항목 판단 (계약서, 퇴근, 지원 전 공통): AI가 check_rules로 항목을 받아 판단한다."""
+    goal = Goal(goal_text, ["check_rules", *tools], {**JUDGMENTS, **(finish_extra or {})}, ["judgments"],
+                check=r.need("items", "먼저 check_rules로 검토 항목을 받아 주세요"))
+    out = r.agent(goal, context, [r.rules_tool(make_items, "법 기준표와 대조해 검토할 항목과 근거 사실을 받는다.")])
+    if out:
+        return r.tools["apply_judgments"](r.state["items"], out.get("judgments")), out
+    items = r.state.get("items") or make_items()
+    return r.tools["wait_ai"](items, r.ai_error), None
+
+
 # ---------- 계약서, 근무 기록 점검 ----------
-def run_contract_check(session: Session, user_id: int, job_id: int) -> dict:
-    r = Run(session, user_id, job_id, "contract_check")
+CONTRACT_GOAL = ("이 사업장의 기본 정보, 계약서 내용, 실제 출퇴근 기록을 법 기준과 대조해 주세요. check_rules로 검토 항목을 받고, "
+                 "필요하면 조문과 계산 결과를 확인한 뒤, 항목마다 정상(ok), 확인 필요(warn), 위반 의심(bad) 중 하나로 판단해 "
+                 "finish의 judgments에 담아 주세요. 위반 의심이 있으면 사용자에게 알림을 보내 주세요.")
+
+
+def run_contract_check(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
+    r = Run(session, user_id, job_id, "contract_check", trigger)
     r.log("입력", "기본 정보, 계약서, 실제 출퇴근 기록을 법 기준표와 대조")
-    items = r.call("judge_job")
-    rec_items = r.call("judge_records")
-    r.log("판단", f"입력 정보 {len(items)}건, 근무 기록 {len(rec_items)}건")
-    items = r.call("attach_law", items + rec_items)
-    items = r.call("ai_judge", items)
-    check_id = r.call("save_check", "contract", items)
-    r.call("notify", "계약서 점검 완료", _summary(items) + ". 계약서 탭에서 확인해 보세요.")
+    items, _ = _judge_items(r, CONTRACT_GOAL, ["get_profile", "get_contract", "calc_work_days", "get_age_on",
+                                                "get_article", "find_refs", "notify"],
+                            lambda: r.tools["judge_job"]() + r.tools["judge_records"](), {"사업장": r.tools["get_job"]().name})
+    items = r.tools["attach_law"](items)
+    check_id = r.tools["save_check"]("contract", items)
+    if not r.ai_used:
+        r.call("notify", "계약서 점검 완료", _summary(items) + ". 계약서 탭에서 확인해 보세요.")
     return r.done({"check_id": check_id, "items": items}, _summary(items))
 
 
@@ -81,58 +149,85 @@ def run_shift_check(session: Session, user_id: int, job_id: int, record_id: int)
     rec = r.tools["get_record"](record_id)
     day = rec.clock_in.date().isoformat()
     r.log("입력", f"퇴근 기록 {rec.clock_in:%H:%M}~{rec.clock_out:%H:%M}")
-    items = r.call("judge_shift", day)
-    if not items:
-        return r.done({"day": day, "items": []}, "오늘 근무 기록에서 문제를 찾지 못했어요")
-    items = r.call("ai_judge", r.call("attach_law", items))
-    r.call("save_check", "shift", {"day": day, "items": items})
-    r.call("notify", "오늘 근무 점검 결과", _summary(items) + ". 계약서 탭에서 확인해 보세요.")
+    found = r.call("judge_shift", day)
+    if not found:  # 코드가 찾은 검토 항목이 없으면 AI에게 맡길 일이 없다
+        return r.done({"day": day, "items": []}, "오늘 근무 기록에서 검토할 항목이 없어요")
+    goal = (f"사용자가 방금 퇴근했어요 ({day}). 그날과 그 주의 출퇴근 기록을 check_rules로 받아 항목마다 판단해 "
+            "finish의 judgments에 담고, 문제가 의심되면 사용자에게 알려 주세요.")
+    items, _ = _judge_items(r, goal, ["calc_work_days", "get_age_on", "get_article", "find_refs", "notify"],
+                            lambda: found, {"퇴근한 날": day})
+    items = r.tools["attach_law"](items)
+    r.tools["save_check"]("shift", {"day": day, "items": items})
+    if not r.ai_used:
+        r.call("notify", "오늘 근무 점검 결과", _summary(items) + ". 계약서 탭에서 확인해 보세요.")
     return r.done({"day": day, "items": items}, _summary(items))
 
 
 def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
     r = Run(session, user_id, None, "seek_check")
     r.log("입력", f"지원하려는 곳: {data.get('name') or '이름 없음'}")
-    out = r.call("judge_seek", data)
-    out["items"] = r.call("ai_judge", r.call("attach_law", out["items"]))
-    r.call("save_check", "seek", {"input": data, **out})
-    return r.done(out, f"{_summary(out['items'])}, 물어볼 질문 {len(out['questions'])}개")
+    seek = r.call("judge_seek", data)
+    goal = ("사용자가 아르바이트에 지원하기 전이에요. 공고 조건을 check_rules로 받아 항목마다 판단해 finish의 judgments에 담고, "
+            "지원할 때 사업장에 물어보면 좋을 질문이 더 있으면 extra_questions에 넣어 주세요.")
+    extra_q = {"extra_questions": {"type": "array", "items": S, "description": "더 물어볼 질문 (없으면 빈 배열)"}}
+    items, out = _judge_items(r, goal, ["get_profile", "get_age_on", "get_article", "find_refs"],
+                              lambda: seek["items"], {"공고": data}, extra_q)
+    questions = seek["questions"] + [str(q)[:200] for q in (out or {}).get("extra_questions") or []
+                                     if str(q).strip() and q not in seek["questions"]][:5]
+    res = {"items": r.tools["attach_law"](items), "questions": questions}
+    r.tools["save_check"]("seek", {"input": data, **res})
+    return r.done(res, f"{_summary(res['items'])}, 물어볼 질문 {len(questions)}개")
 
 
 # ---------- 급여, 퇴직 ----------
 def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "payday", trigger)
     r.log("입력", f"{month} 급여 점검")
-    expected = r.call("calc_pay", month)
-    paid = r.call("get_payslip", month)
-    cmp = r.call("compare_pay", expected, paid)
+    goal = Goal(f"{month} 급여를 계산한 금액과 받은 금액을 compare_pay로 비교하고, 체불이 의심되는지 판단해 finish에 담아 주세요. "
+                "금액은 도구 결과만 쓰세요. 적게 받았거나 받은 금액이 없으면 사용자에게 알림을 보내 주세요.",
+                ["get_profile", "calc_pay", "get_payslip", "compare_pay", "calc_work_days", "get_article", "notify"],
+                JUDGE_ONE, list(JUDGE_ONE), check=r.need("pay", "먼저 compare_pay로 금액을 비교해 주세요"))
+    out = r.agent(goal, {"달": month})
+    pay = r.state.get("pay")
+    if not pay:
+        expected, paid = r.call("calc_pay", month), r.call("get_payslip", month)
+        pay = {"month": month, "expected": expected, "paid": paid, "compare": r.call("compare_pay", expected, paid)}
+    cmp = apply_one(session, pay["compare"], out, r.ai_error)
     r.log("판단", cmp["text"])
-    r.call("save_check", "payday", {"month": month, "expected": expected, "paid": paid, "compare": cmp})
-    if cmp.get("short"):  # 금액 차이는 코드가 계산한 사실이라 바로 알린다 (체불 판단은 AI)
-        r.call("notify", f"{month} 급여 점검 결과", cmp["text"] + " 상담 사전 자료를 만들어 둘 수 있어요.")
-    elif paid is None:
-        r.call("notify", f"{month} 급여 점검", "받은 급여를 아직 올리지 않았어요. 명세서나 입금 금액을 올려 주세요.")
-    return r.done({"expected": expected, "paid": paid, "compare": cmp}, cmp["text"])
+    r.tools["save_check"]("payday", pay)
+    if not r.ai_used:
+        if cmp.get("short"):  # 금액 차이는 코드가 계산한 사실이라 바로 알린다 (체불 판단은 AI)
+            r.call("notify", f"{month} 급여 점검 결과", cmp["text"] + " 상담 사전 자료를 만들어 둘 수 있어요.")
+        elif pay["paid"] is None:
+            r.call("notify", f"{month} 급여 점검", "받은 급여를 아직 올리지 않았어요. 명세서나 입금 금액을 올려 주세요.")
+    return r.done({"expected": pay["expected"], "paid": pay["paid"], "compare": cmp}, cmp["text"])
 
 
 def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict | None:
     r = Run(session, user_id, job_id, "quit_check", trigger)
-    st = r.call("settlement")
-    if not st:
+    if not r.tools["settlement"]():
         r.done({}, "그만둔 사업장이 아니에요")
         return None
-    unpaid = st["rule_status"] != "ok"  # 받았다고 기록하지 않음
-    if unpaid and st["left"] < 0:
-        r.call("notify", "퇴직 후 임금 지급 기한이 지났어요",
-               f"지급 기한 {st['due']}이 지났어요. 아직 못 받았다면 상담 사전 자료를 만들어 보세요.")
-    elif unpaid and st["left"] <= 3:
-        r.call("notify", "퇴직 후 임금 지급 기한이 다가와요", f"지급 기한 {st['due']}까지 {st['left']}일 남았어요.")
+    goal = Goal("사용자가 일을 그만뒀어요. settlement로 임금 지급 기한을 확인하고, 기한 안에 받지 못한 것이 의심되는지 판단해 "
+                "finish에 담아 주세요. 기한이 지났거나 3일 안으로 다가왔는데 받았다는 기록이 없으면 사용자에게 알려 주세요.",
+                ["get_profile", "settlement", "get_article", "notify"], JUDGE_ONE, list(JUDGE_ONE),
+                check=r.need("settlement", "먼저 settlement로 지급 기한을 확인해 주세요"))
+    out = r.agent(goal, {})
+    st = r.state.get("settlement") or r.call("settlement")
+    st = apply_one(session, st, out, r.ai_error)
+    if not r.ai_used:
+        unpaid = st["rule_status"] != "ok"  # 받았다고 기록하지 않음
+        if unpaid and st["left"] < 0:
+            r.call("notify", "퇴직 후 임금 지급 기한이 지났어요",
+                   f"지급 기한 {st['due']}이 지났어요. 아직 못 받았다면 상담 사전 자료를 만들어 보세요.")
+        elif unpaid and st["left"] <= 3:
+            r.call("notify", "퇴직 후 임금 지급 기한이 다가와요", f"지급 기한 {st['due']}까지 {st['left']}일 남았어요.")
     r.done({}, f"지급 기한 {st['due']}")
     return st
 
 
 def run_open_check(session: Session, user_id: int, job_id: int, limit_hours: int, trigger: str = "schedule") -> dict:
-    """퇴근을 잊은 기록 찾기: 출근한 지 오래됐는데 퇴근이 없으면 알린다."""
+    """퇴근을 잊은 기록 찾기: 출근한 지 오래됐는데 퇴근이 없으면 알린다 (시간 계산과 알림은 코드의 일)."""
     r = Run(session, user_id, job_id, "open_check", trigger)
     rec = r.call("find_open_record")
     if not rec or rec["hours"] < limit_hours:
@@ -155,16 +250,22 @@ def run_read_image(session: Session, user_id: int, job_id: int, evidence_id: int
 
 
 # ---------- 상담 ----------
-def run_report(session: Session, user_id: int, job_id: int) -> dict:
-    r = Run(session, user_id, job_id, "report")
+def run_report(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
+    r = Run(session, user_id, job_id, "report", trigger)
     r.log("입력", "상담 사전 자료 만들기")
-    counsel = r.call("counsel_for_age")
-    r.log("판단", "만 나이에 맞는 상담 기관: " + ", ".join(c["name"] for c in counsel))
-    summary = r.call("summarize_case")
-    r.log("판단", "AI가 사건 요약 작성" if summary["ai"] else summary["reason"])
-    rep = r.call("build_report", summary)
-    r.call("notify", "상담 사전 자료를 만들었어요", "자료 탭에서 다시 열어 볼 수 있어요. 상담 기관에 낼 때 함께 보여 주세요.")
-    return r.done({**rep, "counsel": counsel, "summary_ai": summary["ai"]}, "상담 사전 자료 작성 완료")
+    goal = Goal("사용자가 노동 상담 기관에 가져갈 상담 사전 자료를 만들어 주세요. 저장된 점검 결과와 기록을 확인하고, "
+                "사건 요약과 상담 때 물어볼 점을 build_report에 넣어 문서를 만든 뒤, 사용자에게 알리고 finish로 끝내 주세요. "
+                "요약에는 기록에 있는 사실만 쓰고, 숫자는 도구 결과를 그대로 옮기세요.",
+                ["get_profile", "get_contract", "get_saved_checks", "calc_work_days", "settlement", "list_evidence",
+                 "counsel_for_age", "get_article", "find_refs", "build_report", "notify"], DONE,
+                check=r.need("report", "먼저 build_report로 문서를 만들어 주세요"))
+    r.agent(goal, {})
+    counsel = r.tools["counsel_for_age"]()
+    rep = r.state.get("report")
+    if not rep:
+        rep = r.call("build_report", {"ai": False, "reason": f"{AI_WAITING}: {r.ai_error or 'AI가 연결되면 사건 요약을 작성해요'}"})
+        r.call("notify", "상담 사전 자료를 만들었어요", "자료 탭에서 다시 열어 볼 수 있어요. 상담 기관에 낼 때 함께 보여 주세요.")
+    return r.done({**rep, "counsel": counsel, "summary_ai": r.ai_used}, "상담 사전 자료 작성 완료")
 
 
 # ---------- 신고 후 보호 ----------
@@ -174,37 +275,114 @@ def run_guard_toggle(session: Session, user_id: int, job_id: int, on: bool) -> d
     r.call("set_reported", on)
     if not on:
         return r.done({"message": ""}, "보복 대응을 멈췄어요")
-    wrote = r.call("write_warning_message")
-    r.log("판단", "AI가 불리한 처우 금지 조항을 근거로 안내 문구 작성" if wrote["ai"] else wrote["reason"])
-    msg = r.call("warning_message")
-    r.call("notify", "보복 대응을 시작했어요", "사업주에게 보낼 안내 문구를 준비했고, 매일 공개 게시물을 확인해요.")
-    return r.done({"message": msg}, "안내 문구 준비, 매일 게시물 확인 예약")
+    goal = Goal("사용자가 사업장을 노동관계법 위반으로 신고했어요. 보복을 막기 위해 사업주에게 보낼 안내 문구를 법 기준표의 조문을 "
+                "근거로 정중하게 써서 save_warning_message로 저장하고, 사용자에게 보복 대응을 시작했다고 알린 뒤 finish로 끝내 주세요.",
+                ["get_profile", "get_article", "save_warning_message", "notify"], DONE,
+                check=r.need("message", "먼저 save_warning_message로 안내 문구를 저장해 주세요"))
+    r.agent(goal, {"보복 금지 관련 조항": _retaliation_laws()})
+    if not r.ai_used:
+        r.call("notify", "보복 대응을 시작했어요", "사업주에게 보낼 안내 문구를 준비했고, 매일 공개 게시물을 확인해요.")
+    return r.done({"message": r.call("warning_message")}, "안내 문구 준비, 매일 게시물 확인 예약")
+
+
+def _retaliation_laws() -> list[str]:
+    from app.calc.params import P
+    return P()["retaliation"]["laws"]
+
+
+POST_GOAL = ("판별 대기 게시물을 list_posts로 보고, 신고한 근로자를 겨냥한 보복성 게시물(신상 공개, 비방, 취업 방해 등)인지 "
+             "게시물마다 set_post_status로 저장해 주세요. 제목과 내용만 보고 판단하고, 내용이 부족하면 unclear로 두세요. "
+             "보복이 의심되면 사용자에게 알린 뒤 finish로 끝내 주세요.")
+POST_TOOLS = ["get_profile", "list_posts", "set_post_status", "get_article", "notify"]
 
 
 def run_guard_search(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "guard_search", trigger)
-    if not r.tools["get_job"]().guard_ai_message:  # 전에 AI 응답이 없었다면 안내 문구를 다시 맡긴다
-        r.call("write_warning_message")
-    res = r.call("search_posts")
-    judged = r.call("classify_posts")  # 검색을 건너뛰어도 판별 대기 게시물은 판별한다
-    _notify_posts(r, res.get("added", 0), judged)
-    if res.get("skipped"):
-        return r.done({**res, "classify": judged}, res["reason"])
-    return r.done({**res, "classify": judged}, f"새 게시물 {res['added']}건")
+    no_msg = not r.tools["get_job"]().guard_ai_message
+    goal = Goal("공개 게시물을 search_posts로 검색해 새 게시물을 찾아 주세요. 그다음 " + POST_GOAL
+                + (" 아직 AI가 쓴 보복 금지 안내 문구가 없으니 save_warning_message로 함께 저장해 주세요." if no_msg else ""),
+                ["search_posts", *POST_TOOLS] + (["save_warning_message"] if no_msg else []), DONE,
+                check=r.need("search", "먼저 search_posts로 검색해 주세요"))
+    def search_posts() -> dict:  # 결과를 이번 실행에 남겨 화면에 돌려준다
+        r.state["search"] = r.tools["search_posts"]()
+        return r.state["search"]
+    tools_extra = [Tool("search_posts", "사업장 이름과 검색어로 공개 게시물을 검색해 새 게시물을 보존한다.", search_posts)]
+    r.agent(goal, {"보복 금지 관련 조항": _retaliation_laws()}, tools_extra)
+    res = r.state.get("search") or r.call("search_posts")
+    judged = _posts_result(r)
+    if not r.ai_used and res.get("added"):
+        r.call("notify", "새 공개 게시물을 찾았어요", f"게시물 {res['added']}건을 보존했어요. 보호 탭에서 확인해 보세요.")
+    return r.done({**res, "classify": judged}, res.get("reason") if res.get("skipped") else f"새 게시물 {res['added']}건")
 
 
-def _notify_posts(r: Run, added: int, judged: dict) -> None:
-    if judged.get("suspect"):
-        r.call("notify", "보복이 의심되는 게시물이 있어요",
-               f"AI가 게시물 {judged['suspect']}건을 보복 의심으로 판별했어요. 보호 탭에서 확인하고 상담 사전 자료를 만들어 보세요.")
-    elif added:
-        r.call("notify", "새 공개 게시물을 찾았어요", f"게시물 {added}건을 보존했어요. 보호 탭에서 확인해 보세요.")
+def run_guard_review(session: Session, user_id: int, job_id: int, trigger: str = "user", r: Run | None = None) -> dict:
+    """판별 대기 게시물 판별 (게시물을 보존한 뒤, 또는 AI 응답 대기 중이던 일을 다시 맡길 때)."""
+    r = r or Run(session, user_id, job_id, "guard_review", trigger)
+    if r.tools["pending_posts"]():
+        r.agent(Goal(POST_GOAL, POST_TOOLS, DONE), {"보복 금지 관련 조항": _retaliation_laws()})
+    return _posts_result(r)
+
+
+def _posts_result(r: Run) -> dict:
+    judged = r.state.get("posts", [])
+    out = {"judged": len(judged), "pending": r.tools["pending_posts"](), "suspect": sum(p["status"] == "suspect" for p in judged)}
+    if out["pending"] and not r.ai_used:
+        out["reason"] = f"{AI_WAITING}: {r.ai_error or '판별하지 않고 증거만 보존했어요'}"
+    return out
 
 
 def run_guard_preserve(session: Session, user_id: int, job_id: int, url: str, title: str = "") -> dict:
     r = Run(session, user_id, job_id, "guard_preserve")
     r.log("입력", f"게시물 주소 {url[:120]}")
     res = r.call("preserve_post", url, title)
-    judged = r.call("classify_posts")
-    _notify_posts(r, 0, judged)
+    judged = run_guard_review(session, user_id, job_id, r=r)
     return r.done({**res, "classify": judged}, "주소, 확인 시각" + (", 화면 캡처" if res["captured"] else "") + " 보존")
+
+
+# ---------- 매일 자동 점검 ----------
+def run_daily(session: Session, user_id: int, job_id: int) -> dict:
+    """매일 정해진 시각: 오늘 이 사업장에 무엇을 확인하고 알릴지 AI가 정한다. AI가 없으면 정해 둔 조건으로 실행한다."""
+    r = Run(session, user_id, job_id, "daily", "schedule")
+    today = today_kst()
+    last_month = date.fromordinal(today.replace(day=1).toordinal() - 1).strftime("%Y-%m")
+    ran: list[str] = []
+
+    def overview() -> dict:
+        job, st = r.tools["get_job"](), r.tools["settlement"]()
+        return {"오늘": today, "월급날": job.payday, "오늘이 월급날": job.payday == today.day, "지난달": last_month,
+                "상태": "그만둠" if job.status == "quit" else "일하는 중",
+                "퇴직 후 지급 기한까지 남은 날": st["left"] if st else None, "신고함": job.reported,
+                "판별 대기 게시물": r.tools["pending_posts"](), "오래된 출근 기록": r.tools["find_open_record"]()}
+
+    def pay_check(month: str) -> dict:
+        ran.append("payday")
+        out = run_payday(session, user_id, job_id, month, trigger="agent")
+        return {"결과": out["compare"]["status"], "사실": out["compare"]["text"]}
+
+    def quit_check() -> dict:
+        ran.append("quit")
+        st = run_quit_check(session, user_id, job_id, trigger="agent")
+        return {"결과": st["status"], "지급 기한": st["due"]} if st else {"안내": "그만둔 사업장이 아니에요"}
+
+    def post_search() -> dict:
+        ran.append("guard")
+        out = run_guard_search(session, user_id, job_id, trigger="agent")
+        return {"새 게시물": out.get("added", 0), "보복 의심": out["classify"]["suspect"]}
+
+    extra = [Tool("get_overview", "오늘 날짜, 월급날, 퇴직 지급 기한, 신고 여부, 판별 대기 게시물을 본다.", overview),
+             Tool("run_pay_check", "그 달 급여 점검을 실행한다 (보통 월급날에 지난달).", pay_check,
+                  {"month": {"type": "string", "description": "YYYY-MM"}}, ["month"]),
+             Tool("run_quit_check", "그만둔 뒤 임금 지급 기한 점검을 실행한다.", quit_check),
+             Tool("run_post_search", "신고한 사업장의 공개 게시물 검색과 판별을 실행한다.", post_search)]
+    goal = Goal("매일 자동 점검 시간이에요. get_overview로 오늘 상황을 보고, 이 사업장에 오늘 필요한 점검을 골라 실행해 주세요. "
+                "필요 없는 점검은 하지 마세요. 알릴 일이 있으면 사용자에게 알린 뒤 finish로 끝내 주세요.",
+                ["get_overview", "run_pay_check", "run_quit_check", "run_post_search", "notify"], DONE)
+    if r.agent(goal, {}, extra) is None and not ran:
+        job = r.tools["get_job"]()
+        if job.status == "working" and job.payday == today.day:
+            pay_check(last_month)
+        if job.status == "quit":
+            quit_check()
+        if job.reported:
+            post_search()
+    return r.done({"ran": ran}, "실행한 점검: " + (", ".join(ran) or "없음"))

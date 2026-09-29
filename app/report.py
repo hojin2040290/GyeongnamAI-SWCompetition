@@ -145,7 +145,8 @@ th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10p
 <body><h1>상담 사전 자료</h1><p class="s">작성 시각 {now_kst()}</p>{''.join(rows)}</body></html>"""
     path = Path(REPORT_DIR) / f"report_{user_id}_{job_id}_{now_kst().strftime('%Y%m%d%H%M%S')}.html"
     path.write_text(doc, encoding="utf-8")
-    rep = Report(user_id=user_id, job_id=job_id, path=str(path), created_at=now_kst())
+    rep = Report(user_id=user_id, job_id=job_id, path=str(path), ai_summary=bool(summary and summary.get("ai")),
+                 created_at=now_kst())
     session.add(rep)
     session.commit()
     return rep

@@ -33,6 +33,35 @@ def find_article(session: Session, label: str) -> LawArticle | None:
                         .order_by(LawArticle.id.desc())).first()
 
 
+def _param_laws(v) -> set[str]:
+    """law_params.json에 출처와 함께 적어 둔 조항 이름들."""
+    out: set[str] = set()
+    if isinstance(v, dict):
+        for k, x in v.items():
+            if k.startswith("law") and isinstance(x, str):
+                out.add(x)
+            elif k == "laws" and isinstance(x, list):
+                out.update(i for i in x if isinstance(i, str))
+            else:
+                out |= _param_laws(x)
+    elif isinstance(v, list):
+        for x in v:
+            out |= _param_laws(x)
+    return out
+
+
+def known_law(session: Session, label: str) -> bool:
+    """AI가 근거로 댄 조항을 받아들일지: 법 기준표에 있으면 받는다.
+    그 법의 기준표가 아직 없으면 law_params.json에 출처와 함께 적힌 조항만 받는다."""
+    parsed = parse_label(label or "")
+    if not parsed:
+        return False
+    if find_article(session, label):
+        return True
+    built = session.exec(select(LawArticle).where(LawArticle.law_name == parsed[0])).first()
+    return not built and any(parse_label(x) == parsed for x in _param_laws(params.P()))
+
+
 def article_info(session: Session, label: str) -> dict:
     """화면과 상담 자료에 쓰는 조문 정보. 없으면 built=False."""
     if not parse_label(label):
