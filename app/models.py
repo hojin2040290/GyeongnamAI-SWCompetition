@@ -46,7 +46,8 @@ class Job(SQLModel, table=True):
     biz_no: str = ""  # 사업자등록번호 (000-00-00000, 모르면 빈 값)
     reported: bool = False
     guard_keywords: str = ""  # 게시물 검색어 (쉼표로 구분, 예: 본인 이름, 별명)
-    guard_message: str = ""  # 사용자가 고친 보복 금지 안내 문구 (비어 있으면 기본 문구)
+    guard_message: str = ""  # 사용자가 고친 보복 금지 안내 문구 (비어 있으면 AI 문구, 그것도 없으면 기본 문구)
+    guard_ai_message: str = ""  # AI가 작성한 보복 금지 안내 문구 (AI 응답이 없으면 빈 값)
     created_at: datetime
 
 
@@ -127,7 +128,9 @@ class GuardPost(SQLModel, table=True):
     url: str
     title: str = ""
     source: str = "user"  # user, search
-    status: str = "pending"  # pending(판별 대기), suspect, ok
+    status: str = "pending"  # pending(AI 응답 대기 중), suspect(보복 의심), ok(문제 없음)
+    snippet: str = ""  # 판별에 쓰는 게시물 내용 일부 (검색 결과 요약이나 보존한 화면의 글자)
+    ai_reason: str = ""  # AI가 판별한 근거
     evidence_id: Optional[int] = None
     found_at: datetime
 

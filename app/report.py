@@ -1,4 +1,4 @@
-"""상담 사전 자료 만들기. 지금은 모인 기록을 정리한 문서이고, AI 연결 후 사건 요약을 AI가 덧붙인다."""
+"""상담 사전 자료 만들기. 모인 기록을 정리하고, 맨 앞에 AI가 쓴 사건 요약을 붙인다 (AI 응답이 없으면 대기 중으로 표시)."""
 import html
 import json
 from pathlib import Path
@@ -16,7 +16,25 @@ from app.models import CheckRun, Evidence, Report, WorkRecord
 LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심", "pending": "확인 중(AI 판단 전)"}
 
 
-def build(session: Session, user_id: int, job_id: int) -> Report:
+def summary_html(summary: dict | None) -> str:
+    """사건 요약 (AI 작성). AI 응답이 없으면 'AI 응답 대기 중'과 이유를 적는다."""
+    e = html.escape
+    out = ["<h2>사건 요약 (AI 작성)</h2>"]
+    if not summary or not summary.get("ai"):
+        reason = (summary or {}).get("reason") or "AI 응답 대기 중"
+        out.append(f"<p class='w'>{e(reason)}</p><p class='s'>아래 기록은 코드가 정리한 사실이에요. "
+                   "AI가 연결된 뒤 자료를 다시 만들면 요약이 들어가요.</p>")
+        return "".join(out)
+    out.append(f"<p>{e(summary['summary'])}</p>")
+    if summary.get("points"):
+        out.append("<p><b>상담 때 물어볼 점</b></p><ul>" + "".join(f"<li>{e(p)}</li>" for p in summary["points"]) + "</ul>")
+    if summary.get("basis"):
+        out.append(f"<p class='s'>요약에 근거로 쓴 조항: {e(', '.join(summary['basis']))}</p>")
+    out.append("<p class='s'>AI가 아래 점검 결과와 기록만 보고 쓴 요약이에요. 숫자는 코드가 계산한 값이고, 법적 판단이 아닌 참고 자료예요.</p>")
+    return "".join(out)
+
+
+def build(session: Session, user_id: int, job_id: int, summary: dict | None = None) -> Report:
     t = make_tools(session, user_id, job_id)
     user, job = t["get_user"](), t["get_job"]()
     e = html.escape
@@ -30,7 +48,7 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     settle = t["settlement"]()
     counsel = t["counsel_for_age"]()
 
-    rows = []
+    rows = [summary_html(summary)]
     articles: dict[str, dict] = {}
     rows.append("<h2>1. 기본 정보</h2><table>")
     rows.append(f"<tr><th>만 나이</th><td>{age_on(user.birth_date, today_kst())}세</td></tr>")
@@ -123,7 +141,7 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>상담 사전 자료</title>
 <style>body{{font-family:sans-serif;max-width:820px;margin:24px auto;padding:0 16px;line-height:1.6}}
 table{{border-collapse:collapse;width:100%;margin:8px 0}}th,td{{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;font-size:14px}}
-th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
+th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}.w{{color:#3355cc;background:#eef2ff;padding:8px 10px;border-radius:8px}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
 <body><h1>상담 사전 자료</h1><p class="s">작성 시각 {now_kst()}</p>{''.join(rows)}</body></html>"""
     path = Path(REPORT_DIR) / f"report_{user_id}_{job_id}_{now_kst().strftime('%Y%m%d%H%M%S')}.html"
     path.write_text(doc, encoding="utf-8")

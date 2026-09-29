@@ -48,6 +48,30 @@ def _judge_prompt(items: list[dict]) -> str:
     return "\n".join(lines)
 
 
+AI_WAITING = "AI 응답 대기 중"
+
+WARNING_SYSTEM = (
+    "당신은 신고한 청소년 아르바이트생을 돕는 보조자입니다. 사업주에게 보낼 보복 금지 안내 문구를 씁니다. "
+    "정중하고 차분하게, 위협이나 과장 없이 3~5문장으로 쓰세요. 주어진 조문만 근거로 들고, 조문에 없는 내용이나 "
+    "주어지지 않은 사실(날짜, 금액, 이름)을 지어내지 마세요. "
+    '설명 없이 JSON {"message": "안내 문구", "laws": ["근거로 든 조항"]}만 답하세요.')
+
+POST_SYSTEM = (
+    "당신은 신고한 청소년 아르바이트생을 돕는 보조자입니다. 공개 게시물이 신고한 근로자를 겨냥한 보복성 게시물"
+    "(신상 공개, 비방, 취업 방해, 불리한 처우 예고 등)인지 판별합니다. 주어진 제목, 주소, 내용만 보고 판단하고 추측하지 마세요. "
+    "보복성이 의심되면 suspect, 관련 없거나 문제없으면 ok, 내용이 부족해 판단할 수 없으면 unclear로 답하세요. "
+    '설명 없이 JSON 배열 [{"i": 번호, "status": "suspect|ok|unclear", "reason": "근거로 쓴 게시물 내용과 조항 한 문장"}]만 답하세요.')
+
+SUMMARY_SYSTEM = (
+    "당신은 청소년 아르바이트생이 노동 상담 기관에 가져갈 상담 사전 자료의 사건 요약을 씁니다. "
+    "주어진 기록만 쓰고, 숫자는 주어진 값을 그대로 옮기며 새로 계산하지 마세요. 기록에 없는 사실은 쓰지 말고 "
+    "'확인 필요'라고 적으세요. 법적 결론을 단정하지 말고 '의심', '확인 필요'처럼 쓰세요. "
+    '설명 없이 JSON {"summary": "사건 요약 4~6문장", "points": ["상담 때 물어볼 점"], '
+    '"basis": ["요약에 근거로 쓴 조항"]}만 답하세요.')
+
+POST_STATUS = {"suspect": "suspect", "ok": "ok", "unclear": "unclear"}
+
+
 def keywords_of(job: Job) -> list[str]:
     return [k.strip() for k in (job.guard_keywords or "").split(",") if k.strip()]
 
@@ -228,10 +252,41 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         age = age_on(get_user().birth_date, today_kst())
         return [c for c in P()["counsel"] if c["min_age"] <= age <= c["max_age"]]
 
-    def build_report() -> dict:
-        """상담 사전 자료 문서 만들기 (AI 연결 후에는 사건 요약을 AI가 작성)."""
+    def case_facts() -> dict:
+        """사건 요약에 넘길 기록 (코드가 계산하고 저장한 값만)."""
+        user, job = get_user(), get_job()
+        from app.calc.age import age_on
+        check = session.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "contract")
+                             .order_by(CheckRun.id.desc())).first()
+        pays = session.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "payday")
+                            .order_by(CheckRun.id.desc())).all()
+        items = [{"조항": it["law"], "결과": it["status"], "내용": it["text"], "사실": it.get("basis", []),
+                  "AI 근거": it.get("ai_reason", "")} for it in (json.loads(check.results_json) if check else [])]
+        pay = [{"월": d["month"], "계산한 금액": d["expected"].get("total"), "받은 금액": d["paid"],
+                "비교": d["compare"]["text"]} for d in (json.loads(p.results_json) for p in pays)]
+        return {"만 나이": age_on(user.birth_date, today_kst()), "사업장": job.name, "업종": job.industry,
+                "하는 일": job.work_desc, "근무 시작": str(job.start_date or "미입력"),
+                "그만둔 날": str(job.quit_date or ""), "약속한 시급": job.wage, "사업장 규모": job.size,
+                "점검 결과": items, "급여 비교": pay, "퇴직 후 지급": settlement(), "신고함": job.reported}
+
+    def summarize_case() -> dict:
+        """상담 사전 자료의 사건 요약 (AI). AI 응답이 없으면 'AI 응답 대기 중'으로 둔다."""
+        if not client.available():
+            return {"ai": False, "reason": f"{AI_WAITING}: AI가 연결되면 사건 요약을 작성해요"}
+        try:
+            ans = client.ask_json(SUMMARY_SYSTEM, json.dumps(case_facts(), ensure_ascii=False, default=str))
+        except client.LLMError as exc:
+            return {"ai": False, "reason": f"{AI_WAITING}: {exc}"}
+        if not isinstance(ans, dict) or not str(ans.get("summary", "")).strip():
+            return {"ai": False, "reason": f"{AI_WAITING}: AI 답에 요약이 없어요"}
+        return {"ai": True, "summary": str(ans["summary"])[:2000],
+                "points": [str(x)[:300] for x in ans.get("points") or []][:8],
+                "basis": [str(x)[:100] for x in ans.get("basis") or []][:8]}
+
+    def build_report(summary: dict | None = None) -> dict:
+        """상담 사전 자료 문서 만들기. 사건 요약은 AI가 쓴 것을 넣는다."""
         from app import report  # report가 이 모듈을 쓰므로 여기서 불러온다
-        rep = report.build(session, user_id, job_id)
+        rep = report.build(session, user_id, job_id, summary)
         return {"id": rep.id, "url": f"/api/reports/{rep.id}"}
 
     # ----- 신고 후 보호 -----
@@ -246,6 +301,32 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         from app import guard
         return guard.current_message(get_job())
 
+    def write_warning_message() -> dict:
+        """보복 금지 안내 문구 작성 (AI). 근거 조문은 법 기준표에서 가져온다. AI 응답이 없으면 기본 문구를 쓴다."""
+        from app.law.lookup import article_info
+        job = get_job()
+        if not client.available():
+            return {"ai": False, "reason": f"{AI_WAITING}: AI가 연결되면 상황에 맞는 문구를 작성해요. 지금은 기본 문구예요."}
+        laws = [{"조항": label, "조문": (article_info(session, label).get("text") or "")[:800]}
+                for label in P()["retaliation"]["laws"]]
+        facts = {"사업주": job.owner or "사장", "사업장": job.name, "업종": job.industry, "근로자 만 나이": _age(),
+                 "상황": "근로자가 노동관계법 위반으로 신고함", "근거 조문": laws}
+        try:
+            ans = client.ask_json(WARNING_SYSTEM, json.dumps(facts, ensure_ascii=False))
+        except client.LLMError as exc:
+            return {"ai": False, "reason": f"{AI_WAITING}: {exc}. 지금은 기본 문구예요."}
+        msg = str(ans.get("message", "")).strip() if isinstance(ans, dict) else ""
+        if not msg:
+            return {"ai": False, "reason": f"{AI_WAITING}: AI 답에 문구가 없어요. 지금은 기본 문구예요."}
+        job.guard_ai_message = msg[:2000]
+        session.add(job)
+        session.commit()
+        return {"ai": True, "message": job.guard_ai_message, "laws": ans.get("laws") or []}
+
+    def _age() -> int:
+        from app.calc.age import age_on
+        return age_on(get_user().birth_date, today_kst())
+
     def search_posts() -> dict:
         from app import guard
         job = get_job()
@@ -256,12 +337,32 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         return guard.preserve(session, user_id, get_job(), url, title)
 
     def classify_posts() -> dict:
-        """판별 대기 게시물 판별. AI 연결 전에는 판별하지 않고 대기로 둔다."""
-        from app.llm import client
-        pending = session.exec(select(GuardPost).where(GuardPost.job_id == job_id, GuardPost.status == "pending")).all()
+        """보복성 게시물 판별 (AI). AI 응답이 없으면 'AI 응답 대기 중'으로 두고 증거만 보존한다."""
+        pending = list(session.exec(select(GuardPost).where(GuardPost.job_id == job_id, GuardPost.status == "pending")
+                                    .order_by(GuardPost.id)))[:20]
+        if not pending:
+            return {"judged": 0, "pending": 0}
         if not client.available():
-            return {"judged": 0, "pending": len(pending), "reason": "AI 연결 전이라 판별하지 않고 증거만 보존했어요"}
-        return {"judged": 0, "pending": len(pending), "reason": "AI 판별 연결 예정"}
+            return {"judged": 0, "pending": len(pending), "reason": f"{AI_WAITING}: 판별하지 않고 증거만 보존했어요"}
+        job = get_job()
+        head = json.dumps({"사업장": job.name, "사업주": job.owner, "검색어(근로자 이름, 별명)": keywords_of(job),
+                           "관련 조항": P()["retaliation"]["laws"]}, ensure_ascii=False)
+        lines = [json.dumps({"i": i, "제목": p.title, "주소": p.url, "내용": p.snippet[:1000]}, ensure_ascii=False)
+                 for i, p in enumerate(pending)]
+        try:
+            answers = client.ask_json(POST_SYSTEM, head + "\n" + "\n".join(lines))
+        except client.LLMError as exc:
+            return {"judged": 0, "pending": len(pending), "reason": f"{AI_WAITING}: {exc}"}
+        judged = 0
+        for a in answers if isinstance(answers, list) else []:
+            i = a.get("i") if isinstance(a, dict) else None
+            if isinstance(i, int) and 0 <= i < len(pending) and a.get("status") in POST_STATUS:
+                pending[i].status, pending[i].ai_reason = POST_STATUS[a["status"]], str(a.get("reason", ""))[:300]
+                session.add(pending[i])
+                judged += 1
+        session.commit()
+        suspect = sum(p.status == "suspect" for p in pending)
+        return {"judged": judged, "pending": len(pending) - judged, "suspect": suspect}
 
     return {
         "get_user": get_user, "get_job": get_job, "get_contract_fields": get_contract_fields,
@@ -271,5 +372,6 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         "notify": notify, "counsel_for_age": counsel_for_age, "build_report": build_report,
         "set_reported": set_reported, "warning_message": warning_message, "search_posts": search_posts,
         "preserve_post": preserve_post, "classify_posts": classify_posts, "ai_judge": ai_judge,
+        "write_warning_message": write_warning_message, "summarize_case": summarize_case,
         "read_contract_image": read_contract_image, "read_payslip_image": read_payslip_image,
     }

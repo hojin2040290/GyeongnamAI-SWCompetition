@@ -738,24 +738,28 @@ $('#evFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const
 $('#reportBtn').onclick=async()=>{
   const w=window.open('','_blank');  // 팝업 차단을 피하려고 누른 순간 창을 먼저 연다
   try{ const r=await api('POST',`/api/jobs/${state.current}/report`); if(w) w.location=r.url; else location.href=r.url;
-    await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace); toast('상담 사전 자료를 만들었어요'); }
+    await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace); toast(r.summary_ai?'상담 사전 자료를 만들었어요':'AI 응답 대기 중이라 사건 요약 없이 만들었어요'); }
   catch(e){ if(w) w.close(); toast(e.message); } };
 
 // 보호
 async function loadGuard(){ $('#guardTrace').innerHTML=''; renderGuard(await api('GET',`/api/jobs/${state.current}/guard`)); }
 function renderGuard(g){
   $('#reported').checked=g.reported; $('#guardOn').classList.toggle('hidden',!g.reported); if(!pendingSaves.has(`msg-${state.current}`)) $('#warnMsg').value=g.message;
-  $('#msgReset').classList.toggle('hidden',!g.custom_message);
+  $('#msgReset').classList.toggle('hidden',!g.custom_message); msgSource(g.message_source);
   state.keywords=g.keywords;
   $('#kwList').innerHTML=g.keywords.map((k,i)=>`<span class="chip kw">${esc(k)}<button type="button" data-i="${i}" aria-label="${esc(k)} 지우기">×</button></span>`).join('');
   $$('#kwList [data-i]').forEach(b=>b.onclick=()=>saveKeywords(state.keywords.filter((_,i)=>i!==Number(b.dataset.i))));
   $('#kwQueries').textContent=`검색할 말: ${g.queries.join(' / ')}`;
-  const st={pending:['warn','판별 대기'],suspect:['bad','보복 의심'],ok:['ok','문제 없음']};
+  const st={pending:['pending','AI 응답 대기 중'],suspect:['bad','보복 의심'],ok:['ok','문제 없음'],unclear:['warn','확인 필요']};
   $('#postList').innerHTML=g.posts.length?g.posts.map(p=>`<li class="post"><div class="main"><strong>${esc(p.title||'제목 없음')}</strong>
     <div class="sub"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></div>
+    ${p.ai_reason?`<div class="sub">AI 판별 근거: ${esc(p.ai_reason)}</div>`:''}
     <div class="sub">${fmtDT(p.found_at)} 확인${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">보존한 화면</a>`:', 화면 캡처 없음'}</div></div>
     <span class="tag ${st[p.status][0]}">${st[p.status][1]}</span></li>`).join(''):'<li><span class="sub">아직 확인한 게시물이 없어요</span></li>';
 }
+const MSG_SOURCE={ai:'AI가 이번 상황에 맞게 작성한 문구예요. 고쳐 써도 돼요.',
+  waiting:'AI 응답 대기 중이라 기본 문구를 보여 드려요. AI가 응답하면 상황에 맞는 문구로 바뀌어요.',custom:'직접 고친 문구예요.'};
+function msgSource(src){ const n=$('#msgSource'); n.textContent=MSG_SOURCE[src]||''; }
 $('#reported').onchange=async e=>{ try{ const g=await api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked}); renderGuard(g); $('#guardTrace').innerHTML=traceHTML(g.trace); }catch(err){ toast(err.message); } };
 async function saveKeywords(list){ try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/keywords`,{keywords:list})); }catch(e){ toast(e.message); } }
 $('#kwAdd').onclick=()=>{ const v=$('#kwInput').value.trim(); if(!v){ toast('검색어를 넣어 주세요'); return; }
@@ -763,10 +767,10 @@ $('#kwAdd').onclick=()=>{ const v=$('#kwInput').value.trim(); if(!v){ toast('검
 $('#kwInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#kwAdd').click(); } });
 $('#warnMsg').addEventListener('input',()=>{
   const jobId=state.current, msg=$('#warnMsg').value;
-  autosave(`msg-${jobId}`,()=>api('PUT',`/api/jobs/${jobId}/guard/message`,{message:msg}).then(g=>{ if(jobId===state.current) $('#msgReset').classList.toggle('hidden',!g.custom_message); }),'#msgSaved');
+  autosave(`msg-${jobId}`,()=>api('PUT',`/api/jobs/${jobId}/guard/message`,{message:msg}).then(g=>{ if(jobId===state.current){ $('#msgReset').classList.toggle('hidden',!g.custom_message); msgSource(g.message_source); } }),'#msgSaved');
 });
-$('#msgReset').onclick=async()=>{ if(!confirm('고친 문구를 지우고 기본 문구로 되돌릴까요?')) return;
-  try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/message`,{message:''})); $('#msgSaved').textContent='기본 문구로 되돌렸어요'; }catch(e){ toast(e.message); } };
+$('#msgReset').onclick=async()=>{ if(!confirm('고친 문구를 지우고 원래 문구로 되돌릴까요?')) return;
+  try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/message`,{message:''})); $('#msgSaved').textContent='원래 문구로 되돌렸어요'; }catch(e){ toast(e.message); } };
 $('#copyMsg').onclick=()=>{ const t=$('#warnMsg').value; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('안내 문구를 복사했어요'),()=>toast('직접 선택해 복사해 주세요')); };
 $('#postAdd').onclick=async()=>{ const url=$('#postUrl').value.trim(); if(!url){ toast('게시물 주소를 넣어 주세요'); return; }
   try{ const r=await api('POST',`/api/jobs/${state.current}/guard/posts`,{url}); $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast('주소와 확인 시각을 보존했어요'); }catch(e){ toast(e.message); } };
