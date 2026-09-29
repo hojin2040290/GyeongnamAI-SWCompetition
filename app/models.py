@@ -136,6 +136,19 @@ class GuardPost(SQLModel, table=True):
     found_at: datetime
 
 
+class CaseNote(SQLModel, table=True):
+    """에이전트의 사건 기억과 조언. 다음 실행 때 사건 기억을 읽고, 조언은 홈에 보여 준다."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    job_id: int = Field(index=True)
+    kind: str  # memory(사건 기억), advice(사용자에게 하는 조언)
+    text: str
+    next_tab: str = ""  # 조언의 바로 가기: check, pay, docs, guard (없으면 빈 값)
+    event: str = ""
+    run_id: str = ""
+    created_at: datetime
+
+
 class AgentLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)

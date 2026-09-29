@@ -661,6 +661,17 @@ def guard_search(job_id: int, u: User = Depends(current_user), s: Session = Depe
     return core.run_guard_search(s, u.id, job_id)
 
 
+# ---------- 사건 진행 상황과 에이전트 조언 ----------
+@router.get("/jobs/{job_id}/case")
+def case_state(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    from app.agent import case
+    job = own_job(s, u, job_id)
+    adv = case.latest_advice(s, job_id)
+    return {"progress": case.progress(s, job), "memory": case.memories(s, job_id),
+            "advice": {"text": adv.text, "next_tab": adv.next_tab, "event": adv.event,
+                       "created_at": adv.created_at.isoformat()} if adv else None}
+
+
 # ---------- 에이전트 진행 상황 (화면에 단계별로 보여 주기) ----------
 @router.get("/agent/last")
 def agent_last(u: User = Depends(current_user), s: Session = Depends(get_session)):

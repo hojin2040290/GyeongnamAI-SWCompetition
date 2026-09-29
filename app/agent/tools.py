@@ -21,7 +21,8 @@ from app.judge import engine
 from app.law.lookup import article_info, attach_articles, attach_refs, known_law, refs_for
 from app import ocr, storage
 from app.llm import client
-from app.models import CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User, WorkRecord
+from app.models import (CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User,
+                        WorkRecord)
 
 NOTIFY_DEDUP_HOURS = 24  # 같은 알림을 다시 보내지 않는 시간
 POST_STATUS = ("suspect", "ok", "unclear")  # 보복 의심, 문제 없음, 확인 필요
@@ -469,6 +470,36 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
     def counsel_for_age() -> list[dict]:
         return t["counsel_for_age"]()
 
+    def _note(kind: str, text: str, next_tab: str = "") -> None:
+        session.add(CaseNote(user_id=user_id, job_id=job_id, kind=kind, text=text, next_tab=next_tab,
+                             event=state.get("event", ""), run_id=state.get("run_id", ""), created_at=now_kst()))
+        session.commit()
+
+    def remember(note: str) -> str:
+        """다음 실행 때 읽을 사건 기억을 남긴다 (한 번 실행에 3개까지)."""
+        t["get_job"]()
+        note = str(note).strip()[:300]
+        if not note:
+            raise ValueError("기억할 내용이 비어 있어요")
+        if state.get("remembered", 0) >= 3:
+            raise ValueError("한 번 실행에 사건 기억은 3개까지 남길 수 있어요")
+        _note("memory", note)
+        state["remembered"] = state.get("remembered", 0) + 1
+        return "기억함"
+
+    def give_advice(advice: str, next_tab: str = "") -> str:
+        """사용자에게 다음에 할 일을 조언한다. 홈에 보이고, next_tab이 있으면 그 화면 바로 가기가 붙는다."""
+        from app.agent.case import NEXT_TABS
+        t["get_job"]()
+        advice = str(advice).strip()[:400]
+        if not advice:
+            raise ValueError("조언이 비어 있어요")
+        if next_tab and next_tab not in NEXT_TABS:
+            raise ValueError(f"next_tab은 {', '.join(NEXT_TABS)} 중 하나이거나 비워 두세요")
+        _note("advice", advice, next_tab)
+        state["advice"] = True
+        return "조언을 남겼어요"
+
     tools = [
         Tool("get_profile", "오늘 날짜, 사용자의 오늘 만 나이, 사업장 기본 정보(시급, 계약상 근무, 계약서 작성 등)를 본다.",
              get_profile),
@@ -495,6 +526,11 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         Tool("set_post_status", "게시물 판별 결과를 저장한다. suspect(보복 의심), ok(문제 없음), unclear(확인 필요).",
              set_post_status, {"post_id": {"type": "integer"}, "status": {"type": "string", "enum": list(POST_STATUS)},
                                "reason": S}, ["post_id", "status", "reason"]),
+        Tool("remember", "다음 실행 때 읽을 사건 기억을 남긴다 (무엇을 판단했고, 무엇이 남았는지).", remember,
+             {"note": S}, ["note"]),
+        Tool("give_advice", "사용자에게 다음에 할 일을 조언한다. next_tab은 check(계약서 점검), pay(급여 점검), "
+             "docs(상담 사전 자료), guard(신고 후 보호) 중 바로 가기할 화면.", give_advice,
+             {"advice": S, "next_tab": {"type": "string", "enum": ["", "check", "pay", "docs", "guard"]}}, ["advice"]),
         Tool("build_report", "상담 사전 자료 문서를 만든다. 사건 요약, 상담 때 물어볼 점, 근거 조항을 넣는다.", build_report,
              {"summary": S, "points": {"type": "array", "items": S}, "basis": LAW_LIST},
              ["summary", "points", "basis"]),

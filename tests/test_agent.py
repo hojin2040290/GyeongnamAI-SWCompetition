@@ -271,3 +271,41 @@ def test_live_steps_while_agent_runs(env):
     a.post(f"/api/jobs/{ja}/check")
     rows = a.get(f"/api/agent/live?after={last}").json()
     assert rows[0]["step"] == "시작" and rows[0]["event"] == "contract_check" and all(r["id"] > last for r in rows)
+
+
+def test_case_memory_and_advice(env, monkeypatch):
+    """에이전트가 남긴 사건 기억은 다음 실행에 넘어가고, 조언은 홈(사건 상태)에 보인다."""
+    a, ja, *_ = env
+
+    def policy(goal, done, tools):
+        names = [n for n, _ in done]
+        if "remember" not in names:
+            return reply([("remember", {"note": "야간근로 인가 여부를 아직 모름"}),
+                          ("give_advice", {"advice": "사업장에 야간근로 인가를 받았는지 물어보세요", "next_tab": "check"})])
+        return smart_policy(goal, [d for d in done if d[0] not in ("remember", "give_advice")], tools)
+    agent = use(monkeypatch, policy)
+    a.post(f"/api/jobs/{ja}/check")
+    st = a.get(f"/api/jobs/{ja}/case").json()
+    assert st["advice"]["text"].startswith("사업장에 야간근로") and st["advice"]["next_tab"] == "check"
+    assert st["memory"][-1]["기억"] == "야간근로 인가 여부를 아직 모름"
+    assert [p["name"] for p in st["progress"]] == ["점검", "기록", "급여", "상담 자료", "신고", "보호"]
+    assert st["progress"][0]["done"]
+    # 다음 실행: 시작 상황에 사건 기억과 진행 상황이 들어 있다
+    agent.payloads.clear()
+    a.post(f"/api/jobs/{ja}/check")
+    first = agent.payloads[0]["messages"][1]["content"]
+    assert "사건 기억" in first and "야간근로 인가 여부를 아직 모름" in first and "사건 진행 상황" in first
+    tool_names = [t["function"]["name"] for t in agent.payloads[0]["tools"]]
+    assert {"remember", "give_advice", "make_plan"} <= set(tool_names)
+
+
+def test_bad_advice_tab_is_rejected(env, monkeypatch):
+    a, ja, *_ = env
+
+    def policy(goal, done, tools):
+        if "give_advice" not in [n for n, _ in done]:
+            return reply([("give_advice", {"advice": "조언", "next_tab": "admin"})])
+        return reply([("finish", {"note": "끝"})])
+    agent = use(monkeypatch, policy)
+    a.post(f"/api/jobs/{ja}/guard/posts", json={"url": "https://example.com/advice", "title": "글"})
+    assert "next_tab" in results(agent.payloads[-1], "give_advice")[0]["error"]

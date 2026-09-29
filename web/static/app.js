@@ -6,7 +6,8 @@ const TIMES = []; for (let h=0; h<24; h++) { TIMES.push(pad(h)+':00'); TIMES.pus
 const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
 const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심', pending:'확인 중'};  // 확인 중: AI 판단 전
 const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
-  report:'상담 자료', guard_on:'보복 대응 시작', guard_off:'보복 대응 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존'};
+  report:'상담 자료', guard_on:'보복 대응 시작', guard_off:'보복 대응 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존',
+  guard_review:'게시물 판별', daily:'매일 자동 점검'};
 const KIND = {contract:'근로계약서', payslip:'급여명세서', message:'사업주 메시지', schedule:'근무표', deposit:'입금 내역', post:'게시물 화면', notice:'채용공고', other:'기타'};
 
 const state = { me:null, jobs:[], current:null, mode:null, cards:[], adding:false, seekFromApp:false,
@@ -521,7 +522,22 @@ async function loadHome(){
   await refreshRecords();
   if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
   await renderQuit();
+  await loadCase();
   await loadAlerts();
+}
+// 사건 진행 상황(코드가 정리)과 에이전트 조언, 사건 기억(에이전트가 남김)
+const NEXT_TAB={check:'계약서 점검하러 가기',pay:'급여 점검하러 가기',docs:'상담 사전 자료 만들러 가기',guard:'신고 후 보호로 가기'};
+async function loadCase(){
+  const c=await api('GET',`/api/jobs/${state.current}/case`);
+  $('#caseSteps').innerHTML=c.progress.map(p=>`<li class="${p.done?'done':''}"><strong>${p.done?'✓ ':''}${esc(p.name)}</strong><span>${esc(p.detail)}</span></li>`).join('');
+  const a=c.advice;
+  $('#caseAdvice').innerHTML=a?`<div class="advice"><div class="advice-head">에이전트 조언</div><p>${esc(a.text)}</p>
+      ${a.next_tab&&NEXT_TAB[a.next_tab]?`<button class="btn ghost small" data-go="${esc(a.next_tab)}">${NEXT_TAB[a.next_tab]}</button>`:''}
+      <div class="sub note-at">${esc(EVENT[a.event]||a.event)} 뒤 ${fmtDT(a.created_at)}</div></div>`
+    :'<p class="ai-note wait">AI 응답 대기 중: 에이전트가 점검을 마치면 다음에 할 일을 조언해 드려요.</p>';
+  $$('#caseAdvice [data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
+  $('#caseMemWrap').classList.toggle('hidden',!c.memory.length);
+  $('#caseMem').innerHTML=c.memory.map(m=>`<div class="log"><b>${esc(EVENT[m['사건']]||m['사건'])}</b> ${esc(m['기억'])}<div class="sub note-at">${esc(m['날짜'])}</div></div>`).join('');
 }
 // 알림: 지금 보고 있는 일하는 곳의 알림만 보여 준다
 async function loadAlerts(){
