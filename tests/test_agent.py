@@ -371,3 +371,47 @@ def test_unknown_answer_does_not_fill_info(env, monkeypatch):
         out = t["apply_judgments"]([item], [{"i": 0, "status": "ok", "law": "근로기준법 제69조", "fact": "주 38시간",
                                              "reason": "", "answer_ids": [q.id]}])
     assert out[0]["status"] == "warn"
+
+
+def test_followup_scheduled_run_and_cancel(env, monkeypatch):
+    """에이전트가 후속 확인을 예약하고, 때가 되면 스케줄러가 예약한 이유와 함께 다시 시작한다."""
+    from datetime import timedelta
+    from app import scheduler
+    from app.calc.timeutil import today_kst
+    from app.models import AgentTask
+    a, ja, b, jb = env
+    tomorrow, far = (today_kst() + timedelta(days=1)).isoformat(), (today_kst() + timedelta(days=90)).isoformat()
+
+    def policy(goal, done, tools):
+        names = [n for n, _ in done]
+        if "schedule_followup" not in names:
+            return reply([("schedule_followup", {"check": "contract_check", "day": far, "note": "너무 먼 날"}),
+                          ("schedule_followup", {"check": "payday", "day": tomorrow, "note": "명세서 없음"}),
+                          ("schedule_followup", {"check": "contract_check", "day": tomorrow,
+                                                 "note": "야간근로 인가 여부를 다시 확인"})])
+        return smart_policy(goal, [d for d in done if d[0] != "schedule_followup"], tools)
+    agent = use(monkeypatch, policy)
+    a.post(f"/api/jobs/{ja}/check")
+    errs = results(agent.payloads[2], "schedule_followup")
+    assert "60일" in errs[0]["error"] and "month" in errs[1]["error"] and errs[2]["task_id"]
+    fu = a.get(f"/api/jobs/{ja}/case").json()["followups"]
+    assert len(fu) == 1 and fu[0]["이유"] == "야간근로 인가 여부를 다시 확인"
+    # 때가 되면 실행: 시작 상황에 예약한 이유가 들어간다
+    with Session(engine) as s:
+        task = s.get(AgentTask, fu[0]["task_id"])
+        task.due_at = now_kst() - timedelta(minutes=1)
+        s.add(task)
+        s.commit()
+    agent2 = use(monkeypatch, smart_policy)
+    assert fu[0]["task_id"] in scheduler.run_due_followups()["followups"]
+    first = agent2.payloads[0]["messages"][1]["content"]
+    assert "지난번에 예약한 확인이에요: 야간근로 인가 여부를 다시 확인" in first
+    assert a.get(f"/api/jobs/{ja}/case").json()["followups"] == []
+    assert scheduler.run_due_followups()["followups"] == []  # 같은 확인을 되풀이하지 않음
+    # 사용자가 취소 (다른 사용자는 못 함)
+    use(monkeypatch, policy)
+    a.post(f"/api/jobs/{ja}/check")
+    tid = a.get(f"/api/jobs/{ja}/case").json()["followups"][0]["task_id"]
+    assert b.delete(f"/api/followups/{tid}").status_code == 404
+    assert a.delete(f"/api/followups/{tid}").json()["ok"]
+    assert a.get(f"/api/jobs/{ja}/case").json()["followups"] == []

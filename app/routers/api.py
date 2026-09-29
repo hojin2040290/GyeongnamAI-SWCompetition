@@ -20,7 +20,7 @@ from app.config import OPEN_RECORD_ALERT_HOURS, PUNCH_CONFIRM_SEC
 from app.db import get_session
 from app.law.lookup import attach_articles, attach_refs, table_status
 from app.llm import client as llm_client
-from app.models import (AgentLog, AgentQuestion, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
+from app.models import (AgentLog, AgentQuestion, AgentTask, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
                         User, WorkRecord)
 from app.storage import save_original
 
@@ -668,8 +668,22 @@ def case_state(job_id: int, u: User = Depends(current_user), s: Session = Depend
     job = own_job(s, u, job_id)
     adv = case.latest_advice(s, job_id)
     return {"progress": case.progress(s, job), "memory": case.memories(s, job_id),
+            "followups": case.followups(s, job_id),
             "advice": {"text": adv.text, "next_tab": adv.next_tab, "event": adv.event,
                        "created_at": adv.created_at.isoformat()} if adv else None}
+
+
+@router.delete("/followups/{task_id}")
+def cancel_followup(task_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """에이전트가 예약한 확인을 사용자가 취소한다."""
+    task = s.get(AgentTask, task_id)
+    if not task or task.user_id != u.id:
+        raise HTTPException(404, "예약한 확인을 찾을 수 없어요")
+    if task.status == "pending":
+        task.status = "cancelled"
+        s.add(task)
+        s.commit()
+    return {"ok": True}
 
 
 # ---------- 에이전트의 질문 ----------

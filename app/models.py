@@ -167,6 +167,22 @@ class AgentQuestion(SQLModel, table=True):
     answered_at: Optional[datetime] = None
 
 
+class AgentTask(SQLModel, table=True):
+    """에이전트가 스스로 예약한 후속 확인. 때가 되면 스케줄러가 그 점검을 다시 시작한다."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    job_id: int = Field(index=True)
+    kind: str  # contract_check, payday, quit_check, guard_review, report
+    month: str = ""  # 급여 점검할 달
+    note: str  # 왜 다시 확인하는지 (다시 시작할 때 에이전트에게 넘김)
+    due_at: datetime
+    status: str = "pending"  # pending(예약), done(실행함), cancelled(취소)
+    event: str = ""  # 예약한 사건
+    run_id: str = ""
+    created_at: datetime
+    done_at: Optional[datetime] = None
+
+
 class AgentLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)

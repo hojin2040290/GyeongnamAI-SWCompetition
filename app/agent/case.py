@@ -7,7 +7,7 @@ import json
 
 from sqlmodel import Session, select
 
-from app.models import AgentQuestion, CaseNote, CheckRun, Evidence, GuardPost, Job, Report, WorkRecord
+from app.models import AgentQuestion, AgentTask, CaseNote, CheckRun, Evidence, GuardPost, Job, Report, WorkRecord
 
 MEMORY_LIMIT = 8  # 다음 실행에 넘기는 메모 수
 NEXT_TABS = {"check": "계약서 점검", "pay": "급여 점검", "docs": "상담 사전 자료", "guard": "신고 후 보호"}
@@ -62,3 +62,15 @@ def questions(s: Session, job_id: int, limit: int = 10) -> list[dict]:
                   .order_by(AgentQuestion.id.desc()).limit(limit)).all()
     return [{"answer_id": q.id, "질문": q.question, "관련 조항": q.law,
              "답": q.answer if q.status == "answered" else "답 기다리는 중"} for q in reversed(rows)]
+
+
+FOLLOWUP_KINDS = {"contract_check": "계약서 점검", "payday": "급여 점검", "quit_check": "퇴직 정산 확인",
+                  "guard_review": "게시물 판별", "report": "상담 사전 자료"}
+
+
+def followups(s: Session, job_id: int) -> list[dict]:
+    """예약해 둔 후속 확인 (다시 예약하지 않게 에이전트에게도 넘긴다)."""
+    rows = s.exec(select(AgentTask).where(AgentTask.job_id == job_id, AgentTask.status == "pending")
+                  .order_by(AgentTask.due_at)).all()
+    return [{"task_id": t.id, "점검": FOLLOWUP_KINDS.get(t.kind, t.kind), "kind": t.kind, "달": t.month,
+             "때": t.due_at.strftime("%Y-%m-%d %H:%M"), "이유": t.note} for t in rows]

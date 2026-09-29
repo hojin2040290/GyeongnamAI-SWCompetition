@@ -350,6 +350,9 @@ em.hint.bad{color:var(--bad)}
 .advice-head{font-size:13px;font-weight:700;color:var(--blue)}
 .advice p{margin:4px 0 8px}
 .case-card .ai-note{margin-bottom:0}
+.follow{margin-top:12px;border-left:3px solid var(--line);padding:2px 0 2px 12px}
+.follow .advice-head{color:var(--ink-soft)}
+.follow .list li{padding:8px 0}
 
 /* 에이전트의 질문 */
 .ask{border-top:1px solid var(--line);padding:10px 0}

@@ -562,6 +562,12 @@ async function loadCase(){
       <div class="sub note-at">${esc(EVENT[a.event]||a.event)} 뒤 ${fmtDT(a.created_at)}</div></div>`
     :'<p class="ai-note wait">AI 응답 대기 중: 에이전트가 점검을 마치면 다음에 할 일을 조언해 드려요.</p>';
   $$('#caseAdvice [data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
+  const fdt=t=>{ const d=new Date(t.replace(' ','T')); return `${d.getMonth()+1}월 ${d.getDate()}일 ${d.getHours()}시`; };
+  $('#caseFollow').innerHTML=c.followups.length?`<div class="follow"><div class="advice-head">에이전트가 예약한 확인</div>
+    <ul class="list">${c.followups.map(f=>`<li><div class="main"><strong>${fdt(f['때'])} ${esc(f['점검'])}${f['달']?` (${esc(f['달'])})`:''}</strong>
+      <div class="sub">${esc(f['이유'])}</div></div><button class="btn ghost small" data-cancel="${f.task_id}">취소</button></li>`).join('')}</ul></div>`:'';
+  $$('#caseFollow [data-cancel]').forEach(b=>b.onclick=async()=>{ if(!confirm('이 예약을 취소할까요?')) return;
+    try{ await api('DELETE',`/api/followups/${b.dataset.cancel}`); await loadCase(); toast('예약을 취소했어요'); }catch(e){ toast(e.message); } });
   $('#caseMemWrap').classList.toggle('hidden',!c.memory.length);
   $('#caseMem').innerHTML=c.memory.map(m=>`<div class="log"><b>${esc(EVENT[m['사건']]||m['사건'])}</b> ${esc(m['기억'])}<div class="sub note-at">${esc(m['날짜'])}</div></div>`).join('');
 }

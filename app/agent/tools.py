@@ -6,7 +6,7 @@ AI는 이 값을 입력하지 않으므로 다른 사용자의 기록에 접근�
 - agent_tools(): AI가 골라 쓰는 도구와 입력 모양 (숫자는 계산 도구만 만든다)
 """
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlmodel import Session, select
 
@@ -21,7 +21,7 @@ from app.judge import engine
 from app.law.lookup import article_info, attach_articles, attach_refs, known_law, refs_for
 from app import ocr, storage
 from app.llm import client
-from app.models import (AgentQuestion, CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User,
+from app.models import (AgentQuestion, AgentTask, CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User,
                         WorkRecord)
 
 NOTIFY_DEDUP_HOURS = 24  # 같은 알림을 다시 보내지 않는 시간
@@ -56,6 +56,8 @@ def user_info_missing(it: dict) -> list[str]:
 
 UNKNOWN_ANSWERS = ("모름", "몰라요", "모르겠어요")
 OPEN_QUESTION_MAX = 3  # 사업장마다 답을 기다리는 질문 수
+FOLLOWUP_MAX = 5  # 사업장마다 예약해 둘 수 있는 후속 확인 수
+FOLLOWUP_DAYS = 60  # 며칠 뒤까지 예약할 수 있는지
 
 
 def judgment_problems(session: Session, it: dict, j: dict, answered: list | tuple = ()) -> list[str]:
@@ -543,6 +545,33 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         return [{"answer_id": q.id, "질문": q.question, "답": q.answer, "관련 조항": q.law,
                  "답한 날": q.answered_at} for q in rows]
 
+    def schedule_followup(check: str, day: str, note: str, month: str = "") -> dict:
+        """나중에 다시 확인할 점검을 예약한다. 그날 정해진 시각에 스케줄러가 그 점검을 다시 시작한다."""
+        from app.agent.case import FOLLOWUP_KINDS
+        from app.config import SCHEDULE_HOUR
+        t["get_job"]()
+        if check not in FOLLOWUP_KINDS:
+            raise ValueError(f"check는 {', '.join(FOLLOWUP_KINDS)} 중 하나여야 해요")
+        d, note = date.fromisoformat(day), str(note).strip()[:200]
+        if not today_kst() < d <= today_kst() + timedelta(days=FOLLOWUP_DAYS):
+            raise ValueError(f"예약은 내일부터 {FOLLOWUP_DAYS}일 안의 날짜만 할 수 있어요")
+        if not note:
+            raise ValueError("다시 확인하는 이유(note)가 필요해요")
+        if check == "payday" and not (len(month) == 7 and month[4] == "-"):
+            raise ValueError("급여 점검은 month(YYYY-MM)가 필요해요")
+        pending = session.exec(select(AgentTask).where(AgentTask.job_id == job_id, AgentTask.status == "pending")).all()
+        if any(p.kind == check and p.due_at.date() == d and p.month == month for p in pending):
+            return {"안내": "같은 날 같은 점검이 이미 예약돼 있어요"}
+        if len(pending) >= FOLLOWUP_MAX:
+            raise ValueError(f"예약해 둔 확인이 {FOLLOWUP_MAX}개예요. 더 급한 것만 남겨 주세요")
+        task = AgentTask(user_id=user_id, job_id=job_id, kind=check, month=month if check == "payday" else "", note=note,
+                         due_at=datetime.combine(d, time(SCHEDULE_HOUR)), event=state.get("event", ""),
+                         run_id=state.get("run_id", ""), created_at=now_kst())
+        session.add(task)
+        session.commit()
+        state.setdefault("followups", []).append(task.id)
+        return {"task_id": task.id, "안내": f"{d.isoformat()} {SCHEDULE_HOUR}시에 다시 확인해요"}
+
     def give_advice(advice: str, next_tab: str = "") -> str:
         """사용자에게 다음에 할 일을 조언한다. 홈에 보이고, next_tab이 있으면 그 화면 바로 가기가 붙는다."""
         from app.agent.case import NEXT_TABS
@@ -588,6 +617,12 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
              ask_user, {"question": S, "options": {"type": "array", "items": S}, "why": S, "law": LAW_LABEL},
              ["question", "options", "why"]),
         Tool("get_answers", "사용자가 답한 질문과 답을 본다.", get_answers),
+        Tool("schedule_followup", "나중에 다시 확인할 점검을 예약한다 (예: 지급 기한 다음 날 받았는지, 명세서를 올리기로 한 날). "
+             "check: contract_check, payday, quit_check, guard_review, report", schedule_followup,
+             {"check": {"type": "string", "enum": ["contract_check", "payday", "quit_check", "guard_review", "report"]},
+              "day": {"type": "string", "description": "YYYY-MM-DD (내일부터 60일 안)"}, "note": S,
+              "month": {"type": "string", "description": "급여 점검할 달 YYYY-MM (payday일 때만)"}},
+             ["check", "day", "note"]),
         Tool("give_advice", "사용자에게 다음에 할 일을 조언한다. next_tab은 check(계약서 점검), pay(급여 점검), "
              "docs(상담 사전 자료), guard(신고 후 보호) 중 바로 가기할 화면.", give_advice,
              {"advice": S, "next_tab": {"type": "string", "enum": ["", "check", "pay", "docs", "guard"]}}, ["advice"]),
