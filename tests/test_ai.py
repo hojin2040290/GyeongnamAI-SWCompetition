@@ -118,7 +118,10 @@ def test_guard_without_model_waits(c):
     assert p["classify"]["judged"] == 0 and "AI 응답 대기 중" in p["classify"]["reason"]
     post = [x for x in c.get(f"/api/jobs/{jid}/guard").json()["posts"] if x["url"].endswith("/wait")][0]
     assert post["status"] == "pending" and post["ai_reason"] == ""
-    html = c.get(c.post(f"/api/jobs/{jid}/report").json()["url"]).text
+    rep = c.post(f"/api/jobs/{jid}/report").json()
+    assert "사건 요약은 AI 응답 대기 중" in rep["trace"][-1]["detail"] and "완료" not in rep["trace"][-1]["detail"]
+    assert "AI 문구는 AI 응답 대기 중" in g["trace"][-1]["detail"]
+    html = c.get(rep["url"]).text
     assert "사건 요약 (AI 작성)" in html and "AI 응답 대기 중" in html
     c.post(f"/api/jobs/{jid}/guard", json={"reported": False})  # 다른 테스트의 매일 점검 수에 끼지 않도록
 
