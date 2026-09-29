@@ -86,7 +86,8 @@ class Run:
         if self.ai_tried and not self.ai_used and AI_WAITING not in summary:
             summary += f" (AI가 할 판단과 작성은 {AI_WAITING})"
         self.log("결과", summary)
-        return {**out, "ai_agent": self.ai_used, "run_id": self.run_id, "trace": self.trace}
+        return {**out, "ai_agent": self.ai_used, "plan": self.state.get("plan"), "run_id": self.run_id,
+                "trace": self.trace}
 
 
 def _short(v) -> str:

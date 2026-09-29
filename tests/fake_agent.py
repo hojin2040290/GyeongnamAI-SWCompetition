@@ -18,8 +18,9 @@ def reply(calls: list[tuple[str, dict]] | None = None, content: str | None = Non
 
 
 class FakeAgent:
-    def __init__(self, policy):
-        self.policy = policy
+    """plan_first면 먼저 make_plan으로 계획을 세우고, 그다음부터 정책에 맡긴다 (정책에는 계획 결과를 빼고 보여 줌)."""
+    def __init__(self, policy, plan_first: bool = True):
+        self.policy, self.plan_first = policy, plan_first
         self.payloads: list[dict] = []
 
     def __call__(self, payload: dict) -> dict:
@@ -28,6 +29,11 @@ class FakeAgent:
         goal = msgs[1]["content"] if len(msgs) > 1 else ""
         done = [(m["name"], json.loads(m["content"])) for m in msgs if m["role"] == "tool"]
         tools = [t["function"]["name"] for t in payload.get("tools", [])]
+        if self.plan_first and "make_plan" in tools:
+            if not any(n == "make_plan" for n, _ in done):
+                return reply([("make_plan", {"steps": ["기록 확인", "도구로 사실과 계산 확인", "판단하고 끝내기"]})],
+                             "먼저 계획을 세울게요.")
+            done = [(n, r) for n, r in done if n != "make_plan"]
         return self.policy(goal, done, tools)
 
 
