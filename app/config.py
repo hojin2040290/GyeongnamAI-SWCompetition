@@ -5,15 +5,31 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _parse_line(line: str) -> tuple[str, str] | None:
+    """KEY=VALUE 한 줄. 앞의 export, 값을 감싼 따옴표, 뒤의 # 설명을 허용한다."""
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        return None
+    key, value = line.split("=", 1)
+    key = key.strip().removeprefix("export ").strip()
+    value = value.strip()
+    if value[:1] in ("\"", "'") and value.find(value[0], 1) > 0:
+        value = value[1:value.find(value[0], 1)]  # 따옴표 안만 (뒤에 설명이 붙어도)
+    elif " #" in value:
+        value = value.split(" #", 1)[0].strip()
+    return (key, value) if key else None
+
+
 def _load_env(path: Path) -> None:
     if not path.exists():
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    for line in path.read_text(encoding="utf-8-sig").splitlines():  # -sig: 파일 맨 앞 BOM 제거
+        parsed = _parse_line(line)
+        if not parsed:
             continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+        key, value = parsed
+        if not os.environ.get(key):  # 터미널에 빈 값으로 잡혀 있어도 .env 값을 쓴다
+            os.environ[key] = value
 
 
 _load_env(BASE_DIR / ".env")
