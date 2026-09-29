@@ -27,9 +27,15 @@ templates = Jinja2Templates(directory=BASE_DIR / "web" / "templates")
 app.include_router(api_router)
 
 
+def static_version() -> str:
+    """CSS, JS 파일이 바뀌면 달라지는 값. 주소에 붙여 브라우저가 예전 파일을 쓰지 않게 한다."""
+    static = BASE_DIR / "web" / "static"
+    return str(max(int((static / f).stat().st_mtime) for f in ("style.css", "app.js")))
+
+
 @app.get("/")
 def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(request, "index.html", {"ver": static_version()})
 
 
 @app.post("/api/dev/daily-check")

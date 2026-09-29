@@ -231,7 +231,6 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 .row-actions{display:flex;gap:8px;margin-top:10px}
 .row-actions .btn{flex:1}
 .ev-link{color:var(--blue);font-size:13px;font-weight:600;text-decoration:none}
-.ev-link:hover{text-decoration:underline}
 .log{font-size:12.5px;color:var(--ink-soft);border-top:1px solid var(--line);padding:6px 0}
 .log b{color:var(--ink)}
 .kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px}
@@ -298,8 +297,9 @@ details.trace{margin-top:12px}
 .btn.block{display:flex;width:100%}
 .btn:hover{filter:brightness(.96)}
 .btn:disabled{background:#c4cbdb;color:#fff;cursor:not-allowed;filter:none}
-.link{border:0;background:none;padding:0;cursor:pointer;color:var(--blue);font-size:14px;font-weight:600;text-decoration:none}
-.link:hover{text-decoration:underline}
-.link.muted{color:var(--ink-soft);font-weight:500}
-.link.small{font-size:13px}
-#quitOpen{display:block;margin:0 0 14px}
+/* 작은 동작도 밑줄 글자가 아닌 작은 보조 버튼 모양 (.muted는 회색) */
+.link{display:inline-flex;align-items:center;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;
+  background:var(--blue-soft);color:var(--blue);font-size:13px;font-weight:600;line-height:1.3;text-decoration:none}
+.link:hover{filter:brightness(.96)}
+.link.muted{background:#e6e9f0;color:var(--ink-soft)}
+#quitOpen{margin:0 0 14px}
