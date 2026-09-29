@@ -43,6 +43,7 @@ class Job(SQLModel, table=True):
     consent: str = ""  # 냈어요, 안 냈어요, 모름
     address: str = ""
     owner: str = ""
+    biz_no: str = ""  # 사업자등록번호 (000-00-00000, 모르면 빈 값)
     reported: bool = False
     guard_keywords: str = ""  # 게시물 검색어 (쉼표로 구분, 예: 본인 이름, 별명)
     guard_message: str = ""  # 사용자가 고친 보복 금지 안내 문구 (비어 있으면 기본 문구)
