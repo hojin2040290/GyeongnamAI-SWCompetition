@@ -34,10 +34,12 @@
         </button>
       </div>
       <button class="btn block" id="modeNext" disabled>다음</button>
-      <p style="text-align:center;margin-top:14px"><button class="link" id="toLogin">이미 가입했어요, 로그인하기</button></p>
+      <p style="text-align:center;margin-top:14px" id="toLoginWrap"><button class="link" id="toLogin">이미 가입했어요, 로그인하기</button></p>
+      <p style="text-align:center;margin-top:14px" class="hidden" id="obLogoutWrap"><button class="link" id="obLogout">다른 계정으로 로그인하기</button></p>
     </div>
 
     <div id="ob1" class="hidden">
+      <button type="button" class="back-btn ob-back" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>뒤로</button>
       <div class="step">1 / 2 기본 정보</div>
       <h1>나이에 맞는 법 기준을 적용하려면 생년월일이 필요해요</h1>
       <p class="lead">근무일마다 만 나이를 계산해 적용할 조항을 고릅니다. 주민등록번호는 받지 않아요.</p>
@@ -51,6 +53,7 @@
     </div>
 
     <div id="obLogin" class="hidden">
+      <button type="button" class="back-btn ob-back" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>뒤로</button>
       <div class="brand-lg">알바지킴이</div>
       <h1>로그인</h1>
       <div class="panel">
@@ -63,6 +66,7 @@
     </div>
 
     <div id="obSeek" class="hidden">
+      <button type="button" class="back-btn ob-back" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>뒤로</button>
       <div class="step">지원 전 확인</div>
       <h1>지원하려는 곳의 조건을 알려 주세요</h1>
       <p class="lead">공고 사진은 원본으로 보관돼요. 공고 내용 자동 읽기는 AI 연결 후 제공되고, 지금은 직접 입력해 주세요.</p>
@@ -92,6 +96,7 @@
         <div id="seekItems"></div>
         <h3>지원하거나 면접 볼 때 물어보세요</h3>
         <div class="panel"><ul class="qs" id="seekQs"></ul></div>
+        <div id="seekTrace"></div>
         <p class="hint">결과는 법적 판단이 아닌 참고용이에요.</p>
         <button class="btn block" id="seekToWork">이곳에서 일하게 됐어요, 등록하기</button>
         <button class="btn ghost block" style="margin-top:8px" id="seekAgain">다른 공고 확인하기</button>
@@ -100,8 +105,9 @@
     </div>
 
     <div id="ob2" class="hidden">
-      <div class="step">2 / 2 아르바이트 정보</div>
-      <h1>일하는 곳을 등록해 주세요</h1>
+      <button type="button" class="back-btn ob-back" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>뒤로</button>
+      <div class="step" id="ob2Step">2 / 2 아르바이트 정보</div>
+      <h1 id="ob2Title">일하는 곳을 등록해 주세요</h1>
       <p class="lead">법 기준을 적용하는 데 필요한 정보예요. 모르는 항목은 모름을 고르면, 판단할 때 확인 필요로 안내해요.</p>
       <div id="jobList"></div>
       <button class="btn ghost block add-job" id="addJobBtn">+ 아르바이트 추가</button>
@@ -109,13 +115,29 @@
       <button class="btn block" style="margin-top:10px" id="saveJobsBtn">시작하기</button>
       <button class="btn ghost block hidden" style="margin-top:8px" id="cancelJobsBtn">취소</button>
     </div>
+
+    <div id="obMe" class="hidden">
+      <button type="button" class="back-btn ob-back" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>뒤로</button>
+      <div class="step">내 정보</div>
+      <h1>내 정보 수정</h1>
+      <p class="lead">생년월일로 근무일마다 만 나이를 계산해요. 바꾸면 점검 결과도 다시 확인해 주세요.</p>
+      <div class="panel">
+        <label class="field"><span>이메일</span><input class="input" id="meEmail" disabled></label>
+        <label class="field"><span>생년월일</span><input class="input" type="date" id="meBirth"></label>
+        <p class="err" id="meErr"></p>
+      </div>
+      <button class="btn block" id="meSave">저장하기</button>
+    </div>
   </div>
 </section>
 
 <!-- ===== 앱 ===== -->
 <div class="app hidden" id="app">
   <header class="top">
-    <div class="brand">알바지킴이</div>
+    <div class="top-left">
+      <button type="button" class="back-btn hidden" id="backBtn" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="brand">알바지킴이</div>
+    </div>
     <button class="job-switch" id="jobSwitch" aria-haspopup="dialog" aria-label="일하는 곳 바꾸기">
       <strong class="cur-job">일하는 곳</strong>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
@@ -123,7 +145,7 @@
   </header>
 
   <main>
-    <section class="view active" id="v-home" aria-label="출퇴근">
+    <section class="view active" id="v-home" aria-label="홈">
       <div class="clock">
         <div class="clock-place cur-job"></div>
         <div class="date" id="today"></div>
@@ -136,50 +158,67 @@
           <label class="switch"><input type="checkbox" id="gpsOn" aria-label="위치 기록 동의"><span></span></label>
         </div>
       </div>
-      <div class="panel">
+      <div id="shiftResult" class="hidden"></div>
+
+      <div class="job-card">
+        <div class="job-card-head">
+          <h2 class="cur-job"></h2>
+          <button class="btn ghost small" id="editJobBtn">정보 수정</button>
+        </div>
+        <p class="lead">출퇴근 버튼으로 남긴 근무 기록이에요. 급여 계산과 체불 증명의 근거가 돼요.</p>
+        <p class="sched-line" id="schedLine"></p>
+        <div class="panel quit-panel hidden" id="quitPanel">
+          <div class="quit-head"><strong>퇴직 후 임금 정산</strong><span class="tag" id="quitTag"></span></div>
+          <p id="quitText"></p>
+          <div class="seg" style="margin-top:10px">
+            <button type="button" id="paidYes">남은 임금 받았어요</button>
+            <button type="button" id="paidNo">아직 못 받았어요</button>
+          </div>
+          <p class="hint">퇴직 후 14일 안에 남은 임금을 지급해야 해요. 당사자가 합의해 기한을 늘린 경우는 예외예요. 받지 못한 임금은 3년 안에 청구할 수 있어요.</p>
+          <button class="btn block hidden" id="quitReport">상담 사전 자료 만들러 가기</button>
+          <button class="link" style="margin-top:10px" id="quitEdit">그만둔 날 고치기</button>
+        </div>
+        <button class="link-quit" id="quitOpen">이곳을 그만뒀어요</button>
+        <div class="panel hidden" id="quitForm">
+          <label class="field"><span>그만둔 날</span><input class="input" type="date" id="quitDateMain"></label>
+          <div class="row-actions"><button class="btn ghost" id="quitCancel">취소</button><button class="btn" id="quitSave">저장하기</button></div>
+        </div>
+        <div class="panel empty-state hidden" id="recordsEmpty">
+          <strong>아직 근무 기록이 없어요</strong>
+          <p>위의 출근하기를 누르면 이곳에 쌓여요.</p>
+        </div>
+        <div class="panel" id="recordsPanel"><ul class="list" id="records"></ul></div>
+        <p class="hint">출퇴근 시각은 증거로 쓰이기 때문에 고칠 수 없어요. 잘못 누른 기록은 상담할 때 함께 설명해 주세요.</p>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
         <h3 style="margin-top:0">알림</h3>
         <div id="alerts"></div>
       </div>
     </section>
 
-    <section class="view" id="v-work" aria-label="근무 기록">
-      <h2 class="cur-job"></h2>
-      <p class="lead">출퇴근 버튼으로 남긴 근무 기록이에요. 급여 계산과 체불 증명의 근거가 돼요.</p>
-      <p class="sched-line" id="schedLine"></p>
-      <div class="panel quit-panel hidden" id="quitPanel">
-        <div class="quit-head"><strong>퇴직 후 임금 정산</strong><span class="tag" id="quitTag"></span></div>
-        <p id="quitText"></p>
-        <div class="seg" style="margin-top:10px">
-          <button type="button" id="paidYes">남은 임금 받았어요</button>
-          <button type="button" id="paidNo">아직 못 받았어요</button>
-        </div>
-        <p class="hint">퇴직 후 14일 안에 남은 임금을 지급해야 해요. 당사자가 합의해 기한을 늘린 경우는 예외예요. 받지 못한 임금은 3년 안에 청구할 수 있어요.</p>
-        <button class="btn block hidden" id="quitReport">상담 사전 자료 만들러 가기</button>
-      </div>
-      <button class="link-quit" id="quitOpen">이곳을 그만뒀어요</button>
-      <div class="panel hidden" id="quitForm">
-        <label class="field"><span>그만둔 날</span><input class="input" type="date" id="quitDateMain"></label>
-        <button class="btn block" id="quitSave">저장하기</button>
-      </div>
-      <div class="panel empty-state hidden" id="recordsEmpty">
-        <strong>아직 근무 기록이 없어요</strong>
-        <p>출퇴근 탭에서 출근하기를 누르면 이곳에 쌓여요.</p>
-      </div>
-      <div class="panel" id="recordsPanel"><ul class="list" id="records"></ul></div>
-
-      <h3>급여 점검</h3>
+    <section class="view" id="v-pay" aria-label="급여 점검">
+      <h2>급여 점검</h2>
+      <p class="place-tag cur-job"></p>
+      <p class="lead">근무 기록으로 받아야 할 금액을 계산하고, 받은 금액과 비교해요.</p>
       <div class="panel">
-        <div class="month-row"><input class="input" type="month" id="payMonth"><button class="btn ghost" id="payRun">지금 점검</button></div>
+        <div class="month-row"><input class="input" type="month" id="payMonth" aria-label="점검할 달"><button class="btn ghost" id="payRun">지금 점검</button></div>
         <div id="payBody"></div>
-        <h3 style="margin-top:18px">받은 급여 올리기</h3>
+        <div id="payTrace"></div>
+      </div>
+      <h3>받은 급여 올리기</h3>
+      <div class="panel">
         <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="number" id="payAmount" inputmode="numeric"><em>원</em></div></label>
         <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf"></label>
         <button class="btn block" id="paySave">저장하고 비교하기</button>
+        <p class="hint">같은 달을 다시 저장하면 새 금액으로 바뀌어요.</p>
       </div>
+      <h3>저장한 받은 급여</h3>
+      <div class="panel"><ul class="list" id="payslips"></ul></div>
     </section>
 
     <section class="view" id="v-check" aria-label="계약서 점검">
-      <h2>계약서 점검</h2>
+      <h2>계약서와 근무 기록 점검</h2>
       <p class="place-tag cur-job"></p>
       <button class="seek-entry" id="seekEntry">
         <span><strong>새 아르바이트에 지원하려고 하나요</strong>지원 전에 공고와 조건을 먼저 확인해요</span>
@@ -190,10 +229,13 @@
       <div class="ai-note">계약서 자동 읽기는 AI 연결 후 제공돼요. 지금은 계약서를 보고 아래 칸을 직접 채워 주세요.</div>
       <h3>계약서에 적힌 내용</h3>
       <div class="panel fields-grid" id="fieldsBox"></div>
-      <button class="btn block" id="checkRun">이 내용으로 점검하기</button>
+      <button class="btn block" id="checkRun">이 내용과 근무 기록으로 점검하기</button>
+      <p class="hint">입력한 기본 정보, 계약서 내용, 실제 출퇴근 기록을 법 기준표와 대조해요.</p>
       <h3>점검 결과</h3>
       <div class="summary" id="checkSummary"></div>
       <div id="checkItems"></div>
+      <div id="checkTrace"></div>
+      <p class="hint" id="lawStatus"></p>
       <p class="hint">결과는 법적 판단이 아닌 참고용이에요. 정확한 판단은 상담 기관에서 받으세요.</p>
       <details class="more"><summary>에이전트 동작 기록</summary><div id="agentLog"></div></details>
     </section>
@@ -215,6 +257,8 @@
       <div class="panel">
         <p style="margin-top:0">기본 정보, 점검 결과, 급여 비교, 근무 기록, 증거 자료를 한 문서로 정리해요. 상담 기관에 내면 처음부터 다시 설명하지 않아도 돼요.</p>
         <button class="btn block" id="reportBtn">상담 사전 자료 만들기</button>
+        <div id="reportTrace"></div>
+        <ul class="list" id="reportList" style="margin-top:12px"></ul>
       </div>
       <div id="counsel"></div>
     </section>
@@ -233,6 +277,14 @@
           <textarea class="input" id="warnMsg"></textarea>
           <button class="btn ghost block" style="margin-top:10px" id="copyMsg">안내 문구 복사</button>
         </div>
+        <h3>게시물 검색어</h3>
+        <div class="panel">
+          <p style="margin-top:0">사업장 이름만으로 검색하면 관련 없는 글이 많이 잡혀요. 본인 이름이나 별명처럼 게시물에 나올 만한 말을 넣어 주세요.</p>
+          <div class="kw-row"><input class="input" id="kwInput" placeholder="예: 본인 이름, 별명" aria-label="검색어"><button class="btn ghost" id="kwAdd">추가</button></div>
+          <div class="chips" id="kwList"></div>
+          <p class="hint" id="kwQueries"></p>
+          <p class="hint">매일 정해진 시각에 에이전트가 이 검색어로 공개 게시물을 스스로 찾아요. 검색 키가 없으면 건너뛰고 기록만 남겨요.</p>
+        </div>
         <h3>게시물 확인</h3>
         <div class="panel">
           <label class="field"><span>의심되는 게시물 주소</span><input class="input" id="postUrl" placeholder="https://"></label>
@@ -241,6 +293,7 @@
             <button class="btn ghost" id="postSearch">공개 게시물 검색</button>
           </div>
           <p class="hint">보복성 여부 판별은 AI 연결 후 제공돼요. 지금은 주소, 확인 시각, 화면을 보존해요.</p>
+          <div id="guardTrace"></div>
           <ul class="list" id="postList" style="margin-top:12px"></ul>
         </div>
       </div>
@@ -250,8 +303,8 @@
 
 <nav class="tabs hidden" aria-label="메뉴" id="tabs">
   <div class="inner">
-    <button aria-current="page" data-v="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>출퇴근</button>
-    <button data-v="work"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>근무</button>
+    <button aria-current="page" data-v="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>홈</button>
+    <button data-v="pay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>급여</button>
     <button data-v="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l3 3v15H6z"/><path d="M9 13l2 2 4-4"/></svg>점검</button>
     <button data-v="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6l2 2h8v10H4z"/></svg>자료</button>
     <button data-v="guard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>보호</button>
@@ -285,10 +338,11 @@
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
     <div class="grabber" aria-hidden="true"></div>
     <div class="sheet-head"><h2 id="pickerTitle">일하는 곳</h2><button class="close" id="pickerClose">닫기</button></div>
-    <p class="lead">기록을 보고 싶은 곳을 골라 주세요</p>
+    <p class="lead">기록을 보고 싶은 곳을 골라 주세요. 정보를 고치려면 수정을 눌러요.</p>
     <div id="placeList" class="place-list" role="radiogroup" aria-labelledby="pickerTitle"></div>
     <div class="picker-foot">
       <button class="btn ghost block" id="addPlace">+ 새 일하는 곳 등록</button>
+      <button class="btn ghost block" style="margin-top:8px" id="editMe">내 정보(생년월일) 수정</button>
       <button class="link" id="logoutBtn" style="margin-top:14px">로그아웃</button>
     </div>
   </div>
