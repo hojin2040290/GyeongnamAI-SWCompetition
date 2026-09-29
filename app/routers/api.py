@@ -8,15 +8,15 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app import guard, report
+from app import guard
 from app.agent import core
-from app.agent.tools import make_tools
+from app.agent.tools import keywords_of, make_tools
 from app.auth import check_password, current_user, hash_password
 from app.calc.age import age_on
 from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
 from app.db import get_session
-from app.judge import engine
+from app.law.lookup import attach_articles, table_status
 from app.models import (AgentLog, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
                         User, WorkRecord)
 from app.storage import save_original
@@ -73,6 +73,24 @@ def logout(request: Request):
 
 @router.get("/me")
 def me(u: User = Depends(current_user)):
+    return user_out(u)
+
+
+class MeIn(BaseModel):
+    birth_date: date
+    mode: Optional[str] = None
+
+
+@router.put("/me")
+def update_me(data: MeIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """생년월일(나이 기준)과 처음 고른 상황은 나중에도 고칠 수 있다."""
+    if data.birth_date > today_kst():
+        raise HTTPException(400, "생년월일이 오늘보다 늦어요")
+    u.birth_date = data.birth_date
+    if data.mode in ("seek", "work", "quit"):
+        u.mode = data.mode
+    s.add(u)
+    s.commit()
     return user_out(u)
 
 
@@ -146,15 +164,19 @@ def create_job(data: JobIn, u: User = Depends(current_user), s: Session = Depend
     apply_job(job, data)
     s.add(job)
     s.commit()
+    s.refresh(job)  # 커밋 뒤 비워진 값을 다시 읽어야 model_dump가 채워진다
     return job_out(job)
 
 
 @router.put("/jobs/{job_id}")
 def update_job(job_id: int, data: JobIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     job = own_job(s, u, job_id)
+    if s.exec(select(Job).where(Job.user_id == u.id, Job.name == data.name.strip(), Job.id != job_id)).first():
+        raise HTTPException(400, f"{data.name} 이름이 이미 있어요. 지점명까지 적어 주세요")
     apply_job(job, data)
     s.add(job)
     s.commit()
+    s.refresh(job)  # 커밋 뒤 비워진 값을 다시 읽어야 model_dump가 채워진다
     return job_out(job)
 
 
@@ -228,7 +250,10 @@ def punch(job_id: int, data: PunchIn, u: User = Depends(current_user), s: Sessio
         s.add(rec)
         action = "in"
     s.commit()
-    return {"action": action, "server_time": t.isoformat(), "record": rec_out(rec)}
+    out = {"action": action, "server_time": t.isoformat(), "record": rec_out(rec)}
+    if action == "out":
+        out["shift"] = core.run_shift_check(s, u.id, job_id, rec.id)  # 퇴근한 순간 에이전트가 그날 기록을 점검
+    return out
 
 
 @router.get("/jobs/{job_id}/records")
@@ -324,7 +349,13 @@ def last_check(job_id: int, u: User = Depends(current_user), s: Session = Depend
     own_job(s, u, job_id)
     row = s.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "contract")
                  .order_by(CheckRun.id.desc())).first()
-    return {"items": json.loads(row.results_json) if row else None, "created_at": row.created_at.isoformat() if row else None}
+    items = attach_articles(s, json.loads(row.results_json)) if row else None
+    return {"items": items, "created_at": row.created_at.isoformat() if row else None}
+
+
+@router.get("/law/status")
+def law_status(u: User = Depends(current_user), s: Session = Depends(get_session)):
+    return table_status(s)
 
 
 # ---------- 지원 전 확인 ----------
@@ -339,14 +370,7 @@ class SeekIn(BaseModel):
 
 @router.post("/seek/check")
 def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
-    facts = engine.Facts(birth=u.birth_date, on=today_kst(), wage=data.wage, probation=data.probation,
-                         schedule=data.schedule, industry=data.industry, work_desc=data.work_desc)
-    items = engine.judge(facts, "seek")
-    out = {"items": engine.to_json(items), "questions": engine.questions(facts, items)}
-    s.add(CheckRun(user_id=u.id, kind="seek", results_json=json.dumps({"input": data.model_dump(), **out}, ensure_ascii=False),
-                   created_at=now_kst()))
-    s.commit()
-    return out
+    return core.run_seek_check(s, u.id, data.model_dump())
 
 
 # ---------- 급여 ----------
@@ -360,6 +384,27 @@ async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(..
     s.add(Payslip(job_id=job_id, month=month, amount=amount, evidence_id=ev_id, created_at=now_kst()))
     s.commit()
     return core.run_payday(s, u.id, job_id, month)
+
+
+@router.get("/jobs/{job_id}/payslips")
+def list_payslips(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    own_job(s, u, job_id)
+    rows = s.exec(select(Payslip).where(Payslip.job_id == job_id).order_by(Payslip.month.desc(), Payslip.id.desc())).all()
+    latest: dict[str, Payslip] = {}
+    for p in rows:
+        latest.setdefault(p.month, p)  # 같은 달을 다시 올리면 마지막 금액을 쓴다
+    return [{"id": p.id, "month": p.month, "amount": p.amount, "evidence_id": p.evidence_id,
+             "created_at": p.created_at.isoformat()} for p in latest.values()]
+
+
+@router.delete("/jobs/{job_id}/payslips/{month}")
+def delete_payslip(job_id: int, month: str, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """잘못 올린 받은 금액 지우기. 함께 올린 명세서 원본은 증거 자료로 남긴다."""
+    own_job(s, u, job_id)
+    for p in s.exec(select(Payslip).where(Payslip.job_id == job_id, Payslip.month == month)).all():
+        s.delete(p)
+    s.commit()
+    return {"ok": True}
 
 
 @router.get("/jobs/{job_id}/pay")
@@ -381,8 +426,9 @@ def agent_payday(job_id: int, month: str, u: User = Depends(current_user), s: Se
 @router.get("/jobs/{job_id}/agent/log")
 def agent_log(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
-    rows = s.exec(select(AgentLog).where(AgentLog.job_id == job_id, AgentLog.user_id == u.id)
-                  .order_by(AgentLog.id.desc()).limit(40)).all()
+    rows = s.exec(select(AgentLog).where(AgentLog.user_id == u.id,
+                                         (AgentLog.job_id == job_id) | (AgentLog.job_id == None))  # noqa: E711
+                  .order_by(AgentLog.id.desc()).limit(60)).all()
     return [{"run_id": r.run_id, "event": r.event, "step": r.step, "detail": r.detail, "at": r.created_at.isoformat()}
             for r in rows]
 
@@ -397,8 +443,14 @@ def counsel(u: User = Depends(current_user)):
 @router.post("/jobs/{job_id}/report")
 def make_report(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
-    rep = report.build(s, u.id, job_id)
-    return {"id": rep.id, "url": f"/api/reports/{rep.id}"}
+    return core.run_report(s, u.id, job_id)
+
+
+@router.get("/jobs/{job_id}/reports")
+def list_reports(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    own_job(s, u, job_id)
+    rows = s.exec(select(Report).where(Report.job_id == job_id, Report.user_id == u.id).order_by(Report.id.desc())).all()
+    return [{"id": r.id, "url": f"/api/reports/{r.id}", "created_at": r.created_at.isoformat()} for r in rows]
 
 
 @router.get("/reports/{rep_id}")
@@ -424,13 +476,27 @@ def guard_state(job_id: int, u: User = Depends(current_user), s: Session = Depen
     job = own_job(s, u, job_id)
     posts = s.exec(select(GuardPost).where(GuardPost.job_id == job_id).order_by(GuardPost.id.desc())).all()
     return {"reported": job.reported, "message": guard.warning_message(job) if job.reported else "",
+            "keywords": keywords_of(job), "queries": guard.search_queries(job, keywords_of(job)),
             "posts": [post_out(p) for p in posts]}
 
 
 @router.post("/jobs/{job_id}/guard")
 def set_reported(job_id: int, data: ReportedIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    own_job(s, u, job_id)
+    run = core.run_guard_toggle(s, u.id, job_id, data.reported)
+    return {**guard_state(job_id, u, s), "trace": run["trace"]}
+
+
+class KeywordsIn(BaseModel):
+    keywords: list[str]
+
+
+@router.put("/jobs/{job_id}/guard/keywords")
+def set_keywords(job_id: int, data: KeywordsIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """게시물 검색어 (본인 이름, 별명 등). 사업장 이름과 함께 검색한다."""
     job = own_job(s, u, job_id)
-    job.reported = data.reported
+    kws = [k.strip().replace(",", " ") for k in data.keywords if k.strip()][:10]
+    job.guard_keywords = ",".join(dict.fromkeys(kws))
     s.add(job)
     s.commit()
     return guard_state(job_id, u, s)
@@ -446,25 +512,13 @@ def add_post(job_id: int, data: PostIn, u: User = Depends(current_user), s: Sess
     own_job(s, u, job_id)
     if not data.url.startswith(("http://", "https://")):
         raise HTTPException(400, "게시물 주소는 http 또는 https로 시작해야 해요")
-    p = GuardPost(job_id=job_id, url=data.url, title=data.title, source="user", found_at=now_kst())
-    s.add(p)
-    s.commit()
-    ev = None
-    try:
-        ev = guard.capture(s, u.id, p)
-    except Exception as exc:  # 캡처 실패해도 주소와 시각은 남긴다
-        p.title = p.title or f"캡처 실패: {type(exc).__name__}"
-    if ev:
-        p.evidence_id = ev.id
-    s.add(p)
-    s.commit()
-    return post_out(p)
+    return core.run_guard_preserve(s, u.id, job_id, data.url, data.title)
 
 
 @router.post("/jobs/{job_id}/guard/search")
 def guard_search(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
-    job = own_job(s, u, job_id)
-    return guard.search_public_posts(s, job, "")
+    own_job(s, u, job_id)
+    return core.run_guard_search(s, u.id, job_id)
 
 
 # ---------- 알림 ----------

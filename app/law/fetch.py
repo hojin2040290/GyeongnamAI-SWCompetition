@@ -35,7 +35,12 @@ def fetch_articles(client: httpx.Client, law_id: str) -> list[tuple[str, str, st
     root = ET.fromstring(r.content)
     out = []
     for unit in root.iter("조문단위"):
+        if (unit.findtext("조문여부") or "").strip() == "전문":  # 장, 절 제목은 조문이 아님
+            continue
         no = (unit.findtext("조문번호") or "").strip()
+        branch = (unit.findtext("조문가지번호") or "").strip()
+        if no and branch and branch != "0":
+            no = f"{no}의{branch}"  # 제76조의2 -> 76의2 (lookup.parse_label과 같은 형식)
         title = (unit.findtext("조문제목") or "").strip()
         text = "\n".join(t.strip() for t in unit.itertext() if t.strip())
         if no:

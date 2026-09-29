@@ -1,0 +1,10 @@
+"""테스트는 임시 폴더의 DB와 파일만 쓴다 (data/app.db를 건드리지 않음)."""
+import os
+import tempfile
+
+_tmp = tempfile.mkdtemp(prefix="albajikimi_test_")
+os.environ["DB_PATH"] = os.path.join(_tmp, "test.db")
+os.environ["UPLOAD_DIR"] = os.path.join(_tmp, "uploads")
+os.environ["REPORT_DIR"] = os.path.join(_tmp, "reports")
+os.environ["NAVER_CLIENT_ID"] = ""
+os.environ["NAVER_CLIENT_SECRET"] = ""

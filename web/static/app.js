@@ -5,9 +5,12 @@ const DAY_KEYS = ['월','화','수','목','금','토','일'];
 const TIMES = []; for (let h=0; h<24; h++) { TIMES.push(pad(h)+':00'); TIMES.push(pad(h)+':30'); }
 const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
 const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심'};
+const EVENT = {contract_check:'계약·근무 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
+  report:'상담 자료', guard_on:'보복 대응 시작', guard_off:'보복 대응 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존'};
 const KIND = {contract:'근로계약서', payslip:'급여명세서', message:'사업주 메시지', schedule:'근무표', deposit:'입금 내역', post:'게시물 화면', notice:'채용공고', other:'기타'};
 
-const state = { me:null, jobs:[], current:null, mode:null, cards:[], adding:false, seekFromApp:false };
+const state = { me:null, jobs:[], current:null, mode:null, cards:[], adding:false, seekFromApp:false,
+  inApp:false, editingJob:null, curOb:null, tabHist:[] };
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function esc(t){ return String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -42,9 +45,53 @@ async function api(method, url, body, isForm){
   return r.json();
 }
 
-function show(id){ ['ob0','ob1','obLogin','obSeek','ob2'].forEach(x=>$('#'+x).classList.toggle('hidden', x!==id)); window.scrollTo(0,0); }
+function show(id){
+  ['ob0','ob1','obLogin','obSeek','ob2','obMe'].forEach(x=>$('#'+x).classList.toggle('hidden', x!==id));
+  state.curOb=id; if(id==='ob0') startScreen(); window.scrollTo(0,0); refreshNav();
+}
 function openOverlay(id){ $('#onboard').classList.remove('hidden'); show(id); }
-function closeOverlay(){ $('#onboard').classList.add('hidden'); }
+function closeOverlay(){ $('#onboard').classList.add('hidden'); state.curOb=null; refreshNav(); }
+function visible(id){ return !$(id).classList.contains('hidden'); }
+
+// ---------- 뒤로 가기 ----------
+// 화면 위 뒤로 버튼, 각 화면의 뒤로 버튼, 휴대폰과 브라우저의 뒤로 버튼이 모두 같은 규칙을 따른다.
+function backTarget(){
+  if(visible('#sheetBg')) return closeSheet;
+  if(visible('#pickerBg')) return closePicker;
+  if(visible('#onboard')){
+    switch(state.curOb){
+      case 'ob1': case 'obLogin': return ()=>show('ob0');
+      case 'obSeek':
+        if(visible('#seekResult')) return seekBackToForm;
+        return state.seekFromApp ? ()=>{ state.seekFromApp=false; closeOverlay(); } : ()=>show('ob0');
+      case 'ob2': return state.inApp ? cancelJobs : ()=>{ clearCards(); show('ob0'); };
+      case 'obMe': return closeOverlay;
+      default: return null;
+    }
+  }
+  if(!state.inApp) return null;
+  if(visible('#quitForm')) return closeQuitForm;
+  if(state.tabHist.length) return ()=>showTab(state.tabHist.pop(), false);
+  if(currentTab!=='home') return ()=>showTab('home', false);
+  return null;
+}
+let skipPop=false;
+function goBack(){
+  const t=backTarget(); if(t) t();
+  if(!backTarget() && history.state?.albaBack){ skipPop=true; history.back(); }
+  refreshNav();
+}
+function refreshNav(){
+  const can=!!backTarget();
+  $('#backBtn').classList.toggle('hidden', !can);
+  if(can && !history.state?.albaBack) history.pushState({albaBack:true}, '');
+}
+window.addEventListener('popstate', ()=>{
+  if(skipPop){ skipPop=false; return; }
+  const t=backTarget(); if(t) t(); refreshNav();
+});
+$('#backBtn').onclick=goBack;
+$$('.ob-back').forEach(b=>b.onclick=goBack);
 
 // ---------- 공통 선택 버튼 ----------
 function bindSeg(root, onChange){
@@ -68,7 +115,7 @@ async function boot(){
   try {
     state.me = await api('GET','/api/me');
     await loadJobs();
-    if (!state.jobs.length) { openOverlay('ob2'); addCard(); }
+    if (!state.jobs.length) openOverlay('ob0');
     else startApp();
   } catch(e) {
     if (e.status === 401) openOverlay('ob0'); else toast(e.message);
@@ -79,7 +126,15 @@ $$('.mode').forEach(b => b.addEventListener('click', () => {
   $$('.mode').forEach(x=>x.setAttribute('aria-checked','false'));
   b.setAttribute('aria-checked','true'); state.mode=b.dataset.mode; $('#modeNext').disabled=false;
 }));
-$('#modeNext').onclick = () => show('ob1');
+function startScreen(){
+  $('#toLoginWrap').classList.toggle('hidden', !!state.me); $('#obLogoutWrap').classList.toggle('hidden', !state.me);
+}
+function afterMode(){
+  if (state.mode==='seek') { seekReset(); show('obSeek'); return; }
+  clearCards(); prepJobForm(false); show('ob2'); const c=addCard(); if(state.mode==='quit') setSeg(c.node,'status','quit');
+}
+$('#modeNext').onclick = () => { if(state.me) afterMode(); else show('ob1'); };
+$('#obLogout').onclick = async () => { await api('POST','/api/auth/logout'); location.reload(); };
 $('#toLogin').onclick = () => show('obLogin');
 $('#toStart').onclick = () => show('ob0');
 
@@ -89,8 +144,7 @@ $('#regBtn').onclick = async () => {
   if(!email||!password||!birth_date){ $('#regErr').textContent='이메일, 비밀번호, 생년월일을 모두 입력해 주세요'; return; }
   try {
     state.me = await api('POST','/api/auth/register',{email,password,birth_date,mode:state.mode||'work'});
-    if (state.mode==='seek') { seekReset(); show('obSeek'); }
-    else { show('ob2'); const c=addCard(); if(state.mode==='quit') setSeg(c.node,'status','quit'); }
+    afterMode();
   } catch(e) { $('#regErr').textContent=e.message; }
 };
 $('#logBtn').onclick = async () => {
@@ -98,7 +152,7 @@ $('#logBtn').onclick = async () => {
   try {
     state.me = await api('POST','/api/auth/login',{email:$('#logEmail').value.trim(),password:$('#logPw').value});
     await loadJobs();
-    if (!state.jobs.length) { show('ob2'); addCard(); } else { closeOverlay(); startApp(); }
+    if (!state.jobs.length) show('ob0'); else { closeOverlay(); startApp(); }
   } catch(e) { $('#logErr').textContent=e.message; }
 };
 
@@ -108,7 +162,8 @@ function addCard(){
   const card={node, schedule:{}}; state.cards.push(card);
   const name=node.querySelector('.f-name');
   name.addEventListener('input',()=>{ node.querySelector('.job-title').textContent=name.value.trim()||'새 일하는 곳'; });
-  node.querySelector('.remove').onclick=()=>{
+  node.querySelector('.remove').onclick=async()=>{
+    if(state.editingJob){ await deleteJob(state.editingJob); return; }
     if(state.cards.length===1){ toast('하나 이상 있어야 해요'); return; }
     node.remove(); state.cards=state.cards.filter(c=>c!==card); refreshRemove();
   };
@@ -126,7 +181,59 @@ function addCard(){
   $('#jobList').appendChild(node); checkMinor(card); refreshRemove();
   return card;
 }
-function refreshRemove(){ state.cards.forEach(c=>c.node.querySelector('.remove').classList.toggle('hidden',state.cards.length===1)); }
+function refreshRemove(){ state.cards.forEach(c=>c.node.querySelector('.remove').classList.toggle('hidden',state.cards.length===1&&!state.editingJob)); }
+function clearCards(){ state.cards.forEach(c=>c.node.remove()); state.cards=[]; }
+function setSched(card, schedule){
+  card.schedule=JSON.parse(JSON.stringify(schedule||{}));
+  const has=DAY_KEYS.some(k=>card.schedule[k]);
+  card.node.querySelector('.sched-sum').textContent=has?schedSummary(card.schedule):'요일과 시간을 선택해 주세요';
+  card.node.querySelector('.sched-go').textContent=has?'수정':'선택';
+}
+function ynV(v){ return v===true?'yes':(v===false?'no':null); }
+function fillCard(card, j){
+  const n=card.node, q=s=>n.querySelector(s);
+  setSeg(n,'status',j.status); q('.f-quit').value=j.quit_date||'';
+  q('.f-name').value=j.name; q('.f-name').dispatchEvent(new Event('input'));
+  q('.f-type').value=j.industry||''; q('.f-work').value=j.work_desc||''; q('.f-wage').value=j.wage??'';
+  q('.f-start').value=j.start_date||''; q('.f-end').value=j.end_date||'';
+  q('.f-noend').checked=!!j.no_end; q('.f-end').disabled=!!j.no_end;
+  if(ynV(j.contract_written)) setSeg(n,'contract',ynV(j.contract_written));
+  if(ynV(j.copy_received)) setSeg(n,'copy',ynV(j.copy_received));
+  setSeg(n,'probation',j.probation||'unknown'); q('.f-probmonths').value=j.probation_months??'';
+  setSched(card, j.schedule);
+  if(j.size) setSeg(n,'size',j.size);
+  if(j.pay_cycle) setSeg(n,'paytype',j.pay_cycle);
+  q('.f-payday').value=j.payday??'';
+  if(j.pay_method) setSeg(n,'paymethod',j.pay_method);
+  if(j.deduction) setSeg(n,'deduct',j.deduction);
+  if(j.consent) setSeg(n,'consent',j.consent);
+  q('.f-addr').value=j.address||''; q('.f-owner').value=j.owner||'';
+  checkMinor(card);
+}
+// 등록 화면을 새로 등록, 추가, 수정 중 어느 용도로 쓸지 정한다
+function prepJobForm(mode){
+  state.editingJob = mode==='edit' ? state.current : null;
+  const inApp = mode==='add' || mode==='edit';
+  $('#ob2Step').textContent = mode==='edit' ? '아르바이트 정보' : (inApp ? '새 일하는 곳' : '2 / 2 아르바이트 정보');
+  $('#ob2Title').textContent = mode==='edit' ? '일하는 곳 정보 수정' : '일하는 곳을 등록해 주세요';
+  $('#addJobBtn').classList.toggle('hidden', mode==='edit');
+  $('#saveJobsBtn').textContent = inApp ? '저장하기' : '시작하기';
+  $('#cancelJobsBtn').classList.toggle('hidden', !inApp);
+  $('#jobErr').textContent='';
+}
+function openJobEditor(job){
+  closePicker(); state.current=job.id; clearCards(); prepJobForm('edit');
+  openOverlay('ob2'); const c=addCard(); fillCard(c, job);
+  c.node.querySelector('.remove').textContent='이곳 삭제'; refreshRemove();
+}
+async function deleteJob(id){
+  const j=state.jobs.find(x=>x.id===id);
+  if(!confirm(`${j.name}을(를) 삭제할까요? 근무 기록과 자료도 이 사업장에서 더 이상 보이지 않아요.`)) return;
+  try{ await api('DELETE',`/api/jobs/${id}`); await loadJobs(); clearCards(); state.editingJob=null;
+    if(!state.jobs.length){ state.inApp=false; state.current=null; $('#app').classList.add('hidden'); $('#tabs').classList.add('hidden'); show('ob0'); return; }
+    state.current=state.jobs[0].id; closeOverlay(); startApp(); toast('삭제했어요');
+  }catch(e){ toast(e.message); }
+}
 function checkMinor(card){
   const node=card.node, start=node.querySelector('.f-start').value;
   const now=ageOn(null), atStart=start?ageOn(start):null;
@@ -160,16 +267,21 @@ $('#saveJobsBtn').onclick=async()=>{
     if(d.status==='quit'&&!d.quit_date){ c.node.scrollIntoView({block:'center'}); $('#jobErr').textContent='그만둔 날을 입력해 주세요'; return; }
   }
   try{
+    if(state.editingJob){
+      await api('PUT',`/api/jobs/${state.editingJob}`,collect(state.cards[0]));
+      clearCards(); state.editingJob=null; await loadJobs(); closeOverlay(); startApp(); toast('정보를 고쳤어요. 점검을 다시 해 보세요'); return;
+    }
     let last=null;
-    for(const c of state.cards){ last = await api('POST','/api/jobs',collect(c)); c.saved=true; }
-    state.cards.forEach(c=>c.node.remove()); state.cards=[];
+    for(const c of state.cards.filter(c=>!c.saved)){ last = await api('POST','/api/jobs',collect(c)); c.saved=true; }
+    clearCards();
     await loadJobs();
     state.current = state.adding||!state.current ? (last?.id ?? state.jobs[0].id) : state.current;
     state.adding=false; closeOverlay(); startApp();
     toast(`${curJob().name} 기록을 보고 있어요`);
   }catch(e){ $('#jobErr').textContent=e.message; }
 };
-$('#cancelJobsBtn').onclick=()=>{ state.cards.forEach(c=>c.node.remove()); state.cards=[]; state.adding=false; closeOverlay(); };
+function cancelJobs(){ clearCards(); state.adding=false; state.editingJob=null; closeOverlay(); }
+$('#cancelJobsBtn').onclick=cancelJobs;
 
 // ---------- 근무 시간 선택 ----------
 let editing=null, draft=null;
@@ -177,9 +289,9 @@ function openSheetFor(target){
   editing=target; draft=JSON.parse(JSON.stringify(target.schedule||{}));
   const nm=target.node.querySelector('.f-name')?.value.trim();
   $('#sheetJobName').textContent=nm?`${nm}에서 일하는 시간을 골라 주세요`:'일하는 시간을 골라 주세요';
-  renderDays(); renderSlots(); $('#sheetBg').classList.remove('hidden'); document.body.style.overflow='hidden';
+  renderDays(); renderSlots(); $('#sheetBg').classList.remove('hidden'); document.body.style.overflow='hidden'; refreshNav();
 }
-function closeSheet(){ $('#sheetBg').classList.add('hidden'); document.body.style.overflow=''; editing=null; }
+function closeSheet(){ $('#sheetBg').classList.add('hidden'); document.body.style.overflow=''; editing=null; refreshNav(); }
 function renderDays(){
   const box=$('#dayPicker'); box.innerHTML='';
   DAY_KEYS.forEach(k=>{ const b=document.createElement('button'); b.type='button'; b.className='day'; b.textContent=k;
@@ -209,12 +321,12 @@ function totals(){ const keys=DAY_KEYS.filter(k=>draft[k]);
 function schedSummary(schedule){ const keys=DAY_KEYS.filter(k=>schedule[k]); if(!keys.length) return '근무 요일 미등록';
   return `${keys.join(', ')}요일, 주 ${fmtH(keys.reduce((a,k)=>a+slotMinutes(schedule[k]),0))}`; }
 $('#copyAll').onclick=()=>{ const keys=DAY_KEYS.filter(k=>draft[k]); const f=draft[keys[0]]; keys.forEach(k=>draft[k]={...f}); renderSlots(); };
-$('#sheetClose').onclick=closeSheet;
-$('#sheetBg').onclick=e=>{ if(e.target.id==='sheetBg') closeSheet(); };
+$('#sheetClose').onclick=goBack;
+$('#sheetBg').onclick=e=>{ if(e.target.id==='sheetBg') goBack(); };
 $('#sheetSave').onclick=()=>{
   if(!DAY_KEYS.some(k=>draft[k])){ toast('일하는 요일을 하나 이상 골라 주세요'); return; }
   editing.schedule=draft; editing.node.querySelector('.sched-sum').textContent=schedSummary(draft);
-  editing.node.querySelector('.sched-go').textContent='수정'; closeSheet(); toast('근무 시간을 저장했어요');
+  editing.node.querySelector('.sched-go').textContent='수정'; goBack(); toast('근무 시간을 저장했어요');
 };
 
 // ---------- 지원 전 확인 ----------
@@ -227,36 +339,49 @@ $('#seekFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
 function seekInput(){ const n=seek.node, w=n.querySelector('.f-wage').value;
   return { name:n.querySelector('.f-name').value.trim(), industry:n.querySelector('.f-type').value, work_desc:n.querySelector('.f-work').value.trim(),
     wage:w?Number(w):null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule }; }
+function articleHTML(a){
+  if(!a) return '';
+  if(!a.built) return `<p class="basis"><span class="chip muted">법 기준표 미구축</span> 법제처 API로 조문을 불러오면 원문이 붙어요.</p>`;
+  return `<details class="law-text"><summary>조문 원문 보기${a.title?` (${esc(a.title)})`:''}</summary><pre>${esc(a.text)}</pre></details>`;
+}
 function itemHTML(it){
   const extra=[]; if(it.basis?.length) extra.push(`근거로 쓴 사실: ${esc(it.basis.join(', '))}`);
   if(it.needed?.length) extra.push(`필요한 정보: ${esc(it.needed.join(', '))}`);
-  return `<div class="result ${it.status}"><div class="head"><span class="law">${esc(it.law)}</span><span class="tag ${it.status}">${LABEL[it.status]}</span></div>
-    <p>${esc(it.text)}</p>${extra.map(x=>`<p class="basis">${x}</p>`).join('')}</div>`;
+  const src=it.source==='records'?'<span class="chip">근무 기록</span>':'';
+  return `<div class="result ${it.status}"><div class="head"><span class="law">${esc(it.law)} ${src}</span><span class="tag ${it.status}">${LABEL[it.status]}</span></div>
+    <p>${esc(it.text)}</p>${extra.map(x=>`<p class="basis">${x}</p>`).join('')}${articleHTML(it.article)}</div>`;
+}
+// 에이전트가 거친 단계 (입력, 판단, 도구 실행, 결과)
+function traceHTML(trace){
+  if(!trace?.length) return '';
+  return `<details class="more trace"><summary>에이전트 동작 보기 (${trace.length}단계)</summary>${trace.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail)}</div>`).join('')}</details>`;
 }
 $('#seekRun').onclick=async()=>{
   $('#seekErr').textContent='';
   try{ const r=await api('POST','/api/seek/check',seekInput());
     $('#seekItems').innerHTML=r.items.map(itemHTML).join('');
     $('#seekQs').innerHTML=r.questions.map(q=>`<li>${esc(q)}</li>`).join('');
+    $('#seekTrace').innerHTML=traceHTML(r.trace);
     $('#seekForm').classList.add('hidden'); $('#seekUpload').classList.add('hidden'); $('#seekResult').classList.remove('hidden');
-    $('#seekClose').classList.toggle('hidden',!state.seekFromApp); window.scrollTo(0,0);
+    $('#seekClose').classList.toggle('hidden',!state.seekFromApp); window.scrollTo(0,0); refreshNav();
   }catch(e){ $('#seekErr').textContent=e.message; }
 };
 function seekReset(){ const n=seek.node; n.querySelectorAll('input').forEach(i=>i.value=''); n.querySelector('.f-type').value='';
   n.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed','false')); seek.schedule={};
   n.querySelector('.sched-sum').textContent='요일과 시간을 선택해 주세요'; n.querySelector('.sched-go').textContent='선택';
-  $('#seekResult').classList.add('hidden'); $('#seekForm').classList.remove('hidden'); $('#seekUpload').classList.remove('hidden'); }
+  seekBackToForm(); }
+// 결과에서 뒤로: 입력한 내용은 그대로 두고 입력 화면으로
+function seekBackToForm(){ $('#seekResult').classList.add('hidden'); $('#seekForm').classList.remove('hidden'); $('#seekUpload').classList.remove('hidden'); window.scrollTo(0,0); refreshNav(); }
 $('#seekAgain').onclick=seekReset;
 $('#seekClose').onclick=()=>{ state.seekFromApp=false; closeOverlay(); };
 $('#seekToWork').onclick=()=>{
-  const d=seekInput(); state.adding=!!state.current;
-  show('ob2'); const c=addCard(), n=c.node;
+  const d=seekInput(); state.adding=state.inApp; state.seekFromApp=false;
+  clearCards(); prepJobForm(state.inApp?'add':false); show('ob2'); const c=addCard(), n=c.node;
   n.querySelector('.f-name').value=d.name; n.querySelector('.f-name').dispatchEvent(new Event('input'));
   n.querySelector('.f-type').value=d.industry; n.querySelector('.f-work').value=d.work_desc; n.querySelector('.f-wage').value=d.wage??'';
   c.schedule=JSON.parse(JSON.stringify(d.schedule));
   if(DAY_KEYS.some(k=>c.schedule[k])){ n.querySelector('.sched-sum').textContent=schedSummary(c.schedule); n.querySelector('.sched-go').textContent='수정'; }
   if(d.probation!=='unknown') setSeg(n,'probation',d.probation);
-  $('#saveJobsBtn').textContent=state.adding?'저장하기':'시작하기'; $('#cancelJobsBtn').classList.toggle('hidden',!state.adding);
   toast('공고 내용으로 채웠어요. 나머지를 확인해 주세요');
 };
 $('#seekEntry').onclick=()=>{ state.seekFromApp=true; seekReset(); openOverlay('obSeek'); };
@@ -266,16 +391,18 @@ async function loadJobs(){ state.jobs=await api('GET','/api/jobs'); }
 function curJob(){ return state.jobs.find(j=>j.id===state.current); }
 function startApp(){
   if(!state.current||!curJob()) state.current=state.jobs[0].id;
-  closeOverlay(); $('#app').classList.remove('hidden'); $('#tabs').classList.remove('hidden');
-  applyCurrent(); showTab(currentTab);
+  state.inApp=true; closeOverlay(); $('#app').classList.remove('hidden'); $('#tabs').classList.remove('hidden');
+  applyCurrent(); showTab(currentTab, false);
 }
 function applyCurrent(){ const j=curJob(); $$('.cur-job').forEach(el=>el.textContent=j.name); $('#schedLine').textContent=schedSummary(j.schedule); }
 let currentTab='home';
-function showTab(v){
+function showTab(v, push=true){
+  if(push && v!==currentTab){ state.tabHist.push(currentTab); if(state.tabHist.length>20) state.tabHist.shift(); }
   currentTab=v;
   $$('nav.tabs button').forEach(b=>b.toggleAttribute('aria-current',b.dataset.v===v)); $$('nav.tabs button[aria-current]').forEach(b=>b.setAttribute('aria-current','page'));
   $$('.view').forEach(x=>x.classList.toggle('active',x.id==='v-'+v)); window.scrollTo(0,0);
-  ({home:loadHome, work:loadWork, check:loadCheck, docs:loadDocs, guard:loadGuard})[v]().catch(e=>toast(e.message));
+  ({home:loadHome, pay:loadPayTab, check:loadCheck, docs:loadDocs, guard:loadGuard})[v]().catch(e=>toast(e.message));
+  refreshNav();
 }
 $$('nav.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.v));
 
@@ -285,17 +412,26 @@ $('#jobSwitch').onclick=()=>{
   state.jobs.forEach(j=>{ const b=document.createElement('button'); b.type='button'; b.className='place'; b.setAttribute('role','radio');
     b.setAttribute('aria-checked',j.id===state.current?'true':'false');
     b.innerHTML=`<span class="radio" aria-hidden="true"></span><span class="info"><strong>${esc(j.name)}</strong><span>${j.status==='quit'?'그만둔 곳, ':''}${esc(schedSummary(j.schedule))}</span></span>`;
-    b.onclick=()=>{ state.current=j.id; applyCurrent(); closePicker(); showTab(currentTab); toast(`${j.name} 기록을 보고 있어요`); };
-    box.appendChild(b); });
-  $('#pickerBg').classList.remove('hidden'); document.body.style.overflow='hidden';
+    b.onclick=()=>{ state.current=j.id; applyCurrent(); closePicker(); showTab(currentTab, false); toast(`${j.name} 기록을 보고 있어요`); };
+    const row=document.createElement('div'); row.className='place-row';
+    const ed=document.createElement('button'); ed.type='button'; ed.className='btn ghost small'; ed.textContent='수정';
+    ed.setAttribute('aria-label',`${j.name} 정보 수정`); ed.onclick=()=>openJobEditor(j);
+    row.append(b, ed); box.appendChild(row); });
+  $('#pickerBg').classList.remove('hidden'); document.body.style.overflow='hidden'; refreshNav();
 };
-function closePicker(){ $('#pickerBg').classList.add('hidden'); document.body.style.overflow=''; }
-$('#pickerClose').onclick=closePicker;
-$('#pickerBg').onclick=e=>{ if(e.target.id==='pickerBg') closePicker(); };
-$('#addPlace').onclick=()=>{ closePicker(); state.adding=true; openOverlay('ob2'); addCard();
-  $('#saveJobsBtn').textContent='저장하기'; $('#cancelJobsBtn').classList.remove('hidden'); };
+function closePicker(){ $('#pickerBg').classList.add('hidden'); document.body.style.overflow=''; refreshNav(); }
+$('#pickerClose').onclick=goBack;
+$('#pickerBg').onclick=e=>{ if(e.target.id==='pickerBg') goBack(); };
+$('#addPlace').onclick=()=>{ closePicker(); state.adding=true; clearCards(); prepJobForm('add'); openOverlay('ob2'); addCard(); };
+$('#editMe').onclick=()=>{ closePicker(); $('#meEmail').value=state.me.email; $('#meBirth').value=state.me.birth_date; $('#meErr').textContent=''; openOverlay('obMe'); };
+$('#meSave').onclick=async()=>{
+  const v=$('#meBirth').value; if(!v){ $('#meErr').textContent='생년월일을 입력해 주세요'; return; }
+  try{ state.me=await api('PUT','/api/me',{birth_date:v}); closeOverlay(); showTab(currentTab,false); toast('생년월일을 고쳤어요. 점검을 다시 해 보세요'); }
+  catch(e){ $('#meErr').textContent=e.message; }
+};
+$('#editJobBtn').onclick=()=>openJobEditor(curJob());
 $('#logoutBtn').onclick=async()=>{ await api('POST','/api/auth/logout'); location.reload(); };
-document.addEventListener('keydown',e=>{ if(e.key!=='Escape') return; if(editing) closeSheet(); else closePicker(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && backTarget() && (visible('#sheetBg')||visible('#pickerBg'))) goBack(); });
 
 // 출퇴근
 const days=['일','월','화','수','목','금','토'];
@@ -307,9 +443,13 @@ function setPunchUI(working, text){
   btn.classList.toggle('out',working); $('#clockState').textContent=text;
 }
 async function loadHome(){
+  const j=curJob(); applyCurrent();
   const r=await api('GET',`/api/jobs/${state.current}/records`);
   const open=r.records.find(x=>!x.clock_out);
   setPunchUI(r.working, open?`${fmtDT(open.clock_in)} 출근 기록됨`:(r.records[0]?`마지막 퇴근 ${fmtDT(r.records[0].clock_out)}`:'아직 출근 기록이 없어요'));
+  renderRecords(r.records);
+  if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
+  await renderQuit();
   const ns=await api('GET','/api/notifications');
   $('#alerts').innerHTML=ns.length?ns.map(n=>`<div class="alert"><span class="dot ${n.read?'read':''}"></span><div><strong>${esc(n.title)}</strong><div class="sub">${esc(n.body)}</div></div></div>`).join('')
     :'<p class="sub" style="margin:0">아직 알림이 없어요. 점검 결과가 생기면 여기에 알려드려요.</p>';
@@ -323,25 +463,31 @@ $('#punchBtn').onclick=async()=>{
     const r=await api('POST',`/api/jobs/${state.current}/punch`,pos||{});
     const t=fmtDT(r.server_time);
     setPunchUI(r.action==='in', r.action==='in'?`${t} 출근 기록됨${pos?', 위치 함께 기록':''}`:`${t} 퇴근 기록됨`);
-    toast(r.action==='in'?'출근이 기록됐어요':'퇴근이 기록됐어요');
+    if(r.shift) renderShift(r.shift);
+    const rs=await api('GET',`/api/jobs/${state.current}/records`); renderRecords(rs.records);
+    toast(r.action==='in'?'출근이 기록됐어요':(r.shift?.items?.length?'퇴근 기록, 오늘 근무에서 확인할 점이 있어요':'퇴근이 기록됐어요'));
   }catch(e){ toast(e.message); } finally{ btn.disabled=curJob().status==='quit'; }
 };
 
-// 근무
+// 근무 기록 (홈)
 function thisMonth(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
-async function loadWork(){
-  const j=curJob(); applyCurrent();
-  const r=await api('GET',`/api/jobs/${j.id}/records`);
-  $('#recordsEmpty').classList.toggle('hidden',r.records.length>0); $('#recordsPanel').classList.toggle('hidden',!r.records.length);
-  $('#records').innerHTML=r.records.map(x=>`<li><div class="main"><strong class="num">${fmtDT(x.clock_in).split(' ').slice(0,2).join(' ')}</strong>
+function renderRecords(recs){
+  $('#recordsEmpty').classList.toggle('hidden',recs.length>0); $('#recordsPanel').classList.toggle('hidden',!recs.length);
+  $('#records').innerHTML=recs.map(x=>`<li><div class="main"><strong class="num">${fmtDT(x.clock_in).split(' ').slice(0,2).join(' ')}</strong>
     <div class="sub num">${fmtDT(x.clock_in).split(' ')[2]} 출근, ${x.clock_out?fmtDT(x.clock_out).split(' ')[2]+' 퇴근':'근무 중'}</div></div>
     <span class="tag ${x.gps?'ok':'warn'}">${x.gps?'위치 기록':'위치 미기록'}</span></li>`).join('');
-  if(!$('#payMonth').value) $('#payMonth').value=thisMonth();
-  await renderQuit(); await loadPay();
+}
+// 퇴근 직후 에이전트 점검 결과
+function renderShift(sh){
+  state.shiftFor=state.current;
+  const box=$('#shiftResult'); box.classList.remove('hidden');
+  const head=sh.items.length?`<strong>오늘 근무 점검</strong><p class="sub" style="margin:2px 0 10px">퇴근 기록으로 쉬는 시간, 청소년 근로시간 한도, 야간근로를 바로 확인했어요.</p>`
+    :`<strong>오늘 근무 점검</strong><p class="sub" style="margin:2px 0 0">퇴근 기록에서 확인할 점을 찾지 못했어요.</p>`;
+  box.innerHTML=`<div class="panel">${head}${sh.items.map(itemHTML).join('')}${traceHTML(sh.trace)}</div>`;
 }
 async function renderQuit(){
   const j=curJob(); const quit=j.status==='quit';
-  $('#quitOpen').classList.toggle('hidden',quit); $('#quitForm').classList.add('hidden'); $('#quitPanel').classList.toggle('hidden',!quit);
+  $('#quitOpen').classList.toggle('hidden',quit); $('#quitForm').classList.add('hidden'); $('#quitPanel').classList.toggle('hidden',!quit); refreshNav();
   if(!quit) return;
   const {settlement:st}=await api('GET',`/api/jobs/${j.id}/settlement`);
   if(!st){ $('#quitTag').className='tag warn'; $('#quitTag').textContent='확인 필요'; $('#quitText').textContent='그만둔 날을 입력하면 정산 기한을 계산해 드려요.'; return; }
@@ -352,9 +498,11 @@ async function renderQuit(){
     : `${f(st.quit_date)}에 그만뒀고 지급 기한 ${f(st.due)}이 지났어요. 아직 못 받았다면 상담을 준비하세요.`;
   $('#quitReport').classList.toggle('hidden',!(j.paid_after_quit===false||(st.status==='bad'&&j.paid_after_quit!==true)));
 }
-$('#quitOpen').onclick=()=>{ $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); };
+function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
+function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen').classList.toggle('hidden',curJob().status==='quit'); refreshNav(); }
+$('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
 $('#quitSave').onclick=async()=>{ const v=$('#quitDateMain').value; if(!v){ toast('그만둔 날을 골라 주세요'); return; }
-  try{ await api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v}); await loadJobs(); await loadWork(); toast('그만둔 날을 저장했어요'); }catch(e){ toast(e.message); } };
+  try{ await api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v}); await loadJobs(); closeQuitForm(); await loadHome(); toast('그만둔 날을 저장했어요'); }catch(e){ toast(e.message); } };
 async function setPaid(p){ try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p}); await loadJobs(); await renderQuit(); toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); }catch(e){ toast(e.message); } }
 $('#paidYes').onclick=()=>setPaid(true); $('#paidNo').onclick=()=>setPaid(false);
 $('#quitReport').onclick=()=>showTab('docs');
@@ -372,20 +520,34 @@ function payHTML(r){
     <div class="result ${c.status}" style="margin-top:12px"><div class="head"><span class="law">비교 결과</span><span class="tag ${c.status}">${LABEL[c.status]}</span></div><p>${esc(c.text)}</p></div>
     ${e.notes.map(n=>`<p class="hint">${esc(n)}</p>`).join('')}`;
 }
+// 급여 점검 탭
+async function loadPayTab(){ applyCurrent(); if(!$('#payMonth').value) $('#payMonth').value=thisMonth(); $('#payTrace').innerHTML=''; await loadPay(); await loadPayslips(); }
 async function loadPay(){ const r=await api('GET',`/api/jobs/${state.current}/pay?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r); }
-$('#payMonth').onchange=()=>loadPay().catch(e=>toast(e.message));
-$('#payRun').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/agent/payday?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r); toast('에이전트가 급여를 점검했어요'); }catch(e){ toast(e.message); } };
+async function loadPayslips(){
+  const ps=await api('GET',`/api/jobs/${state.current}/payslips`);
+  $('#payslips').innerHTML=ps.length?ps.map(p=>`<li><div class="main"><strong class="num">${esc(p.month)}</strong><div class="sub num">${won(p.amount)}${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">명세서 원본</a>`:''}</div></div>
+    <span class="row-btns"><button class="btn ghost small" data-edit="${esc(p.month)}" data-amt="${p.amount}">고치기</button><button class="btn ghost small danger" data-del="${esc(p.month)}">지우기</button></span></li>`).join('')
+    :'<li><span class="sub">아직 저장한 받은 급여가 없어요</span></li>';
+  $$('#payslips [data-edit]').forEach(b=>b.onclick=()=>{ $('#payMonth').value=b.dataset.edit; $('#payAmount').value=b.dataset.amt; $('#payAmount').focus(); loadPay().catch(e=>toast(e.message)); toast('금액을 고친 뒤 저장하고 비교하기를 눌러 주세요'); });
+  $$('#payslips [data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm(`${b.dataset.del} 받은 금액을 지울까요? 명세서 원본은 증거 자료로 남아요.`)) return;
+    try{ await api('DELETE',`/api/jobs/${state.current}/payslips/${b.dataset.del}`); await loadPay(); await loadPayslips(); toast('지웠어요'); }catch(e){ toast(e.message); } });
+}
+$('#payMonth').onchange=()=>{ $('#payTrace').innerHTML=''; loadPay().catch(e=>toast(e.message)); };
+$('#payRun').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/agent/payday?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); toast('에이전트가 급여를 점검했어요'); }catch(e){ toast(e.message); } };
 $('#paySave').onclick=async()=>{
   const amt=$('#payAmount').value; if(!amt){ toast('받은 금액을 입력해 주세요'); return; }
   const fd=new FormData(); fd.append('month',$('#payMonth').value); fd.append('amount',amt); const f=$('#payFile').files[0]; if(f) fd.append('file',f);
-  try{ const r=await api('POST',`/api/jobs/${state.current}/payslip`,fd,true); $('#payBody').innerHTML=payHTML(r); $('#payAmount').value=''; $('#payFile').value=''; toast('저장하고 비교했어요'); }catch(e){ toast(e.message); }
+  try{ const r=await api('POST',`/api/jobs/${state.current}/payslip`,fd,true); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); $('#payAmount').value=''; $('#payFile').value=''; await loadPayslips(); toast('저장하고 비교했어요'); }catch(e){ toast(e.message); }
 };
 
 // 점검
 async function loadCheck(){
   const f=await api('GET',`/api/jobs/${state.current}/contract/fields`);
   $('#fieldsBox').innerHTML=f.items.map(k=>`<label class="field"><span>${esc(k)}</span><input class="input" data-k="${esc(k)}" value="${esc(f.fields[k]||'')}" placeholder="계약서에 없으면 비워 두세요"></label>`).join('');
-  const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items);
+  const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items); $('#checkTrace').innerHTML='';
+  const ls=await api('GET','/api/law/status');
+  $('#lawStatus').textContent=ls.built?`법 기준표: ${Object.entries(ls.laws).map(([k,v])=>`${k} ${v}개 조문`).join(', ')} (법제처 API)`
+    :'법 기준표 미구축: 법제처 API 키를 등록하고 조문을 불러오면 결과마다 조문 원문이 붙어요.';
   await loadLog();
 }
 function renderCheck(items){
@@ -395,13 +557,13 @@ function renderCheck(items){
   const order={bad:0,warn:1,ok:2}; $('#checkItems').innerHTML=[...items].sort((a,b)=>order[a.status]-order[b.status]).map(itemHTML).join('');
 }
 async function loadLog(){ const logs=await api('GET',`/api/jobs/${state.current}/agent/log`);
-  $('#agentLog').innerHTML=logs.length?logs.map(l=>`<div class="log"><b>${esc(l.event)} ${esc(l.step)}</b> ${esc(l.detail)}</div>`).join(''):'<p class="sub">기록이 없어요</p>'; }
+  $('#agentLog').innerHTML=logs.length?logs.map(l=>`<div class="log"><b>${esc(EVENT[l.event]||l.event)} ${esc(l.step)}</b> ${esc(l.detail)}</div>`).join(''):'<p class="sub">기록이 없어요</p>'; }
 $('#contractFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f);
   try{ await api('POST',`/api/jobs/${state.current}/contract`,fd,true); toast('계약서 원본을 저장했어요. 아래 칸을 채워 주세요'); }catch(err){ toast(err.message); } e.target.value=''; };
 $('#checkRun').onclick=async()=>{
   const fields={}; $$('#fieldsBox input').forEach(i=>fields[i.dataset.k]=i.value.trim());
   try{ await api('PUT',`/api/jobs/${state.current}/contract/fields`,{fields}); const r=await api('POST',`/api/jobs/${state.current}/check`);
-    renderCheck(r.items); await loadLog(); toast('점검을 마쳤어요'); }catch(e){ toast(e.message); }
+    renderCheck(r.items); $('#checkTrace').innerHTML=traceHTML(r.trace); await loadLog(); toast('점검을 마쳤어요'); }catch(e){ toast(e.message); }
 };
 
 // 자료
@@ -410,27 +572,42 @@ async function loadDocs(){
   $('#evList').innerHTML=evs.length?evs.map(e=>`<li><div class="main"><strong>${esc(KIND[e.kind]||e.kind)}</strong>
     <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at)} 올림</div><a class="ev-link" href="/api/evidence/${e.id}/file" target="_blank">원본 보기</a></div><span class="tag ok">원본</span></li>`).join('')
     :'<li><span class="sub">아직 올린 자료가 없어요</span></li>';
+  const rs=await api('GET',`/api/jobs/${state.current}/reports`);
+  $('#reportList').innerHTML=rs.map(r=>`<li><div class="main"><strong>상담 사전 자료</strong><div class="sub">${fmtDT(r.created_at)} 작성</div></div><a class="ev-link" href="${esc(r.url)}" target="_blank">열기</a></li>`).join('');
+  $('#reportTrace').innerHTML='';
   const cs=await api('GET','/api/counsel');
   $('#counsel').innerHTML=cs.map(c=>`<div class="panel"><strong>${esc(c.name)}</strong><div class="sub">${esc(c.note)}</div><div class="num" style="margin-top:4px">${esc(c.phone)}</div></div>`).join('');
 }
 $('#evFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f); fd.append('kind',$('#evKind').value);
   try{ await api('POST',`/api/jobs/${state.current}/evidence`,fd,true); await loadDocs(); toast('자료를 원본으로 저장했어요'); }catch(err){ toast(err.message); } e.target.value=''; };
-$('#reportBtn').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/report`); window.open(r.url,'_blank'); toast('상담 사전 자료를 만들었어요'); }catch(e){ toast(e.message); } };
+$('#reportBtn').onclick=async()=>{
+  const w=window.open('','_blank');  // 팝업 차단을 피하려고 누른 순간 창을 먼저 연다
+  try{ const r=await api('POST',`/api/jobs/${state.current}/report`); if(w) w.location=r.url; else location.href=r.url;
+    await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace); toast('상담 사전 자료를 만들었어요'); }
+  catch(e){ if(w) w.close(); toast(e.message); } };
 
 // 보호
-async function loadGuard(){ renderGuard(await api('GET',`/api/jobs/${state.current}/guard`)); }
+async function loadGuard(){ $('#guardTrace').innerHTML=''; renderGuard(await api('GET',`/api/jobs/${state.current}/guard`)); }
 function renderGuard(g){
   $('#reported').checked=g.reported; $('#guardOn').classList.toggle('hidden',!g.reported); $('#warnMsg').value=g.message;
+  state.keywords=g.keywords;
+  $('#kwList').innerHTML=g.keywords.map((k,i)=>`<span class="chip kw">${esc(k)}<button type="button" data-i="${i}" aria-label="${esc(k)} 지우기">×</button></span>`).join('');
+  $$('#kwList [data-i]').forEach(b=>b.onclick=()=>saveKeywords(state.keywords.filter((_,i)=>i!==Number(b.dataset.i))));
+  $('#kwQueries').textContent=`검색할 말: ${g.queries.join(' / ')}`;
   const st={pending:['warn','판별 대기'],suspect:['bad','보복 의심'],ok:['ok','문제 없음']};
   $('#postList').innerHTML=g.posts.length?g.posts.map(p=>`<li class="post"><div class="main"><strong>${esc(p.title||'제목 없음')}</strong>
     <div class="sub"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></div>
     <div class="sub">${fmtDT(p.found_at)} 확인${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">보존한 화면</a>`:', 화면 캡처 없음'}</div></div>
     <span class="tag ${st[p.status][0]}">${st[p.status][1]}</span></li>`).join(''):'<li><span class="sub">아직 확인한 게시물이 없어요</span></li>';
 }
-$('#reported').onchange=async e=>{ try{ renderGuard(await api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked})); }catch(err){ toast(err.message); } };
+$('#reported').onchange=async e=>{ try{ const g=await api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked}); renderGuard(g); $('#guardTrace').innerHTML=traceHTML(g.trace); }catch(err){ toast(err.message); } };
+async function saveKeywords(list){ try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/keywords`,{keywords:list})); }catch(e){ toast(e.message); } }
+$('#kwAdd').onclick=()=>{ const v=$('#kwInput').value.trim(); if(!v){ toast('검색어를 넣어 주세요'); return; }
+  $('#kwInput').value=''; saveKeywords([...(state.keywords||[]), ...v.split(',').map(x=>x.trim()).filter(Boolean)]); };
+$('#kwInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#kwAdd').click(); } });
 $('#copyMsg').onclick=()=>{ const t=$('#warnMsg').value; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('안내 문구를 복사했어요'),()=>toast('직접 선택해 복사해 주세요')); };
 $('#postAdd').onclick=async()=>{ const url=$('#postUrl').value.trim(); if(!url){ toast('게시물 주소를 넣어 주세요'); return; }
-  try{ await api('POST',`/api/jobs/${state.current}/guard/posts`,{url}); $('#postUrl').value=''; await loadGuard(); toast('주소와 확인 시각을 보존했어요'); }catch(e){ toast(e.message); } };
-$('#postSearch').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/guard/search`); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); await loadGuard(); }catch(e){ toast(e.message); } };
+  try{ const r=await api('POST',`/api/jobs/${state.current}/guard/posts`,{url}); $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast('주소와 확인 시각을 보존했어요'); }catch(e){ toast(e.message); } };
+$('#postSearch').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/guard/search`); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
 
 boot();
