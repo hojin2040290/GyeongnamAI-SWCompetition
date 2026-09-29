@@ -90,24 +90,18 @@ def parse_admrul_list(text: str) -> list[dict]:
              "enforce_date": _t(a, "시행일자")} for a in root_of(text).iter("admrul")]
 
 
+MIN_WAGE_NOTICE = re.compile(r"^(\d{4})년 적용 최저임금 고시$")
+
+
 def pick_min_wage_notices(rows: list[dict]) -> list[dict]:
-    """고용노동부의 현행 최저임금 고시만 (선원 최저임금 고시 등은 제외)."""
-    return [r for r in rows if r["ministry"] == "고용노동부" and "최저임금" in r["name"]
-            and "선원" not in r["name"] and r["status"] == "현행"]
-
-
-def parse_admrul_body(text: str) -> dict:
-    root = root_of(text)
-    info = root.find("행정규칙기본정보")
-    body = _clean(root.findtext("조문내용") or "")
-    return {"name": _t(info, "행정규칙명"), "number": _t(info, "발령번호"), "enforce_date": _t(info, "시행일자"),
-            "text": body}
-
-
-def find_hourly_min_wage(text: str) -> int | None:
-    """고시 원문에서 '시간급 10,320원' 같은 금액을 찾는다."""
-    m = re.search(r"시간급\s*[:：]?\s*([\d,]{4,})\s*원", text or "")
-    return int(m.group(1).replace(",", "")) if m else None
+    """고용노동부의 'OOOO년 적용 최저임금 고시'만 (선원 고시, 최저임금안 고시, 단순노무직종 지정 고시 등은 제외).
+    연도는 이름에서 읽는다. 금액은 고시 첨부파일에만 있어 읽지 않는다 (금액은 law_params.json)."""
+    out = []
+    for r in rows:
+        m = MIN_WAGE_NOTICE.match(r["name"])
+        if m and r["ministry"] == "고용노동부":
+            out.append({**r, "year": int(m.group(1))})
+    return out
 
 
 # ---------- 판례, 해석례, 결정문 ----------

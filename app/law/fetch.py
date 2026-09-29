@@ -3,13 +3,12 @@
 사용법: .env에 LAW_OC(신청할 때 정한 인증키)를 넣고
     python -m app.law.fetch
 - 법 기준표: 근로 관련 법령의 현행(시행일 기준) 조문과 별표 -> LawArticle
-- 최저임금 고시: 고용노동부 현행 고시 원문의 시간급 -> LawValue (law_params.json보다 우선)
+- 최저임금 고시: 연도별 고용노동부 고시의 이름과 번호 -> LawDoc (금액은 law_params.json, 고시는 근거로만)
 - 참고 자료: 점검 주제별 판례, 법제처 해석례, 고용노동부 해석, 노동위원회 결정문 -> LawDoc
 - 매일 자동 점검은 refresh_if_changed()로 현행 판이 바뀐 법령만 다시 받는다.
 법제처에 등록한 IP에서만 호출된다 (다른 곳에서는 '사용자 정보 검증에 실패' 오류).
 """
 import json
-import re
 import sys
 
 import httpx
@@ -21,7 +20,7 @@ from app.config import LAW_OC
 from app.db import engine, init_db
 from app.law import parse as lp
 from app.law.topics import TOPICS
-from app.models import LawArticle, LawDoc, LawSource, LawValue
+from app.models import LawArticle, LawDoc, LawSource
 
 BASE = "https://www.law.go.kr/DRF"
 
@@ -81,51 +80,37 @@ def refresh_if_changed(s: Session, client: httpx.Client, names: list[str] = LAWS
     return changed
 
 
-# ---------- 최저임금 고시 ----------
-def fetch_min_wage(s: Session, client: httpx.Client) -> list[str]:
+# ---------- 최저임금 고시 (근거로만) ----------
+NOTICE_TOPIC = "최저임금 고시"
+
+
+def notice_citation(row: dict) -> str:
+    return f"{row['name']} (고용노동부 고시 제{row['number']}호)" if row.get("number") else row["name"]
+
+
+def fetch_min_wage_notices(s: Session, client: httpx.Client) -> list[str]:
+    """연도별 최저임금 고시의 이름과 번호를 근거로 저장한다. law_params.json에 그 해 값이 없으면 알려 준다."""
     rows = lp.pick_min_wage_notices(lp.parse_admrul_list(get(client, "lawSearch.do", target="admrul", query="최저임금")))
-    saved = []
-    for row in rows:
-        body = lp.parse_admrul_body(get(client, "lawService.do", target="admrul", ID=row["id"]))
-        amount = lp.find_hourly_min_wage(body["text"])
-        year = int((body["enforce_date"] or row["enforce_date"])[:4] or 0)
-        if not amount or not year:
-            continue
-        source = f"{body['name'] or row['name']} (고용노동부 고시 제{body['number'] or row['number']}호)"
-        s.exec(delete(LawValue).where(LawValue.key == "min_wage", LawValue.year == year))
-        s.add(LawValue(key="min_wage", year=year, value=amount, source=source, fetched_at=now_kst()))
-        saved.append(f"{year}년 {amount:,}원: {source}")
-        known = params.P()["min_wage"]["by_year"].get(str(year))
-        if known and known != amount:
-            saved.append(f"  law_params.json의 {year}년 값 {known:,}원과 달라요. 고시 값을 써요.")
-    s.commit()
-    load_overrides(s)
-    return saved
-
-
-def diagnose_min_wage(client: httpx.Client) -> list[str]:
-    """최저임금 고시를 못 찾을 때 원인 확인: 검색 결과 전체와, 고른 고시 본문에서 '최저임금'과 '원' 주변 글자."""
+    s.exec(delete(LawDoc).where(LawDoc.topic == NOTICE_TOPIC))
     lines = []
-    for query in ("최저임금", "최저임금 고시"):
-        rows = lp.parse_admrul_list(get(client, "lawSearch.do", target="admrul", query=query, display="100"))
-        lines.append(f"[검색어 '{query}'] {len(rows)}건")
-        lines += [f"  {r['name']} | {r['kind']} | {r['ministry']} | {r['status']} | 시행 {r['enforce_date']} | 번호 {r['id']}"
-                  for r in rows]
-        for r in lp.pick_min_wage_notices(rows)[:2]:
-            text = get(client, "lawService.do", target="admrul", ID=r["id"])
-            body = lp.parse_admrul_body(text)
-            lines.append(f"  -> 고른 고시 '{r['name']}' 본문 {len(body['text'])}자")
-            for m in list(re.finditer(r"[\d,]{4,}\s*원", body["text"]))[:5]:
-                lines.append("     ..." + body["text"][max(0, m.start() - 40):m.end() + 10].replace("\n", " ") + "...")
-            if not body["text"]:
-                lines.append("     본문(조문내용)이 비어 있어요. 응답에 있는 태그: " + ", ".join(sorted(
-                    {el.tag for el in lp.root_of(text).iter()})[:40]))
+    for row in sorted(rows, key=lambda r: r["year"]):
+        s.add(LawDoc(kind="admrul", doc_id=row["id"], topic=NOTICE_TOPIC, title=row["name"], number=row["number"],
+                     date=row["enforce_date"], summary=notice_citation(row), fetched_at=now_kst()))
+        known = params.P()["min_wage"]["by_year"].get(str(row["year"]))
+        if known:
+            lines.append(f"{row['year']}년 {known:,}원 (law_params.json), 근거 고시: {notice_citation(row)}")
+        else:
+            lines.append(f"{row['year']}년 고시가 있는데 law_params.json에 {row['year']}년 값이 없어요. "
+                         f"고시 원문(첨부파일)을 확인해 data/law_params.json의 min_wage.by_year에 채워 주세요.")
+    s.commit()
+    load_notices(s)
     return lines
 
 
-def load_overrides(s: Session) -> None:
-    """DB에 저장한 고시 값을 판단에 쓰도록 올린다 (서버 시작과 갱신 때)."""
-    params.set_overrides({(v.key, v.year): (v.value, v.source) for v in s.exec(select(LawValue)).all()})
+def load_notices(s: Session) -> None:
+    """저장한 고시를 판단 근거로 쓰도록 올린다 (서버 시작과 갱신 때)."""
+    docs = s.exec(select(LawDoc).where(LawDoc.topic == NOTICE_TOPIC)).all()
+    params.set_notices({int(d.date[:4]): d.summary for d in docs if d.date[:4].isdigit()})
 
 
 # ---------- 참고 자료 ----------
@@ -151,10 +136,6 @@ def fetch_refs(s: Session, client: httpx.Client) -> dict[str, int]:
 
 
 def main() -> int:
-    if "--min-wage" in sys.argv:  # 최저임금 고시 원인 확인만
-        with httpx.Client(timeout=30, follow_redirects=True) as client:
-            print("\n".join(diagnose_min_wage(client)))
-        return 0
     if not LAW_OC:
         print("LAW_OC가 없어요. .env에 LAW_OC=인증키 를 넣어 주세요. (python -m app.law.probe 로 원인 확인)")
         return 1
@@ -164,9 +145,8 @@ def main() -> int:
             print("[법 기준표]")
             for name, msg in build_law_table(s, client).items():
                 print(f"  {name}: {msg}")
-            print("[최저임금 고시]")
-            for line in fetch_min_wage(s, client) or ["고시에서 시간급을 찾지 못했어요 (law_params.json 값을 계속 써요). "
-                                                      "원인 확인: python -m app.law.fetch --min-wage"]:
+            print("[최저임금 고시 (금액은 law_params.json, 고시는 근거)]")
+            for line in fetch_min_wage_notices(s, client) or ["고용노동부 최저임금 고시를 찾지 못했어요"]:
                 print(f"  {line}")
             print("[참고 자료: 판례, 해석례, 결정문]")
             for topic, n in fetch_refs(s, client).items():

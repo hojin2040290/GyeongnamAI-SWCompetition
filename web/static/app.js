@@ -682,7 +682,8 @@ async function loadCheck(){
   $$('#fieldsBox input').forEach(i=>i.addEventListener('input',()=>autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved')));
   const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items); $('#checkTrace').innerHTML='';
   const ls=await api('GET','/api/law/status');
-  const mw=ls.min_wage?` 최저임금 ${ls.min_wage.year}년 시간급 ${won(ls.min_wage.value)}, 출처: ${ls.min_wage.source}.`:'';
+  const mw=(ls.min_wage?` 최저임금 ${ls.min_wage.year}년 시간급 ${won(ls.min_wage.value)}, 근거 고시: ${ls.min_wage.source}.`:'')
+    +(ls.min_wage_missing_years?.length?` ${ls.min_wage_missing_years.join(', ')}년 최저임금 값은 아직 등록 전이에요.`:'');
   $('#lawStatus').textContent=ls.built?`법 기준표: 법제처 현행 법령 ${Object.keys(ls.laws).length}개, 조문 ${Object.values(ls.laws).reduce((a,b)=>a+b,0)}개, 참고 판례·해석 ${ls.refs}건.${mw}`
     :'법 기준표 미구축: 법제처 API 키를 등록하고 조문을 불러오면 결과마다 조문 원문이 붙어요.';
   await loadLog();

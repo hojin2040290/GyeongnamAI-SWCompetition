@@ -44,7 +44,7 @@ def refresh_law_table() -> list[str] | str:
         with httpx.Client(timeout=30, follow_redirects=True) as client, Session(engine) as s:
             changed = fetch.refresh_if_changed(s, client)
             if changed:
-                fetch.fetch_min_wage(s, client)
+                fetch.fetch_min_wage_notices(s, client)
             return changed
     except Exception as exc:  # 법제처 오류로 다른 자동 점검이 멈추지 않게
         return f"법제처 확인 실패: {type(exc).__name__}"
