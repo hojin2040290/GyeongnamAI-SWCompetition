@@ -1,11 +1,8 @@
 """정해진 시점에 에이전트를 스스로 시작시키는 예약 작업."""
-from datetime import date
-
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlmodel import Session, select
 
 from app.agent import core
-from app.calc.timeutil import today_kst
 from app.config import LAW_OC, OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
 from app.db import engine
 from app.models import Job, WorkRecord
@@ -14,22 +11,13 @@ scheduler = BackgroundScheduler(timezone=TIMEZONE)
 
 
 def daily_check() -> dict:
-    """매일: 월급날인 사업장은 지난달 급여 점검, 그만둔 사업장은 지급 기한 점검,
-    신고한 사업장은 공개 게시물 검색 (검색 키가 없으면 건너뛰고 기록만 남김)."""
-    today = today_kst()
-    last_month = date.fromordinal(today.replace(day=1).toordinal() - 1).strftime("%Y-%m")
+    """매일: 사업장마다 에이전트가 오늘 필요한 점검(급여, 퇴직 지급 기한, 공개 게시물)을 골라 실행한다.
+    AI 응답이 없으면 정해 둔 조건(월급날, 그만둠, 신고함)으로 실행한다."""
     done = {"payday": 0, "quit": 0, "guard": 0}
     with Session(engine) as s:
         for job in s.exec(select(Job)).all():
-            if job.status == "working" and job.payday == today.day:
-                core.run_payday(s, job.user_id, job.id, last_month, trigger="schedule")
-                done["payday"] += 1
-            if job.status == "quit":
-                core.run_quit_check(s, job.user_id, job.id, trigger="schedule")
-                done["quit"] += 1
-            if job.reported:
-                core.run_guard_search(s, job.user_id, job.id, trigger="schedule")
-                done["guard"] += 1
+            for kind in core.run_daily(s, job.user_id, job.id)["ran"]:
+                done[kind] += 1
     done["law_changed"] = refresh_law_table()
     return done
 

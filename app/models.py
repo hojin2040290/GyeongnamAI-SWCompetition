@@ -119,6 +119,7 @@ class Report(SQLModel, table=True):
     user_id: int = Field(index=True)
     job_id: int
     path: str
+    ai_summary: bool = False  # AI가 쓴 사건 요약이 들어갔는지 (아니면 AI 응답 대기 중)
     created_at: datetime
 
 

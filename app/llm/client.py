@@ -47,7 +47,7 @@ def chat(messages: list[dict], tools: list[dict] | None = None, model: str | Non
         raise LLMError("AI 모델이 아직 연결되지 않았어요")
     payload = {"model": model or LLM_MODEL, "messages": messages, "temperature": 0}
     if tools:
-        payload["tools"] = tools
+        payload["tools"], payload["tool_choice"] = tools, "auto"
     data = _post(payload)
     try:
         return data["choices"][0]["message"]
