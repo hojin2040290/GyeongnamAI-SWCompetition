@@ -144,6 +144,7 @@ class CaseNote(SQLModel, table=True):
     kind: str  # memory(에이전트 메모), advice(사용자에게 하는 조언)
     text: str
     next_tab: str = ""  # 조언의 바로 가기: check, pay, docs, guard (없으면 빈 값)
+    basis_key: str = ""  # 매일 종합 조언이 본 기록의 요약값 (기록이 그대로면 다시 조언하지 않음)
     event: str = ""
     run_id: str = ""
     created_at: datetime

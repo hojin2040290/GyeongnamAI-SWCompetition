@@ -3,11 +3,13 @@
 진행 상황은 저장된 기록으로 코드가 정리하고(판단 없음), 메모와 조언은 에이전트가 남긴다.
 문제가 생기기 전에 미리 기록을 모으는 사용자도 있으므로 '사건'이라는 말은 쓰지 않는다.
 """
+import hashlib
 import json
 
 from sqlmodel import Session, select
 
-from app.models import AgentQuestion, AgentTask, CaseNote, CheckRun, Evidence, GuardPost, Job, Report, WorkRecord
+from app.models import (AgentQuestion, AgentTask, CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Payslip,
+                        Report, WorkRecord)
 
 MEMORY_LIMIT = 8  # 다음 실행에 넘기는 메모 수
 NEXT_TABS = {"check": "계약서 점검", "pay": "급여 점검", "docs": "상담 사전 자료", "guard": "신고 후 보호"}
@@ -74,3 +76,25 @@ def followups(s: Session, job_id: int) -> list[dict]:
                   .order_by(AgentTask.due_at)).all()
     return [{"task_id": t.id, "점검": FOLLOWUP_KINDS.get(t.kind, t.kind), "kind": t.kind, "달": t.month,
              "때": t.due_at.strftime("%Y-%m-%d %H:%M"), "이유": t.note} for t in rows]
+
+
+def _last_id(s: Session, model, job_id: int, *extra) -> int:
+    row = s.exec(select(model).where(model.job_id == job_id, *extra).order_by(model.id.desc())).first()
+    return row.id if row else 0
+
+
+def data_key(s: Session, job: Job) -> str:
+    """사용자에게서 얻은 기록과 에이전트가 만든 기록의 요약값. 하나라도 새로 생기거나 바뀌면 달라진다."""
+    parts = {
+        "job": [job.wage, job.schedule_json, job.size, job.probation, job.contract_written, job.copy_received,
+                job.consent, job.status, str(job.quit_date), job.paid_after_quit, job.reported, job.biz_no],
+        "records": [_last_id(s, WorkRecord, job.id),
+                    len(s.exec(select(WorkRecord).where(WorkRecord.job_id == job.id, WorkRecord.void_at != None)).all())],  # noqa: E711
+        "evidence": _last_id(s, Evidence, job.id), "contract": _last_id(s, ContractFields, job.id),
+        "payslip": _last_id(s, Payslip, job.id), "checks": _last_id(s, CheckRun, job.id),
+        "reports": _last_id(s, Report, job.id), "memory": _last_id(s, CaseNote, job.id, CaseNote.kind == "memory"),
+        "answers": [(q.id, q.status) for q in s.exec(select(AgentQuestion).where(AgentQuestion.job_id == job.id)).all()],
+        "posts": [(p.id, p.status) for p in s.exec(select(GuardPost).where(GuardPost.job_id == job.id)).all()],
+        "tasks": [(t.id, t.status) for t in s.exec(select(AgentTask).where(AgentTask.job_id == job.id)).all()],
+    }
+    return hashlib.sha256(json.dumps(parts, default=str).encode()).hexdigest()[:16]
