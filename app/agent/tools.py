@@ -49,8 +49,20 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         return json.loads(row.fields_json) if row else {}
 
     def get_records() -> list[WorkRecord]:
-        return list(session.exec(select(WorkRecord).where(WorkRecord.job_id == job_id, WorkRecord.user_id == user_id)
+        """계산과 점검에 쓰는 기록. 실수로 표시한 기록은 뺀다."""
+        return list(session.exec(select(WorkRecord).where(WorkRecord.job_id == job_id, WorkRecord.user_id == user_id,
+                                                          WorkRecord.void_at == None)  # noqa: E711
                                  .order_by(WorkRecord.clock_in)))
+
+    def find_open_record() -> dict | None:
+        """퇴근을 누르지 않은 채 오래된 출근 기록."""
+        r = session.exec(select(WorkRecord).where(WorkRecord.job_id == job_id, WorkRecord.user_id == user_id,
+                                                  WorkRecord.clock_out == None, WorkRecord.void_at == None)  # noqa: E711
+                         .order_by(WorkRecord.id.desc())).first()
+        if not r:
+            return None
+        hours = (now_kst() - r.clock_in).total_seconds() / 3600
+        return {"id": r.id, "clock_in": r.clock_in.isoformat(), "hours": round(hours, 1)}
 
     def get_record(record_id: int) -> WorkRecord:
         r = session.get(WorkRecord, record_id)
@@ -183,7 +195,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
 
     return {
         "get_user": get_user, "get_job": get_job, "get_contract_fields": get_contract_fields,
-        "get_records": get_records, "get_record": get_record, "judge_job": judge_job, "judge_records": judge_records,
+        "get_records": get_records, "get_record": get_record, "find_open_record": find_open_record, "judge_job": judge_job, "judge_records": judge_records,
         "judge_shift": judge_shift, "judge_seek": judge_seek, "attach_law": attach_law, "calc_pay": calc_pay,
         "get_payslip": get_payslip, "compare_pay": compare_pay, "settlement": settlement, "save_check": save_check,
         "notify": notify, "counsel_for_age": counsel_for_age, "build_report": build_report,

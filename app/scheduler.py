@@ -6,9 +6,9 @@ from sqlmodel import Session, select
 
 from app.agent import core
 from app.calc.timeutil import today_kst
-from app.config import SCHEDULE_HOUR, TIMEZONE
+from app.config import OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
 from app.db import engine
-from app.models import Job
+from app.models import Job, WorkRecord
 
 scheduler = BackgroundScheduler(timezone=TIMEZONE)
 
@@ -33,9 +33,21 @@ def daily_check() -> dict:
     return done
 
 
+def open_record_check() -> dict:
+    """30분마다: 퇴근을 누르지 않은 채 오래된 출근 기록이 있으면 알림 (같은 알림은 하루 한 번)."""
+    done = 0
+    with Session(engine) as s:
+        rows = s.exec(select(WorkRecord).where(WorkRecord.clock_out == None, WorkRecord.void_at == None)).all()  # noqa: E711
+        for job_id, user_id in {(r.job_id, r.user_id) for r in rows}:
+            if core.run_open_check(s, user_id, job_id, OPEN_RECORD_ALERT_HOURS)["open"]:
+                done += 1
+    return {"open": done}
+
+
 def start() -> None:
     if not scheduler.running:
         scheduler.add_job(daily_check, "cron", hour=SCHEDULE_HOUR, minute=0, id="daily_check", replace_existing=True)
+        scheduler.add_job(open_record_check, "interval", minutes=30, id="open_record_check", replace_existing=True)
         scheduler.start()
 
 

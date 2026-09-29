@@ -478,10 +478,7 @@ function setPunchUI(working, text){
 }
 async function loadHome(){
   const j=curJob(); applyCurrent();
-  const r=await api('GET',`/api/jobs/${state.current}/records`);
-  const open=r.records.find(x=>!x.clock_out);
-  setPunchUI(r.working, open?`${fmtDT(open.clock_in)} 출근 기록됨`:(r.records[0]?`마지막 퇴근 ${fmtDT(r.records[0].clock_out)}`:'아직 출근 기록이 없어요'));
-  renderRecords(r.records);
+  await refreshRecords();
   if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
   await renderQuit();
   const ns=await api('GET','/api/notifications');
@@ -498,23 +495,65 @@ function getPos(){ return new Promise(res=>{ if(!navigator.geolocation) return r
 $('#punchBtn').onclick=async()=>{
   const btn=$('#punchBtn'); btn.disabled=true;
   try{ let pos=null; if($('#gpsOn').checked){ pos=await getPos(); if(!pos) toast('위치를 가져오지 못해 시각만 기록해요'); }
-    const r=await api('POST',`/api/jobs/${state.current}/punch`,pos||{});
+    let r;
+    try{ r=await api('POST',`/api/jobs/${state.current}/punch`,pos||{}); }
+    catch(e){
+      if(e.status!==409) throw e;
+      // 방금 출근했거나 퇴근을 오래 안 눌렀을 때는 한 번 더 확인한다
+      if(!confirm(e.message)){ toast('기록하지 않았어요'); return; }
+      r=await api('POST',`/api/jobs/${state.current}/punch`,{...(pos||{}), confirm:true});
+    }
     const t=fmtDT(r.server_time);
     setPunchUI(r.action==='in', r.action==='in'?`${t} 출근 기록됨${pos?', 위치 함께 기록':''}`:`${t} 퇴근 기록됨`);
     if(r.shift) renderShift(r.shift);
-    const rs=await api('GET',`/api/jobs/${state.current}/records`); renderRecords(rs.records);
+    await refreshRecords(false);
     toast(r.action==='in'?'출근이 기록됐어요':(r.shift?.items?.length?'퇴근 기록, 오늘 근무에서 확인할 점이 있어요':'퇴근이 기록됐어요'));
   }catch(e){ toast(e.message); } finally{ btn.disabled=curJob().status==='quit'; }
 };
 
 // 근무 기록 (홈)
 function thisMonth(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
+// 출퇴근 버튼 상태, 퇴근 잊음 안내, 기록 목록을 한 번에 새로 그린다
+async function refreshRecords(updateState=true){
+  const r=await api('GET',`/api/jobs/${state.current}/records`);
+  const live=r.records.filter(x=>!x.void), open=live.find(x=>!x.clock_out), last=live.find(x=>x.clock_out);
+  if(updateState) setPunchUI(r.working, open?`${fmtDT(open.clock_in)} 출근 기록됨`:(last?`마지막 퇴근 ${fmtDT(last.clock_out)}`:'아직 출근 기록이 없어요'));
+  else setPunchUI(r.working, $('#clockState').textContent);
+  const box=$('#openAlert');
+  if(open && open.hours>=r.open_alert_hours){
+    box.classList.remove('hidden');
+    box.innerHTML=`<strong>퇴근을 누르지 않은 것 같아요</strong><p class="sub" style="margin:4px 0 10px">${fmtDT(open.clock_in)}에 출근한 뒤 ${Math.floor(open.hours)}시간 동안 퇴근 기록이 없어요.
+      일을 마쳤다면 퇴근을 누르고, 잘못 누른 출근이면 실수로 표시해 주세요. 퇴근을 늦게 누르면 그 시간까지 근무로 계산돼요.</p>
+      <button class="btn ghost block" data-void="${open.id}">이 출근 기록을 실수로 표시</button>`;
+  } else box.classList.add('hidden');
+  renderRecords(r.records);
+}
 function renderRecords(recs){
   $('#recordsEmpty').classList.toggle('hidden',recs.length>0); $('#recordsPanel').classList.toggle('hidden',!recs.length);
-  $('#records').innerHTML=recs.map(x=>`<li><div class="main"><strong class="num">${fmtDT(x.clock_in).split(' ').slice(0,2).join(' ')}</strong>
-    <div class="sub num">${fmtDT(x.clock_in).split(' ')[2]} 출근, ${x.clock_out?fmtDT(x.clock_out).split(' ')[2]+' 퇴근':'근무 중'}</div></div>
-    <span class="tag ${x.gps?'ok':'warn'}">${x.gps?'위치 기록':'위치 미기록'}</span></li>`).join('');
+  $('#records').innerHTML=recs.map(x=>{
+    const when=`${fmtDT(x.clock_in).split(' ')[2]} 출근, ${x.clock_out?fmtDT(x.clock_out).split(' ')[2]+' 퇴근':(x.void?'퇴근 없음':'근무 중')}`;
+    const side=x.void
+      ? `<button class="btn ghost small" data-unvoid="${x.id}">표시 취소</button>`
+      : `<span class="rec-side"><span class="tag ${x.gps?'ok':'warn'}">${x.gps?'위치 기록':'위치 미기록'}</span><button class="link small-link" data-void="${x.id}">실수로 누름</button></span>`;
+    const note=x.void?`<div class="sub void-note">실수로 표시함 (${fmtDT(x.void_at)}), ${esc(x.void_reason)}. 급여 계산과 점검에서 빠져요</div>`:'';
+    return `<li class="${x.void?'void':''}"><div class="main"><strong class="num">${fmtDT(x.clock_in).split(' ').slice(0,2).join(' ')}</strong>
+      <div class="sub num rec-time">${when}</div>${note}</div>${side}</li>`;
+  }).join('');
 }
+// 실수 표시: 기록은 지우지 않고 표시만 한다
+async function voidRecord(id){
+  const reason=prompt('실수로 누른 기록으로 표시할까요? 시각은 그대로 남고 급여 계산과 점검에서만 빠져요.\n이유를 적어 주세요 (예: 일 안 하는 날 잘못 누름)','실수로 누름');
+  if(reason===null) return;
+  try{ await api('POST',`/api/jobs/${state.current}/records/${id}/void`,{reason}); await refreshRecords(); toast('실수로 표시했어요'); }catch(e){ toast(e.message); }
+}
+async function unvoidRecord(id){
+  if(!confirm('실수 표시를 취소할까요? 다시 급여 계산과 점검에 들어가요.')) return;
+  try{ await api('DELETE',`/api/jobs/${state.current}/records/${id}/void`); await refreshRecords(); toast('표시를 취소했어요'); }catch(e){ toast(e.message); }
+}
+document.addEventListener('click',e=>{
+  const v=e.target.closest('[data-void]'), u=e.target.closest('[data-unvoid]');
+  if(v) voidRecord(Number(v.dataset.void)); else if(u) unvoidRecord(Number(u.dataset.unvoid));
+});
 // 퇴근 직후 에이전트 점검 결과
 function renderShift(sh){
   state.shiftFor=state.current;

@@ -73,11 +73,15 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     if settle:
         rows.append(f"<p>퇴직일 {settle['quit_date']}, 임금 지급 기한 {settle['due']} ({LABEL[settle['status']]})</p>")
 
-    rows.append("<h2>4. 근무 기록</h2><table><tr><th>출근</th><th>퇴근</th><th>출근 위치</th></tr>")
+    rows.append("<h2>4. 근무 기록</h2><table><tr><th>출근</th><th>퇴근</th><th>출근 위치</th><th>비고</th></tr>")
     for r in recs:
         loc = f"{r.in_lat:.5f}, {r.in_lng:.5f}" if r.in_lat is not None else "기록 안 함"
-        rows.append(f"<tr><td>{r.clock_in}</td><td>{r.clock_out or '미기록'}</td><td>{loc}</td></tr>")
-    rows.append("</table><p class='s'>출퇴근 시각은 버튼을 누른 순간 서버가 받은 시각이에요.</p>")
+        note, cls = "", ""
+        if r.void_at:
+            note, cls = f"실수로 표시함 ({r.void_at}, 이유: {e(r.void_reason)}). 계산에서 제외", " class='v'"
+        rows.append(f"<tr{cls}><td>{r.clock_in}</td><td>{r.clock_out or '미기록'}</td><td>{loc}</td><td>{note}</td></tr>")
+    rows.append("</table><p class='s'>출퇴근 시각은 버튼을 누른 순간 서버가 받은 시각이에요. 실수로 누른 기록은 지우지 않고 "
+                "표시한 시각과 이유를 함께 남겼어요.</p>")
 
     rows.append("<h2>5. 증거 자료</h2><table><tr><th>종류</th><th>파일</th><th>올린 시각</th><th>파일 고유값(SHA-256)</th></tr>")
     for ev in evs:
@@ -104,7 +108,7 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>상담 사전 자료</title>
 <style>body{{font-family:sans-serif;max-width:820px;margin:24px auto;padding:0 16px;line-height:1.6}}
 table{{border-collapse:collapse;width:100%;margin:8px 0}}th,td{{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;font-size:14px}}
-th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}</style></head>
+th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
 <body><h1>상담 사전 자료</h1><p class="s">작성 시각 {now_kst()}</p>{''.join(rows)}</body></html>"""
     path = Path(REPORT_DIR) / f"report_{user_id}_{job_id}_{now_kst().strftime('%Y%m%d%H%M%S')}.html"
     path.write_text(doc, encoding="utf-8")

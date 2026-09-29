@@ -134,3 +134,47 @@ def test_same_notification_is_not_repeated(c):
     c.post(f"/api/jobs/{job_id}/agent/payday?month=2026-08")
     titles = [n["title"] for n in c.get("/api/notifications").json()]
     assert titles.count("2026-08 급여 점검") == 1 and len(titles) == before + 1
+
+
+def test_mistaken_punch_is_marked_not_deleted(c):
+    from unittest.mock import patch
+    job = c.post("/api/jobs", json={**JOB, "name": "가상실수점"}).json()
+    jid = job["id"]
+    t0 = datetime(2026, 9, 21, 10, 0)
+    with patch("app.routers.api.now_kst", return_value=t0):
+        c.post(f"/api/jobs/{jid}/punch", json={})
+    with patch("app.routers.api.now_kst", return_value=t0.replace(second=30)):
+        r = c.post(f"/api/jobs/{jid}/punch", json={})
+        assert r.status_code == 409 and "방금 출근" in r.json()["detail"]  # 1분 안에 퇴근은 한 번 더 확인
+    with patch("app.routers.api.now_kst", return_value=t0.replace(hour=14)):
+        assert c.post(f"/api/jobs/{jid}/punch", json={}).json()["action"] == "out"
+    rec = c.get(f"/api/jobs/{jid}/records").json()["records"][0]
+    assert c.get(f"/api/jobs/{jid}/pay?month=2026-09").json()["expected"]["work_min"] == 240
+    v = c.post(f"/api/jobs/{jid}/records/{rec['id']}/void", json={"reason": "일 안 한 날"}).json()
+    assert v["void"] and v["void_reason"] == "일 안 한 날" and v["clock_in"] == rec["clock_in"]  # 시각은 그대로
+    assert c.get(f"/api/jobs/{jid}/pay?month=2026-09").json()["expected"]["work_min"] == 0  # 계산에서 빠짐
+    html = c.get(c.post(f"/api/jobs/{jid}/report").json()["url"]).text
+    assert "실수로 표시함" in html and "일 안 한 날" in html
+    assert not c.delete(f"/api/jobs/{jid}/records/{rec['id']}/void").json()["void"]
+    assert c.get(f"/api/jobs/{jid}/pay?month=2026-09").json()["expected"]["work_min"] == 240
+
+
+def test_forgotten_punch_out(c):
+    from unittest.mock import patch
+    from app import scheduler
+    jid = c.post("/api/jobs", json={**JOB, "name": "가상퇴근잊음점"}).json()["id"]
+    t0 = datetime(2026, 9, 21, 10, 0)
+    with patch("app.routers.api.now_kst", return_value=t0):
+        c.post(f"/api/jobs/{jid}/punch", json={})
+    with patch("app.routers.api.now_kst", return_value=t0.replace(day=22, hour=9)):
+        r = c.post(f"/api/jobs/{jid}/punch", json={})
+        assert r.status_code == 409 and "23시간" in r.json()["detail"]
+    assert scheduler.open_record_check()["open"] >= 1
+    scheduler.open_record_check()  # 두 번 돌아도 알림은 하나
+    assert [n["title"] for n in c.get("/api/notifications").json()].count("퇴근을 누르지 않은 것 같아요") == 1
+    rec = c.get(f"/api/jobs/{jid}/records").json()["records"][0]
+    c.post(f"/api/jobs/{jid}/records/{rec['id']}/void", json={})
+    recs = c.get(f"/api/jobs/{jid}/records").json()
+    assert recs["working"] is False and recs["records"][0]["void_reason"] == "실수로 누름"
+    assert c.post(f"/api/jobs/{jid}/punch", json={}).json()["action"] == "in"  # 새 출근 가능
+    assert c.delete(f"/api/jobs/{jid}/records/{rec['id']}/void").status_code == 400  # 출근 중이면 취소 불가

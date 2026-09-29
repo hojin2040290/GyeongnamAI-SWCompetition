@@ -15,6 +15,7 @@ from app.auth import check_password, current_user, hash_password
 from app.calc.age import age_on
 from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
+from app.config import OPEN_RECORD_ALERT_HOURS, PUNCH_CONFIRM_SEC
 from app.db import get_session
 from app.law.lookup import attach_articles, table_status
 from app.models import (AgentLog, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
@@ -242,11 +243,31 @@ def settlement(job_id: int, u: User = Depends(current_user), s: Session = Depend
 class PunchIn(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
+    confirm: bool = False  # 확인 질문에 '예'라고 답하고 다시 보낸 요청
 
 
 def rec_out(r: WorkRecord) -> dict:
+    end = r.clock_out or now_kst()
     return {"id": r.id, "clock_in": r.clock_in.isoformat(), "clock_out": r.clock_out.isoformat() if r.clock_out else None,
-            "gps": r.in_lat is not None}
+            "gps": r.in_lat is not None, "hours": round((end - r.clock_in).total_seconds() / 3600, 1),
+            "void": r.void_at is not None, "void_at": r.void_at.isoformat() if r.void_at else None,
+            "void_reason": r.void_reason}
+
+
+def open_record(s: Session, job_id: int) -> WorkRecord | None:
+    return s.exec(select(WorkRecord).where(WorkRecord.job_id == job_id, WorkRecord.clock_out == None,  # noqa: E711
+                                           WorkRecord.void_at == None).order_by(WorkRecord.id.desc())).first()  # noqa: E711
+
+
+def punch_warning(open_rec: WorkRecord, t) -> str:
+    """퇴근을 누르기 전에 한 번 더 물어볼 상황이면 그 문구를 돌려준다."""
+    sec = (t - open_rec.clock_in).total_seconds()
+    if sec < PUNCH_CONFIRM_SEC:
+        return "방금 출근했어요. 정말 퇴근할까요?"
+    if sec >= OPEN_RECORD_ALERT_HOURS * 3600:
+        return (f"출근한 지 {int(sec // 3600)}시간이 지났어요. 지금 퇴근으로 기록할까요? "
+                "퇴근을 잊었던 거라면 취소하고 그 출근 기록을 실수로 표시해 주세요.")
+    return ""
 
 
 @router.post("/jobs/{job_id}/punch")
@@ -256,8 +277,9 @@ def punch(job_id: int, data: PunchIn, u: User = Depends(current_user), s: Sessio
     if job.status == "quit":
         raise HTTPException(400, "그만둔 사업장이에요")
     t = now_kst()
-    open_rec = s.exec(select(WorkRecord).where(WorkRecord.job_id == job_id, WorkRecord.clock_out == None)  # noqa: E711
-                      .order_by(WorkRecord.id.desc())).first()
+    open_rec = open_record(s, job_id)
+    if open_rec and not data.confirm and (msg := punch_warning(open_rec, t)):
+        raise HTTPException(409, msg)  # 화면이 확인을 받은 뒤 confirm=true로 다시 보낸다
     if open_rec:
         open_rec.clock_out, open_rec.out_lat, open_rec.out_lng = t, data.lat, data.lng
         s.add(open_rec)
@@ -278,7 +300,42 @@ def punch(job_id: int, data: PunchIn, u: User = Depends(current_user), s: Sessio
 def records(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
     rows = s.exec(select(WorkRecord).where(WorkRecord.job_id == job_id).order_by(WorkRecord.clock_in.desc())).all()
-    return {"working": any(r.clock_out is None for r in rows), "records": [rec_out(r) for r in rows]}
+    return {"working": any(r.clock_out is None and r.void_at is None for r in rows),
+            "open_alert_hours": OPEN_RECORD_ALERT_HOURS, "records": [rec_out(r) for r in rows]}
+
+
+class VoidIn(BaseModel):
+    reason: str = ""
+
+
+def own_record(s: Session, u: User, job_id: int, rec_id: int) -> WorkRecord:
+    own_job(s, u, job_id)
+    r = s.get(WorkRecord, rec_id)
+    if not r or r.job_id != job_id or r.user_id != u.id:
+        raise HTTPException(404, "근무 기록을 찾을 수 없어요")
+    return r
+
+
+@router.post("/jobs/{job_id}/records/{rec_id}/void")
+def void_record(job_id: int, rec_id: int, data: VoidIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """실수로 누른 기록 표시. 시각은 그대로 두고, 표시한 시각과 이유를 함께 남긴다."""
+    r = own_record(s, u, job_id, rec_id)
+    r.void_at, r.void_reason = now_kst(), (data.reason.strip() or "실수로 누름")[:200]
+    s.add(r)
+    s.commit()
+    return rec_out(r)
+
+
+@router.delete("/jobs/{job_id}/records/{rec_id}/void")
+def unvoid_record(job_id: int, rec_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """실수 표시 취소. 퇴근이 없는 기록인데 이미 다른 출근이 진행 중이면 취소할 수 없다."""
+    r = own_record(s, u, job_id, rec_id)
+    if r.clock_out is None and (cur := open_record(s, job_id)) and cur.id != r.id:
+        raise HTTPException(400, "지금 출근 중인 기록이 있어 표시를 취소할 수 없어요. 먼저 퇴근해 주세요")
+    r.void_at, r.void_reason = None, ""
+    s.add(r)
+    s.commit()
+    return rec_out(r)
 
 
 # ---------- 증거 자료 ----------
