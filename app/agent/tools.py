@@ -573,7 +573,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         return {"task_id": task.id, "안내": f"{d.isoformat()} {SCHEDULE_HOUR}시에 다시 확인해요"}
 
     def give_advice(advice: str, next_tab: str = "") -> str:
-        """사용자에게 다음에 할 일을 조언한다. 홈에 보이고, next_tab이 있으면 그 화면 바로 가기가 붙는다."""
+        """사용자에게 조언한다. 홈에 보이고, next_tab이 있으면 그 화면 바로 가기가 붙는다."""
         from app.agent.case import NEXT_TABS
         t["get_job"]()
         advice = str(advice).strip()[:400]
@@ -623,7 +623,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
               "day": {"type": "string", "description": "YYYY-MM-DD (내일부터 60일 안)"}, "note": S,
               "month": {"type": "string", "description": "급여 점검할 달 YYYY-MM (payday일 때만)"}},
              ["check", "day", "note"]),
-        Tool("give_advice", "사용자에게 다음에 할 일을 조언한다. next_tab은 check(계약서 점검), pay(급여 점검), "
+        Tool("give_advice", "사용자에게 조언한다. 관련 화면이 있으면 next_tab은 check(계약서 점검), pay(급여 점검), "
              "docs(상담 사전 자료), guard(신고 후 보호) 중 바로 가기할 화면.", give_advice,
              {"advice": S, "next_tab": {"type": "string", "enum": ["", "check", "pay", "docs", "guard"]}}, ["advice"]),
         Tool("build_report", "상담 사전 자료 문서를 만든다. 사건 요약, 상담 때 물어볼 점, 근거 조항을 넣는다.", build_report,
