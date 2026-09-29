@@ -38,6 +38,7 @@ class Run:
         self.state: dict = {}  # AI가 도구로 만든 결과 (검토 항목, 급여 비교, 저장한 문구 등)
         self.steps = 0
         self.ai_used = False
+        self.ai_tried = False  # AI에게 맡기려 했는지 (결과 기록에 AI 몫이 빠졌는지 적기 위해)
         self.ai_error = ""
         self.trace: list[dict] = []
         label = {"user": "사용자 입력", "schedule": "정해진 시점 (자동 점검)", "agent": "에이전트가 시작",
@@ -59,7 +60,7 @@ class Run:
         for t in extra or []:
             tools[t.name] = t
         out = run_agent(self, goal, tools, context)
-        self.ai_used = out is not None
+        self.ai_tried, self.ai_used = True, out is not None
         if not self.ai_used:
             self.log("대기", f"{AI_WAITING}: 정해 둔 순서로 사실만 정리해요")
         return out
@@ -82,6 +83,8 @@ class Run:
         self.s.commit()
 
     def done(self, out: dict, summary: str) -> dict:
+        if self.ai_tried and not self.ai_used and AI_WAITING not in summary:
+            summary += f" (AI가 할 판단과 작성은 {AI_WAITING})"
         self.log("결과", summary)
         return {**out, "ai_agent": self.ai_used, "run_id": self.run_id, "trace": self.trace}
 
@@ -265,8 +268,11 @@ def run_report(session: Session, user_id: int, job_id: int, trigger: str = "user
     rep = r.state.get("report")
     if not rep:
         rep = r.call("build_report", {"ai": False, "reason": f"{AI_WAITING}: {r.ai_error or 'AI가 연결되면 사건 요약을 작성해요'}"})
-        r.call("notify", "상담 사전 자료를 만들었어요", "자료 탭에서 다시 열어 볼 수 있어요. 상담 기관에 낼 때 함께 보여 주세요.")
-    return r.done({**rep, "counsel": counsel, "summary_ai": r.ai_used}, "상담 사전 자료 작성 완료")
+        r.call("notify", "상담 사전 자료를 만들었어요 (사건 요약은 AI 응답 대기 중)",
+               "기록을 정리한 자료를 만들었어요. AI가 쓰는 사건 요약은 아직 빠져 있고, AI가 응답하면 요약을 넣어 다시 만들어요.")
+    return r.done({**rep, "counsel": counsel, "summary_ai": r.ai_used},
+                  "상담 사전 자료 작성 완료 (AI 사건 요약 포함)" if r.ai_used
+                  else f"기록만 정리한 상담 사전 자료 작성, 사건 요약은 {AI_WAITING}")
 
 
 # ---------- 신고 후 보호 ----------
@@ -282,8 +288,11 @@ def run_guard_toggle(session: Session, user_id: int, job_id: int, on: bool) -> d
                 check=r.need("message", "먼저 save_warning_message로 안내 문구를 저장해 주세요"))
     r.agent(goal, {"보복 금지 관련 조항": _retaliation_laws()})
     if not r.ai_used:
-        r.call("notify", "보복 대응을 시작했어요", "사업주에게 보낼 안내 문구를 준비했고, 매일 공개 게시물을 확인해요.")
-    return r.done({"message": r.call("warning_message")}, "안내 문구 준비, 매일 게시물 확인 예약")
+        r.call("notify", "보복 대응을 시작했어요", "사업주에게 보낼 기본 안내 문구를 준비했고, 매일 공개 게시물을 확인해요. "
+               "AI가 응답하면 상황에 맞는 문구로 바꿔요.")
+    return r.done({"message": r.call("warning_message")},
+                  "AI가 쓴 안내 문구 저장, 매일 게시물 확인 예약" if r.ai_used
+                  else f"기본 안내 문구로 준비 (AI 문구는 {AI_WAITING}), 매일 게시물 확인 예약")
 
 
 def _retaliation_laws() -> list[str]:
