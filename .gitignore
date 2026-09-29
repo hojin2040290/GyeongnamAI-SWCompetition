@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 알바지킴이: 개인 기록과 사용자가 올린 파일은 올리지 않는다
+data/app.db
+data/app.db-*
+data/uploads/*
+!data/uploads/.keep
+data/reports/*
+!data/reports/.keep
+.DS_Store
