@@ -20,28 +20,55 @@ def warning_message(job: Job) -> str:
             "연락하는 것은 금지되어 있습니다. 원만하게 해결되기를 바랍니다.")
 
 
-def search_public_posts(session: Session, job: Job, user_name: str) -> dict:
+def search_queries(job: Job, keywords: list[str]) -> list[str]:
+    """검색어: 사업장 이름과 사용자가 등록한 검색어(본인 이름, 별명 등)를 함께 넣는다."""
+    if not keywords:
+        return [job.name]
+    return [f"{job.name} {k}" for k in keywords]
+
+
+def search_public_posts(session: Session, job: Job, keywords: list[str]) -> dict:
     """네이버 검색 API로 공개 게시물 검색. 키가 없으면 건너뛴다. 로그인이 필요한 공간은 검색하지 않는다."""
+    queries = search_queries(job, keywords)
     if not (NAVER_CLIENT_ID and NAVER_CLIENT_SECRET):
-        return {"skipped": True, "reason": "네이버 검색 API 키가 없어 검색을 건너뛰었어요"}
+        return {"skipped": True, "queries": queries, "reason": "네이버 검색 API 키가 없어 검색을 건너뛰었어요"}
     headers = {"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}
-    query = f"{job.name} {user_name}".strip()
     added = 0
     with httpx.Client(timeout=15) as c:
-        for kind in ("blog", "cafearticle", "webkr"):
-            r = c.get(f"https://openapi.naver.com/v1/search/{kind}.json", params={"query": query, "display": 10},
-                      headers=headers)
-            if r.status_code != 200:
-                continue
-            for it in r.json().get("items", []):
-                url = it.get("link", "")
-                if not url or session.exec(select(GuardPost).where(GuardPost.job_id == job.id, GuardPost.url == url)).first():
+        for query in queries:
+            for kind in ("blog", "cafearticle", "webkr"):
+                r = c.get(f"https://openapi.naver.com/v1/search/{kind}.json", params={"query": query, "display": 10},
+                          headers=headers)
+                if r.status_code != 200:
                     continue
-                title = html.unescape(re.sub(r"<[^>]+>", "", it.get("title", "")))
-                session.add(GuardPost(job_id=job.id, url=url, title=title, source="search", found_at=now_kst()))
-                added += 1
+                for it in r.json().get("items", []):
+                    url = it.get("link", "")
+                    if not url or session.exec(select(GuardPost).where(GuardPost.job_id == job.id,
+                                                                       GuardPost.url == url)).first():
+                        continue
+                    title = html.unescape(re.sub(r"<[^>]+>", "", it.get("title", "")))
+                    session.add(GuardPost(job_id=job.id, url=url, title=title, source="search", found_at=now_kst()))
+                    session.flush()
+                    added += 1
     session.commit()
-    return {"skipped": False, "added": added}
+    return {"skipped": False, "queries": queries, "added": added}
+
+
+def preserve(session: Session, user_id: int, job: Job, url: str, title: str = "") -> dict:
+    """사용자가 알려 준 게시물의 주소와 확인 시각을 남기고, 가능하면 화면을 캡처해 보존한다."""
+    p = GuardPost(job_id=job.id, url=url, title=title, source="user", found_at=now_kst())
+    session.add(p)
+    session.commit()
+    try:
+        ev = capture(session, user_id, p)
+    except Exception as exc:  # 캡처 실패해도 주소와 시각은 남긴다
+        ev = None
+        p.title = p.title or f"캡처 실패: {type(exc).__name__}"
+    if ev:
+        p.evidence_id = ev.id
+    session.add(p)
+    session.commit()
+    return {"id": p.id, "captured": ev is not None}
 
 
 def capture(session: Session, user_id: int, post: GuardPost) -> Evidence | None:

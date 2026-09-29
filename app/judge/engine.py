@@ -5,9 +5,10 @@
 확인 필요 처리한다. AI 연결 후에는 LLMJudge가 같은 형식(Item)으로 결과를 돌려주면 된다.
 """
 from dataclasses import asdict, dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
+from app.calc import records as rec
 from app.calc import schedule as sch
 from app.calc.age import age_on, is_youth_protection
 from app.calc.params import P
@@ -23,6 +24,7 @@ class Item:
     basis: list = field(default_factory=list)   # 판단에 쓴 사실
     needed: list = field(default_factory=list)  # 부족해서 확인이 필요한 정보
     ai_pending: bool = False                    # AI 연결 후 판단할 항목
+    source: str = "input"                       # input(입력한 정보, 계약서), records(실제 출퇴근 기록)
 
 
 @dataclass
@@ -176,6 +178,72 @@ def judge(facts: Facts, stage: str) -> list[Item]:
         items.append(Item(pr["law"], WARN, "사업장 인원을 몰라 연장·야간·휴일 가산수당 적용 여부를 판단하지 않았어요.", needed=["사업장 인원"]))
 
     return verify(items, facts)
+
+
+def _dates(days: list[str], limit: int = 5) -> list[str]:
+    return days[:limit] + ([f"외 {len(days) - limit}건"] if len(days) > limit else [])
+
+
+def _need_break(work: int, rules: list) -> int:
+    return max([r for t, r in rules if work >= t] or [0])
+
+
+def judge_records(birth: date, records: list, schedule: dict, focus: date | None = None) -> list[Item]:
+    """실제 출퇴근 기록으로 판단. focus가 있으면 그날과 그날이 속한 주만 본다 (퇴근 직후 점검)."""
+    minor, br = P()["minor"], P()["break"]
+    facts = rec.day_facts(records, schedule, birth, minor["night_start"], minor["night_end"])
+    if focus:
+        week_start = focus - timedelta(days=focus.weekday())
+        facts = [f for f in facts if week_start <= f.day < week_start + timedelta(days=7)]
+    daily = [f for f in facts if focus is None or f.day == focus]
+    items: list[Item] = []
+
+    # 쉬는 시간: 기록된 근무 길이에 필요한 쉬는 시간과 계약상 쉬는 시간 비교
+    short, unknown = [], []
+    for f in daily:
+        need = _need_break(f.span_min - (f.break_min or 0), br["rules"])
+        if need == 0:
+            continue
+        if f.break_min is None:
+            unknown.append(f.when())
+        elif f.break_min < need:
+            short.append(f"{f.when()} (필요 {need}분, 계약상 {f.break_min}분)")
+    if short:
+        items.append(Item(br["law"], BAD, "실제 근무 기록을 보면 근무 길이에 필요한 쉬는 시간보다 계약상 쉬는 시간이 짧아요.",
+                          basis=_dates(short), source="records"))
+    if unknown:
+        items.append(Item(br["law"], WARN, "쉬는 시간을 몰라 실제 근무한 날의 쉬는 시간을 확인하지 못했어요.",
+                          basis=_dates(unknown), needed=["그날 실제로 쉰 시간"], source="records"))
+
+    # 만 18세 미만: 그날의 만 나이로 판단
+    minor_daily = [f for f in daily if f.age < minor["age"]]
+    night = [f.when() for f in minor_daily if f.night_min > 0]
+    if night:
+        items.append(Item(minor["law_night"], BAD, "만 18세 미만인 날 밤 10시부터 오전 6시 사이에 실제로 일한 기록이 있어요. "
+                          "본인 동의와 고용노동부 인가가 있어야 해요.",
+                          basis=_dates(night), needed=["고용노동부 인가 여부"], source="records"))
+    over, long = [], []
+    for d, fs in rec.by_day(minor_daily).items():
+        total = sum(f.work_min for f in fs)
+        label = f"{d.month}월 {d.day}일 {total // 60}시간 {total % 60}분"
+        if total > minor["daily_limit_min"] + minor["daily_ext_min"]:
+            over.append(label)
+        elif total > minor["daily_limit_min"]:
+            long.append(label)
+    for wk, fs in rec.by_week([f for f in facts if f.age < minor["age"]]).items():
+        total = sum(f.work_min for f in fs)
+        label = f"{wk.month}월 {wk.day}일 주 {total // 60}시간 {total % 60}분"
+        if total > minor["weekly_limit_min"] + minor["weekly_ext_min"]:
+            over.append(label)
+        elif total > minor["weekly_limit_min"]:
+            long.append(label)
+    if over:
+        items.append(Item(minor["law_hours"], BAD, "실제 근무 기록이 만 18세 미만의 근로시간 한도(연장 합의를 해도 하루 8시간, 주 40시간)를 넘어요.",
+                          basis=_dates(over), source="records"))
+    elif long:
+        items.append(Item(minor["law_hours"], WARN, "실제 근무 기록이 하루 7시간 또는 주 35시간을 넘어요. 연장 합의가 있었는지 확인해야 해요.",
+                          basis=_dates(long), needed=["연장 합의 여부"], source="records"))
+    return verify(items, None)
 
 
 def questions(facts: Facts, items: list[Item]) -> list[str]:

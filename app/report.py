@@ -10,6 +10,7 @@ from app.calc import schedule as sch
 from app.calc.age import age_on
 from app.calc.timeutil import now_kst, today_kst
 from app.config import REPORT_DIR
+from app.law.lookup import article_info
 from app.models import CheckRun, Evidence, Report, WorkRecord
 
 LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심"}
@@ -30,6 +31,7 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     counsel = t["counsel_for_age"]()
 
     rows = []
+    articles: dict[str, dict] = {}
     rows.append("<h2>1. 기본 정보</h2><table>")
     rows.append(f"<tr><th>만 나이</th><td>{age_on(user.birth_date, today_kst())}세</td></tr>")
     rows.append(f"<tr><th>사업장</th><td>{e(job.name)}</td></tr><tr><th>주소</th><td>{e(job.address or '미입력')}</td></tr>")
@@ -44,10 +46,14 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
 
     rows.append("<h2>2. 점검 결과</h2>")
     if check:
-        rows.append("<table><tr><th>조항</th><th>결과</th><th>내용</th><th>근거</th></tr>")
+        rows.append("<table><tr><th>조항</th><th>결과</th><th>내용</th><th>근거</th><th>법 기준표</th></tr>")
         for it in json.loads(check.results_json):
+            art = article_info(session, it["law"])  # 저장 뒤 법 기준표가 새로 구축됐을 수 있어 다시 찾는다
+            articles.setdefault(it["law"], art)
+            src = "근무 기록" if it.get("source") == "records" else "입력 정보"
             rows.append(f"<tr><td class='n'>{e(it['law'])}</td><td class='n'>{LABEL[it['status']]}</td><td>{e(it['text'])}</td>"
-                        f"<td>{e(', '.join(it['basis']))}</td></tr>")
+                        f"<td>{e(', '.join(it['basis']))}<br><span class='s'>{src} 기준</span></td>"
+                        f"<td class='n'>{'조문 원문 첨부' if art['built'] else '법 기준표 미구축'}</td></tr>")
         rows.append(f"</table><p class='s'>점검 시각 {check.created_at}</p>")
     else:
         rows.append("<p>아직 계약 점검을 하지 않았어요.</p>")
@@ -81,12 +87,24 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     rows.append("<h2>6. 상담 기관</h2><ul>")
     for c in counsel:
         rows.append(f"<li>{e(c['name'])} {c['phone']} ({e(c['note'])})</li>")
-    rows.append("</ul><p class='s'>이 자료는 법적 판단이 아닌 참고 자료예요.</p>")
+    rows.append("</ul>")
+
+    rows.append("<h2>7. 관련 조문 원문</h2>")
+    built = {k: v for k, v in articles.items() if v["built"]}
+    for label, art in built.items():
+        rows.append(f"<h3>{e(label)} {e(art.get('title', ''))}</h3><pre>{e(art['text'])}</pre>"
+                    f"<p class='s'>법제처 국가법령정보 API에서 불러온 시각 {art['fetched_at']}</p>")
+    missing = [k for k, v in articles.items() if not v["built"]]
+    if missing:
+        rows.append(f"<p>법 기준표 미구축: {e(', '.join(missing))}. 법제처 API로 조문을 불러오면 원문이 함께 들어가요.</p>")
+    if not articles:
+        rows.append("<p>점검 결과가 없어 첨부할 조문이 없어요.</p>")
+    rows.append("<p class='s'>이 자료는 법적 판단이 아닌 참고 자료예요.</p>")
 
     doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>상담 사전 자료</title>
 <style>body{{font-family:sans-serif;max-width:820px;margin:24px auto;padding:0 16px;line-height:1.6}}
 table{{border-collapse:collapse;width:100%;margin:8px 0}}th,td{{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;font-size:14px}}
-th{{background:#f2f4f8}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}</style></head>
+th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}</style></head>
 <body><h1>상담 사전 자료</h1><p class="s">작성 시각 {now_kst()}</p>{''.join(rows)}</body></html>"""
     path = Path(REPORT_DIR) / f"report_{user_id}_{job_id}_{now_kst().strftime('%Y%m%d%H%M%S')}.html"
     path.write_text(doc, encoding="utf-8")

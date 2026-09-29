@@ -1,0 +1,106 @@
+"""화면에서 부르는 API 흐름 테스트. 모든 기능이 에이전트를 거쳐 동작 기록에 남는지 확인한다."""
+from datetime import datetime
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
+
+from app.db import engine, init_db
+from app.main import app
+from app.models import AgentLog, LawArticle, WorkRecord
+
+JOB = {"name": "가상카페 테스트점", "wage": 11000, "schedule": {"금": {"start": "17:00", "end": "21:00", "brk": "없음"}},
+       "size": "5+", "contract_written": True, "copy_received": True, "probation": "no", "consent": "냈어요"}
+
+
+@pytest.fixture(scope="module")
+def c():
+    init_db()
+    with TestClient(app) as client:
+        r = client.post("/api/auth/register", json={"email": "flow@example.com", "password": "test1234",
+                                                     "birth_date": "2010-05-01", "mode": "work"})
+        assert r.status_code == 200
+        yield client
+
+
+def events(user_id: int = 1) -> set[str]:
+    with Session(engine) as s:
+        return {a.event for a in s.exec(select(AgentLog).where(AgentLog.user_id == user_id))}
+
+
+def test_edit_me_and_job(c):
+    assert c.put("/api/me", json={"birth_date": "2010-06-01"}).json()["birth_date"] == "2010-06-01"
+    assert c.put("/api/me", json={"birth_date": "2999-01-01"}).status_code == 400
+    job = c.post("/api/jobs", json=JOB).json()
+    upd = c.put(f"/api/jobs/{job['id']}", json={**JOB, "wage": 11500, "size": "lt5"}).json()
+    assert upd["wage"] == 11500 and upd["size"] == "lt5"
+    c.post("/api/jobs", json={**JOB, "name": "가상편의점"})
+    assert c.put(f"/api/jobs/{job['id']}", json={**JOB, "name": "가상편의점"}).status_code == 400
+
+
+def test_punch_out_runs_shift_check(c):
+    job_id = c.get("/api/jobs").json()[0]["id"]
+    assert c.post(f"/api/jobs/{job_id}/punch", json={}).json()["action"] == "in"
+    # 서버 시각 대신 미성년 야간 근무가 생기도록 기록 시각을 조정
+    with Session(engine) as s:
+        r = s.exec(select(WorkRecord).where(WorkRecord.clock_out == None)).first()  # noqa: E711
+        r.clock_in = datetime(2026, 9, 25, 17, 0)
+        s.add(r)
+        s.commit()
+    from unittest.mock import patch
+    with patch("app.routers.api.now_kst", return_value=datetime(2026, 9, 25, 22, 30)):
+        out = c.post(f"/api/jobs/{job_id}/punch", json={}).json()
+    assert out["action"] == "out"
+    laws = {i["law"] for i in out["shift"]["items"]}
+    assert "근로기준법 제70조" in laws
+    assert out["shift"]["trace"][0]["step"] == "시작"
+    assert "shift_check" in events()
+
+
+def test_contract_check_uses_records_and_law_table(c):
+    job_id = c.get("/api/jobs").json()[0]["id"]
+    items = c.post(f"/api/jobs/{job_id}/check").json()["items"]
+    assert any(i["source"] == "records" for i in items)
+    assert all(i["article"]["built"] is False for i in items)  # 법 기준표가 비어 있으면 미구축
+    with Session(engine) as s:
+        s.add(LawArticle(law_name="근로기준법", article_no="70", title="테스트 조문", text="테스트용 가상 조문 원문",
+                         fetched_at=datetime(2026, 9, 29)))
+        s.commit()
+    items = c.get(f"/api/jobs/{job_id}/check").json()["items"]
+    night = [i for i in items if i["law"] == "근로기준법 제70조"][0]
+    assert night["article"]["built"] and night["article"]["text"] == "테스트용 가상 조문 원문"
+
+
+def test_seek_report_guard_go_through_agent(c):
+    job_id = c.get("/api/jobs").json()[0]["id"]
+    r = c.post("/api/seek/check", json={"name": "가상분식", "wage": 9000, "schedule": {}}).json()
+    assert r["items"] and r["questions"] and r["trace"]
+    rep = c.post(f"/api/jobs/{job_id}/report").json()
+    html = c.get(rep["url"]).text
+    assert "관련 조문 원문" in html and "테스트용 가상 조문 원문" in html
+    assert c.get(f"/api/jobs/{job_id}/reports").json()[0]["id"] == rep["id"]
+    g = c.post(f"/api/jobs/{job_id}/guard", json={"reported": True}).json()
+    assert g["reported"] and "제104조" in g["message"]
+    g = c.put(f"/api/jobs/{job_id}/guard/keywords", json={"keywords": ["김가상", " 별명 ", ""]}).json()
+    assert g["keywords"] == ["김가상", "별명"] and g["queries"] == ["가상카페 테스트점 김가상", "가상카페 테스트점 별명"]
+    s = c.post(f"/api/jobs/{job_id}/guard/search").json()
+    assert s["skipped"] is True
+    p = c.post(f"/api/jobs/{job_id}/guard/posts", json={"url": "https://example.com/post/1"}).json()
+    assert p["classify"]["pending"] == 1
+    assert {"seek_check", "report", "guard_on", "guard_search", "guard_preserve"} <= events()
+    logs = c.get(f"/api/jobs/{job_id}/agent/log").json()
+    assert any(lg["event"] == "seek_check" for lg in logs)  # 사업장 없이 실행한 지원 전 확인도 보인다
+
+
+def test_daily_check_searches_reported_jobs(c):
+    assert c.post("/api/dev/daily-check").json()["guard"] == 1
+
+
+def test_payslip_edit(c):
+    job_id = c.get("/api/jobs").json()[0]["id"]
+    c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "10000"})
+    c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "20000"})
+    ps = c.get(f"/api/jobs/{job_id}/payslips").json()
+    assert [(p["month"], p["amount"]) for p in ps] == [("2026-09", 20000)]
+    c.delete(f"/api/jobs/{job_id}/payslips/2026-09")
+    assert c.get(f"/api/jobs/{job_id}/payslips").json() == []

@@ -42,6 +42,7 @@ class Job(SQLModel, table=True):
     address: str = ""
     owner: str = ""
     reported: bool = False
+    guard_keywords: str = ""  # 게시물 검색어 (쉼표로 구분, 예: 본인 이름, 별명)
     created_at: datetime
 
 
