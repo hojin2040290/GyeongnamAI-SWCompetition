@@ -9,11 +9,12 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.agent import core, loop
-from app.agent.tools import agent_tools
+from app.agent.tools import agent_tools, make_tools
+from app.calc.timeutil import now_kst
 from app.db import engine, init_db
 from app.llm import client
 from app.main import app
-from app.models import GuardPost, Job
+from app.models import AgentQuestion, GuardPost, Job
 from tests.fake_agent import FakeAgent, called, reply, smart_policy
 
 
@@ -274,7 +275,7 @@ def test_live_steps_while_agent_runs(env):
 
 
 def test_case_memory_and_advice(env, monkeypatch):
-    """에이전트가 남긴 사건 기억은 다음 실행에 넘어가고, 조언은 홈(사건 상태)에 보인다."""
+    """에이전트가 남긴 메모는 다음 실행에 넘어가고, 조언은 홈에 보인다."""
     a, ja, *_ = env
 
     def policy(goal, done, tools):
@@ -290,11 +291,11 @@ def test_case_memory_and_advice(env, monkeypatch):
     assert st["memory"][-1]["기억"] == "야간근로 인가 여부를 아직 모름"
     assert [p["name"] for p in st["progress"]] == ["점검", "기록", "급여", "상담 자료", "신고", "보호"]
     assert st["progress"][0]["done"]
-    # 다음 실행: 시작 상황에 사건 기억과 진행 상황이 들어 있다
+    # 다음 실행: 시작 상황에 지난 메모와 진행 상황이 들어 있다
     agent.payloads.clear()
     a.post(f"/api/jobs/{ja}/check")
     first = agent.payloads[0]["messages"][1]["content"]
-    assert "사건 기억" in first and "야간근로 인가 여부를 아직 모름" in first and "사건 진행 상황" in first
+    assert "지난 메모" in first and "야간근로 인가 여부를 아직 모름" in first and "진행 상황" in first
     tool_names = [t["function"]["name"] for t in agent.payloads[0]["tools"]]
     assert {"remember", "give_advice", "make_plan"} <= set(tool_names)
 
@@ -309,3 +310,64 @@ def test_bad_advice_tab_is_rejected(env, monkeypatch):
     agent = use(monkeypatch, policy)
     a.post(f"/api/jobs/{ja}/guard/posts", json={"url": "https://example.com/advice", "title": "글"})
     assert "next_tab" in results(agent.payloads[-1], "give_advice")[0]["error"]
+
+
+def test_ask_user_then_resume_with_answer(env, monkeypatch):
+    """정보가 없으면 AI가 사용자에게 묻고, 답하면 같은 점검을 다시 시작해 답을 근거로 판단한다."""
+    a, ja, b, jb = env
+    Q = "보호자 동의서와 가족관계증명서를 사업장에 냈나요?"
+
+    def policy(goal, done, tools):
+        names = [n for n, _ in done]
+        items = called(done, "check_rules")
+        if items is None:
+            return reply([("check_rules", {}), ("get_answers", {})])
+        answers = called(done, "get_answers") or []
+        docs = [it for it in items if it["조항"] == "근로기준법 제66조"][0]
+        if not answers and "ask_user" not in names:
+            return reply([("ask_user", {"question": Q, "options": ["냈어요", "안 냈어요"], "why": "서류 제출 여부가 기록에 없어요",
+                                        "law": "근로기준법 제66조"})])
+        judgments = [{"i": it["i"], "status": "warn", "law": it["조항"], "fact": (it["사실"] or ["입력 정보"])[0],
+                      "reason": "테스트"} for it in items if it["i"] != docs["i"]]
+        if answers:
+            judgments.append({"i": docs["i"], "status": "ok", "law": "근로기준법 제66조", "fact": "사용자가 서류를 냈다고 답함",
+                              "reason": "답을 근거로 판단", "answer_ids": [answers[0]["answer_id"]]})
+        else:
+            judgments.append({"i": docs["i"], "status": "warn", "law": "근로기준법 제66조", "fact": "서류 제출 여부 모름",
+                              "reason": "답을 기다려요"})
+        return reply([("finish", {"judgments": judgments})])
+    use(monkeypatch, policy)
+    # 다른 사용자 사업장에 서류 제출 여부가 없도록 비워 둔 상태에서 시작
+    r = a.post(f"/api/jobs/{ja}/check").json()
+    docs = [i for i in r["items"] if i["law"] == "근로기준법 제66조"][0]
+    assert docs["status"] == "warn"
+    qs = a.get(f"/api/jobs/{ja}/questions").json()
+    assert qs[-1]["question"] == Q and "모름" in qs[-1]["options"]
+    assert any(n["title"] == "에이전트가 물어볼 게 있어요" for n in a.get("/api/notifications").json())
+    # 같은 질문은 두 번 만들지 않는다
+    a.post(f"/api/jobs/{ja}/check")
+    assert len([q for q in a.get(f"/api/jobs/{ja}/questions").json() if q["question"] == Q]) == 1
+    # 다른 사용자는 이 질문에 답할 수 없다
+    assert b.post(f"/api/questions/{qs[-1]['id']}/answer", json={"answer": "안 냈어요"}).status_code == 404
+    res = a.post(f"/api/questions/{qs[-1]['id']}/answer", json={"answer": "냈어요"}).json()
+    assert res["event"] == "contract_check" and res["ai_agent"]
+    docs = [i for i in res["items"] if i["law"] == "근로기준법 제66조"][0]
+    assert docs["status"] == "ok" and any("사용자 답변" in b_ for b_ in docs["basis"])
+    assert a.get(f"/api/jobs/{ja}/questions").json() == []
+
+
+def test_unknown_answer_does_not_fill_info(env, monkeypatch):
+    """'모름'이라고 답한 질문은 부족한 정보를 채운 것으로 보지 않는다."""
+    a, ja, *_ = env
+    with Session(engine) as s:
+        job = s.get(Job, ja)
+        q = AgentQuestion(user_id=job.user_id, job_id=ja, event="contract_check", question="연장 합의를 했나요?",
+                          status="answered", answer="모름", created_at=now_kst())
+        s.add(q)
+        s.commit()
+        t = make_tools(s, job.user_id, ja)
+        item = {"law": "근로기준법 제69조", "status": "pending", "rule_status": "warn", "text": "", "basis": ["주 38시간"],
+                "needed": ["연장 합의 여부"]}
+        out = t["apply_judgments"]([item], [{"i": 0, "status": "ok", "law": "근로기준법 제69조", "fact": "주 38시간",
+                                             "reason": "", "answer_ids": [q.id]}])
+    assert out[0]["status"] == "warn"

@@ -27,7 +27,9 @@ JUDGE_ONE = {"status": {"type": "string", "enum": ["ok", "warn", "bad"], "descri
              "law": {"type": "string", "description": "근거로 쓴 조항"}, "fact": {"type": "string", "description": "근거로 쓴 사실"},
              "reason": {"type": "string", "description": "판단 이유 한두 문장"}}
 JUDGMENTS = {"judgments": {"type": "array", "description": "검토 항목마다 판단 하나", "items": {
-    "type": "object", "properties": {"i": {"type": "integer", "description": "check_rules 항목 번호"}, **JUDGE_ONE},
+    "type": "object", "properties": {"i": {"type": "integer", "description": "check_rules 항목 번호"}, **JUDGE_ONE,
+                                     "answer_ids": {"type": "array", "items": {"type": "integer"},
+                                                    "description": "근거로 쓴 사용자 답변 번호 (get_answers)"}},
     "required": ["i", "status", "law", "fact", "reason"]}}}
 DONE = {"note": {"type": "string", "description": "한 일 요약"}}
 
@@ -44,6 +46,7 @@ class Run:
         self.ai_error = ""
         self.trace: list[dict] = []
         label = {"user": "사용자 입력", "schedule": "정해진 시점 (자동 점검)", "agent": "에이전트가 시작",
+                 "answer": "사용자가 에이전트의 질문에 답함",
                  "retry": "AI 응답 대기 중이던 일 다시 맡김"}
         self.log("시작", label.get(trigger, trigger))
 
@@ -61,10 +64,11 @@ class Run:
         tools = agent_tools(self.s, self.user_id, self.job_id, self.state)
         for t in extra or []:
             tools[t.name] = t
-        if self.job_id is not None:  # 사건 기억과 진행 상황을 넘기고, 기억 남기기와 조언을 쓸 수 있게 한다
-            context = {**context, "사건 진행 상황": case.progress(self.s, self.tools["get_job"]()),
-                       "사건 기억": case.memories(self.s, self.job_id) or "아직 없음"}
-            goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice"])
+        if self.job_id is not None:  # 지난 메모와 진행 상황을 넘기고, 기억 남기기와 조언을 쓸 수 있게 한다
+            context = {**context, "진행 상황": case.progress(self.s, self.tools["get_job"]()),
+                       "지난 메모": case.memories(self.s, self.job_id) or "아직 없음",
+                       "질문과 답": case.questions(self.s, self.job_id) or "아직 없음"}
+            goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice", "ask_user", "get_answers"])
         out = run_agent(self, goal, tools, context)
         self.ai_tried, self.ai_used = True, out is not None
         if not self.ai_used:
@@ -193,6 +197,7 @@ def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
 # ---------- 급여, 퇴직 ----------
 def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "payday", trigger)
+    r.state["resume"] = {"month": month}  # 질문에 답하면 같은 달로 다시 시작
     r.log("입력", f"{month} 급여 점검")
     goal = Goal(f"{month} 급여를 계산한 금액과 받은 금액을 compare_pay로 비교하고, 체불이 의심되는지 판단해 finish에 담아 주세요. "
                 "금액은 도구 결과만 쓰세요. 적게 받았거나 받은 금액이 없으면 사용자에게 알림을 보내 주세요.",
@@ -410,3 +415,27 @@ def run_daily(session: Session, user_id: int, job_id: int) -> dict:
         if job.reported:
             post_search()
     return r.done({"ran": ran}, "실행한 점검: " + (", ".join(ran) or "없음"))
+
+
+# ---------- 사용자가 에이전트의 질문에 답했을 때 ----------
+RESUME = {"contract_check": "contract_check", "shift_check": "contract_check", "payday": "payday",
+          "quit_check": "quit_check", "report": "report", "daily": "daily", "guard_on": "guard_review",
+          "guard_search": "guard_review", "guard_preserve": "guard_review", "guard_review": "guard_review"}
+
+
+def run_answer(session: Session, user_id: int, job_id: int, event: str, context: dict) -> dict:
+    """답을 받아 질문했던 점검을 다시 시작한다 (퇴근 점검은 그 주만 보므로 계약서 점검으로 이어 간다)."""
+    kind = RESUME.get(event, "contract_check")
+    if kind == "payday":
+        return run_payday(session, user_id, job_id, context.get("month") or today_kst().strftime("%Y-%m"), "answer")
+    if kind == "quit_check":
+        st = run_quit_check(session, user_id, job_id, "answer")
+        return {"settlement": st, "trace": []}
+    if kind == "report":
+        return run_report(session, user_id, job_id, "answer")
+    if kind == "daily":
+        return run_daily(session, user_id, job_id)
+    if kind == "guard_review":
+        r = Run(session, user_id, job_id, "guard_review", "answer")
+        return r.done({"classify": run_guard_review(session, user_id, job_id, r=r)}, "게시물 판별 다시")
+    return run_contract_check(session, user_id, job_id, "answer")

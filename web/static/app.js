@@ -522,10 +522,36 @@ async function loadHome(){
   await refreshRecords();
   if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
   await renderQuit();
+  await loadAsk();
   await loadCase();
   await loadAlerts();
 }
-// 사건 진행 상황(코드가 정리)과 에이전트 조언, 사건 기억(에이전트가 남김)
+// 에이전트의 질문: 답하면 질문했던 점검을 에이전트가 다시 판단한다
+const RESUME_TAB={contract_check:'check',payday:'pay',report:'docs',guard_review:'guard'};
+async function loadAsk(){
+  const qs=await api('GET',`/api/jobs/${state.current}/questions`);
+  if(state.askFor!==state.current) $('#askTrace').innerHTML='';  // 다른 일하는 곳의 결과는 지운다
+  $('#askCard').classList.toggle('hidden',!qs.length && !$('#askTrace').innerHTML);
+  $('#askList').innerHTML=qs.map(q=>`<div class="ask" data-q="${q.id}"><p class="ask-q">${esc(q.question)}</p>
+      <p class="sub">${esc(q.why)}${q.law?` (${esc(q.law)})`:''}</p>
+      <div class="ask-opts">${q.options.map(o=>`<button class="btn ghost small" data-a="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+      <div class="kw-row"><input class="input" placeholder="직접 적어서 답하기" aria-label="직접 답하기"><button class="btn ghost small" data-own>보내기</button></div>
+      <button class="link small muted" data-close>이 질문 닫기</button></div>`).join('');
+  $$('#askList .ask').forEach(el=>{ const id=el.dataset.q;
+    el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>answerAsk(id,b.dataset.a));
+    el.querySelector('[data-own]').onclick=()=>{ const v=el.querySelector('input').value.trim(); if(!v){ toast('답을 적어 주세요'); return; } answerAsk(id,v); };
+    el.querySelector('[data-close]').onclick=async()=>{ try{ await api('DELETE',`/api/questions/${id}`); await loadAsk(); }catch(e){ toast(e.message); } };
+  });
+}
+async function answerAsk(id, answer){
+  $$('#askList button').forEach(b=>b.disabled=true); state.askFor=state.current;
+  try{ const r=await agent('#askTrace',()=>api('POST',`/api/questions/${id}/answer`,{answer}));
+    $('#askTrace').innerHTML=traceHTML(r.trace)+(RESUME_TAB[r.event]?`<button class="btn ghost small" style="margin-top:8px" data-go="${RESUME_TAB[r.event]}">다시 판단한 결과 보기</button>`:'');
+    $$('#askTrace [data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
+    toast('답을 받아 에이전트가 다시 판단했어요'); await loadAsk(); await loadCase(); await loadAlerts();
+  }catch(e){ toast(e.message); $$('#askList button').forEach(b=>b.disabled=false); }
+}
+// AI 에이전트 진행 상황(코드가 정리)과 에이전트 조언, 메모(에이전트가 남김)
 const NEXT_TAB={check:'계약서 점검하러 가기',pay:'급여 점검하러 가기',docs:'상담 사전 자료 만들러 가기',guard:'신고 후 보호로 가기'};
 async function loadCase(){
   const c=await api('GET',`/api/jobs/${state.current}/case`);
