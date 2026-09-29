@@ -5,7 +5,7 @@ const DAY_KEYS = ['월','화','수','목','금','토','일'];
 const TIMES = []; for (let h=0; h<24; h++) { TIMES.push(pad(h)+':00'); TIMES.push(pad(h)+':30'); }
 const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
 const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심'};
-const EVENT = {contract_check:'계약·근무 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
+const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
   report:'상담 자료', guard_on:'보복 대응 시작', guard_off:'보복 대응 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존'};
 const KIND = {contract:'근로계약서', payslip:'급여명세서', message:'사업주 메시지', schedule:'근무표', deposit:'입금 내역', post:'게시물 화면', notice:'채용공고', other:'기타'};
 
