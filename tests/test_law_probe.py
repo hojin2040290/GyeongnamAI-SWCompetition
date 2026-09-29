@@ -11,3 +11,9 @@ def test_summarize_and_find_id():
     assert find_law_id(SAMPLE, "근로기준법") == "999999"
     assert find_law_id(SAMPLE, "최저임금법") is None
     assert summarize("<html>오류</html").startswith("XML 아님")
+
+
+def test_error_message_is_shown():
+    err = "<Response><result>실패</result><msg>사용자 정보 검증에 실패하였습니다.</msg></Response>"
+    s = summarize(err)
+    assert "<result> 실패" in s and "<msg> 사용자 정보 검증에 실패하였습니다." in s

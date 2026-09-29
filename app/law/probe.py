@@ -38,6 +38,8 @@ def summarize(text: str) -> str:
         return "XML 아님: " + " ".join(text.split())[:300]
     tags = Counter(el.tag for el in root.iter())
     lines = [f"최상위 <{root.tag}>, 자주 나온 태그: {', '.join(f'{t}({n})' for t, n in tags.most_common(12))}"]
+    if len(root) and all(len(el) == 0 for el in root):  # 오류 안내처럼 값만 있는 짧은 응답은 글자를 그대로 보여 준다
+        lines += [f"    <{el.tag}> {' '.join((el.text or '').split())[:200]}" for el in root]
     first = next((el for el in root if len(el)), None)
     if first is not None:
         lines.append(f"첫 <{first.tag}> 안의 값:")
