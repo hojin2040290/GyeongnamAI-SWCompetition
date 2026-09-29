@@ -13,7 +13,7 @@ from app.config import REPORT_DIR
 from app.law.lookup import article_info
 from app.models import CheckRun, Evidence, Report, WorkRecord
 
-LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심"}
+LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심", "pending": "확인 중(AI 판단 전)"}
 
 
 def build(session: Session, user_id: int, job_id: int) -> Report:
@@ -52,9 +52,9 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
             art = article_info(session, it["law"])  # 저장 뒤 법 기준표가 새로 구축됐을 수 있어 다시 찾는다
             articles.setdefault(it["law"], art)
             src = "근무 기록" if it.get("source") == "records" else "입력 정보"
-            rows.append(f"<tr><td class='n'>{e(it['law'])}</td><td class='n'>{LABEL[it['status']]}</td><td>{e(it['text'])}</td>"
+            rows.append(f"<tr><td class='n'>{e(it['law'])}</td><td class='n'>{LABEL.get(it['status'], it['status'])}</td><td>{e(it['text'])}</td>"
                         f"<td>{e(', '.join(it['basis']))}<br><span class='s'>{src} 기준</span></td>"
-                        f"<td class='n'>{'조문 원문 첨부' if art['built'] else '법 기준표 미구축'}</td></tr>")
+                        f"<td class='n'>{'조문 원문 첨부' if art['built'] else ('-' if art.get('na') else '법 기준표 미구축')}</td></tr>")
         rows.append(f"</table><p class='s'>점검 시각 {check.created_at}</p>")
     else:
         rows.append("<p>아직 계약 점검을 하지 않았어요.</p>")
@@ -72,7 +72,7 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     else:
         rows.append("<p>급여 점검 기록이 없어요.</p>")
     if settle:
-        rows.append(f"<p>퇴직일 {settle['quit_date']}, 임금 지급 기한 {settle['due']} ({LABEL[settle['status']]})</p>")
+        rows.append(f"<p>퇴직일 {settle['quit_date']}, 임금 지급 기한 {settle['due']} ({LABEL.get(settle['status'], '')})</p>")
 
     rows.append("<h2>4. 근무 기록</h2><table><tr><th>출근</th><th>퇴근</th><th>출근 위치</th><th>비고</th></tr>")
     for r in recs:
@@ -99,7 +99,7 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
     for label, art in built.items():
         rows.append(f"<h3>{e(label)} {e(art.get('title', ''))}</h3><pre>{e(art['text'])}</pre>"
                     f"<p class='s'>법제처 국가법령정보 API에서 불러온 시각 {art['fetched_at']}</p>")
-    missing = [k for k, v in articles.items() if not v["built"]]
+    missing = [k for k, v in articles.items() if not v["built"] and not v.get("na")]
     if missing:
         rows.append(f"<p>법 기준표 미구축: {e(', '.join(missing))}. 법제처 API로 조문을 불러오면 원문이 함께 들어가요.</p>")
     if not articles:

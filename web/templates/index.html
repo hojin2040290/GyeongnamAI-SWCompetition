@@ -212,7 +212,8 @@
       <h3>받은 급여 올리기</h3>
       <div class="panel">
         <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="number" id="payAmount" inputmode="numeric"><em>원</em></div></label>
-        <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf"></label>
+        <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf">
+          <em class="hint" id="payOcr">사진을 고르면 원본으로 저장하고, AI가 금액을 읽어 채워요.</em></label>
         <button class="btn block" id="paySave">저장하고 비교하기</button>
         <p class="hint">같은 달을 다시 저장하면 새 금액으로 바뀌어요.</p>
       </div>
@@ -229,7 +230,7 @@
       </button>
       <label class="upload"><input type="file" accept="image/*,.pdf" hidden id="contractFile">
         <strong>근로계약서 사진 올리기</strong>원본은 그대로 저장돼요</label>
-      <div class="ai-note">계약서 자동 읽기는 AI 연결 후 제공돼요. 지금은 계약서를 보고 아래 칸을 직접 채워 주세요.</div>
+      <div class="ai-note" id="ocrNote">사진을 올리면 원본으로 저장하고, AI가 읽어 아래 칸을 채워요. AI가 연결되지 않았으면 직접 입력해 주세요.</div>
       <h3>계약서에 적힌 내용</h3>
       <div class="panel fields-grid" id="fieldsBox"></div>
       <button class="btn block" id="checkRun">이 내용과 근무 기록으로 점검하기</button>

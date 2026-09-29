@@ -54,8 +54,11 @@ def _short(v) -> str:
     return text if len(text) < 400 else text[:400] + "…"
 
 
-def _count(items: list[dict]) -> tuple[int, int]:
-    return sum(i["status"] == "bad" for i in items), sum(i["status"] == "warn" for i in items)
+def _summary(items: list[dict]) -> str:
+    """결과 개수 요약. AI 판단 전 항목은 '확인 중'으로 센다."""
+    names = [("bad", "위반 의심"), ("warn", "확인 필요"), ("pending", "확인 중(AI 판단 전)"), ("ok", "정상")]
+    parts = [f"{label} {n}건" for key, label in names if (n := sum(i["status"] == key for i in items))]
+    return ", ".join(parts) or "점검할 항목이 없어요"
 
 
 # ---------- 계약서, 근무 기록 점검 ----------
@@ -66,11 +69,10 @@ def run_contract_check(session: Session, user_id: int, job_id: int) -> dict:
     rec_items = r.call("judge_records")
     r.log("판단", f"입력 정보 {len(items)}건, 근무 기록 {len(rec_items)}건")
     items = r.call("attach_law", items + rec_items)
-    bad, warn = _count(items)
+    items = r.call("ai_judge", items)
     check_id = r.call("save_check", "contract", items)
-    r.call("notify", "계약서 점검 완료",
-           f"위반 의심 {bad}건, 확인 필요 {warn}건이 있어요." if bad or warn else "확인한 항목은 모두 정상이에요.")
-    return r.done({"check_id": check_id, "items": items}, f"위반 의심 {bad}건, 확인 필요 {warn}건")
+    r.call("notify", "계약서 점검 완료", _summary(items) + ". 계약서 탭에서 확인해 보세요.")
+    return r.done({"check_id": check_id, "items": items}, _summary(items))
 
 
 def run_shift_check(session: Session, user_id: int, job_id: int, record_id: int) -> dict:
@@ -82,21 +84,19 @@ def run_shift_check(session: Session, user_id: int, job_id: int, record_id: int)
     items = r.call("judge_shift", day)
     if not items:
         return r.done({"day": day, "items": []}, "오늘 근무 기록에서 문제를 찾지 못했어요")
-    items = r.call("attach_law", items)
-    bad, warn = _count(items)
+    items = r.call("ai_judge", r.call("attach_law", items))
     r.call("save_check", "shift", {"day": day, "items": items})
-    r.call("notify", "오늘 근무 점검 결과", f"위반 의심 {bad}건, 확인 필요 {warn}건. 계약서 탭에서 확인해 보세요.")
-    return r.done({"day": day, "items": items}, f"위반 의심 {bad}건, 확인 필요 {warn}건")
+    r.call("notify", "오늘 근무 점검 결과", _summary(items) + ". 계약서 탭에서 확인해 보세요.")
+    return r.done({"day": day, "items": items}, _summary(items))
 
 
 def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
     r = Run(session, user_id, None, "seek_check")
     r.log("입력", f"지원하려는 곳: {data.get('name') or '이름 없음'}")
     out = r.call("judge_seek", data)
-    out["items"] = r.call("attach_law", out["items"])
-    bad, warn = _count(out["items"])
+    out["items"] = r.call("ai_judge", r.call("attach_law", out["items"]))
     r.call("save_check", "seek", {"input": data, **out})
-    return r.done(out, f"위반 의심 {bad}건, 확인 필요 {warn}건, 물어볼 질문 {len(out['questions'])}개")
+    return r.done(out, f"{_summary(out['items'])}, 물어볼 질문 {len(out['questions'])}개")
 
 
 # ---------- 급여, 퇴직 ----------
@@ -108,7 +108,7 @@ def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger:
     cmp = r.call("compare_pay", expected, paid)
     r.log("판단", cmp["text"])
     r.call("save_check", "payday", {"month": month, "expected": expected, "paid": paid, "compare": cmp})
-    if cmp["status"] == "bad":
+    if cmp.get("short"):  # 금액 차이는 코드가 계산한 사실이라 바로 알린다 (체불 판단은 AI)
         r.call("notify", f"{month} 급여 점검 결과", cmp["text"] + " 상담 사전 자료를 만들어 둘 수 있어요.")
     elif paid is None:
         r.call("notify", f"{month} 급여 점검", "받은 급여를 아직 올리지 않았어요. 명세서나 입금 금액을 올려 주세요.")
@@ -121,10 +121,11 @@ def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "
     if not st:
         r.done({}, "그만둔 사업장이 아니에요")
         return None
-    if st["status"] == "bad":
+    unpaid = st["rule_status"] != "ok"  # 받았다고 기록하지 않음
+    if unpaid and st["left"] < 0:
         r.call("notify", "퇴직 후 임금 지급 기한이 지났어요",
                f"지급 기한 {st['due']}이 지났어요. 아직 못 받았다면 상담 사전 자료를 만들어 보세요.")
-    elif st["status"] == "warn" and st["left"] <= 3:
+    elif unpaid and st["left"] <= 3:
         r.call("notify", "퇴직 후 임금 지급 기한이 다가와요", f"지급 기한 {st['due']}까지 {st['left']}일 남았어요.")
     r.done({}, f"지급 기한 {st['due']}")
     return st
@@ -141,6 +142,16 @@ def run_open_check(session: Session, user_id: int, job_id: int, limit_hours: int
     r.call("notify", "퇴근을 누르지 않은 것 같아요",
            f"{day} 출근 뒤 퇴근 기록이 없어요. 일을 마쳤다면 퇴근을 누르고, 잘못 누른 출근이면 홈에서 실수로 표시해 주세요.")
     return r.done({"open": rec}, "퇴근 잊음 알림")
+
+
+# ---------- 사진 읽기 (비전 모델) ----------
+def run_read_image(session: Session, user_id: int, job_id: int, evidence_id: int, kind: str) -> dict:
+    """계약서나 급여명세서 사진을 AI가 읽는다. 읽은 값은 화면에 채워 사용자가 확인한 뒤 저장한다."""
+    r = Run(session, user_id, job_id, f"read_{kind}")
+    r.log("입력", f"{'근로계약서' if kind == 'contract' else '급여명세서'} 사진")
+    res = r.call("read_contract_image" if kind == "contract" else "read_payslip_image", evidence_id)
+    summary = f"항목 {res.get('found', 0)}개를 읽었어요" if res.get("ai") else res.get("reason", "")
+    return r.done(res, summary)
 
 
 # ---------- 상담 ----------

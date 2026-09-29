@@ -81,6 +81,7 @@ def run_pay(cases: list[dict]) -> dict:
 def main() -> int:
     data = json.loads(CASES.read_text(encoding="utf-8"))
     j, p = run_judge(data["judge"]), run_pay(data["pay"])
+    print("※ 판단 측정은 AI 판단을 확인하는 검증 장치(코드 규칙) 기준이에요. AI 연결 후에는 AI 결과로 다시 측정해요.")
     print(f"[위반 의심 사례 누락] 잡아야 할 조항 {j['expected']}건 중 누락 {j['missed']}건 (목표 0건)")
     print(f"  결과까지 정확히 맞은 항목 {j['strict']}, 정상 사례 오탐 {j['false_alarm']}")
     print(*j["details"], sep="\n") if j["details"] else None
