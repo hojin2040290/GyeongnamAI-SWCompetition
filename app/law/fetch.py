@@ -9,6 +9,7 @@
 법제처에 등록한 IP에서만 호출된다 (다른 곳에서는 '사용자 정보 검증에 실패' 오류).
 """
 import json
+import re
 import sys
 
 import httpx
@@ -102,6 +103,26 @@ def fetch_min_wage(s: Session, client: httpx.Client) -> list[str]:
     return saved
 
 
+def diagnose_min_wage(client: httpx.Client) -> list[str]:
+    """최저임금 고시를 못 찾을 때 원인 확인: 검색 결과 전체와, 고른 고시 본문에서 '최저임금'과 '원' 주변 글자."""
+    lines = []
+    for query in ("최저임금", "최저임금 고시"):
+        rows = lp.parse_admrul_list(get(client, "lawSearch.do", target="admrul", query=query, display="100"))
+        lines.append(f"[검색어 '{query}'] {len(rows)}건")
+        lines += [f"  {r['name']} | {r['kind']} | {r['ministry']} | {r['status']} | 시행 {r['enforce_date']} | 번호 {r['id']}"
+                  for r in rows]
+        for r in lp.pick_min_wage_notices(rows)[:2]:
+            text = get(client, "lawService.do", target="admrul", ID=r["id"])
+            body = lp.parse_admrul_body(text)
+            lines.append(f"  -> 고른 고시 '{r['name']}' 본문 {len(body['text'])}자")
+            for m in list(re.finditer(r"[\d,]{4,}\s*원", body["text"]))[:5]:
+                lines.append("     ..." + body["text"][max(0, m.start() - 40):m.end() + 10].replace("\n", " ") + "...")
+            if not body["text"]:
+                lines.append("     본문(조문내용)이 비어 있어요. 응답에 있는 태그: " + ", ".join(sorted(
+                    {el.tag for el in lp.root_of(text).iter()})[:40]))
+    return lines
+
+
 def load_overrides(s: Session) -> None:
     """DB에 저장한 고시 값을 판단에 쓰도록 올린다 (서버 시작과 갱신 때)."""
     params.set_overrides({(v.key, v.year): (v.value, v.source) for v in s.exec(select(LawValue)).all()})
@@ -130,6 +151,10 @@ def fetch_refs(s: Session, client: httpx.Client) -> dict[str, int]:
 
 
 def main() -> int:
+    if "--min-wage" in sys.argv:  # 최저임금 고시 원인 확인만
+        with httpx.Client(timeout=30, follow_redirects=True) as client:
+            print("\n".join(diagnose_min_wage(client)))
+        return 0
     if not LAW_OC:
         print("LAW_OC가 없어요. .env에 LAW_OC=인증키 를 넣어 주세요. (python -m app.law.probe 로 원인 확인)")
         return 1
@@ -140,7 +165,8 @@ def main() -> int:
             for name, msg in build_law_table(s, client).items():
                 print(f"  {name}: {msg}")
             print("[최저임금 고시]")
-            for line in fetch_min_wage(s, client) or ["  고시에서 시간급을 찾지 못했어요 (law_params.json 값을 계속 써요)"]:
+            for line in fetch_min_wage(s, client) or ["고시에서 시간급을 찾지 못했어요 (law_params.json 값을 계속 써요). "
+                                                      "원인 확인: python -m app.law.fetch --min-wage"]:
                 print(f"  {line}")
             print("[참고 자료: 판례, 해석례, 결정문]")
             for topic, n in fetch_refs(s, client).items():
