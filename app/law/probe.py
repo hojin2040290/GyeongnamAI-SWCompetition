@@ -11,7 +11,7 @@ from collections import Counter
 
 import httpx
 
-from app.config import LAW_OC
+from app.config import BASE_DIR, LAW_OC, _parse_line
 
 BASE = "https://www.law.go.kr/DRF"
 
@@ -58,9 +58,25 @@ def find_law_id(text: str, name: str) -> str | None:
     return None
 
 
+def missing_key_message() -> str:
+    """키를 못 찾았을 때 흔한 실수를 짚어 준다 (키 값은 출력하지 않음)."""
+    env, example = BASE_DIR / ".env", BASE_DIR / ".env.example"
+    if not env.exists():
+        msg = f".env 파일이 없어요 ({env}). "
+        lines = example.read_text(encoding="utf-8-sig").splitlines() if example.exists() else []
+        if any((kv := _parse_line(line)) and kv[0] == "LAW_OC" and kv[1] for line in lines):
+            msg += ("키가 .env.example에 들어 있어요. .env.example은 GitHub에 올라가는 파일이라 위험해요.\n"
+                    "  cp .env.example .env   (키가 든 내용을 .env로 복사)\n"
+                    "  git checkout -- .env.example   (.env.example은 원래대로)")
+        else:
+            msg += "cp .env.example .env 로 만든 뒤 LAW_OC=인증키 를 넣어 주세요."
+        return msg
+    return ".env에서 LAW_OC 값을 찾지 못했어요. LAW_OC=인증키 형태의 줄이 있는지, 파일을 저장했는지 확인해 주세요."
+
+
 def main() -> int:
     if not LAW_OC:
-        print("LAW_OC가 없어요. .env에 LAW_OC=신청할 때 정한 인증키 를 넣어 주세요.")
+        print(missing_key_message())
         return 1
     law_id = None
     with httpx.Client(timeout=20, follow_redirects=True) as c:
