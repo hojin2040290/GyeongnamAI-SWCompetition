@@ -395,20 +395,32 @@ function refsHTML(refs){
 function itemHTML(it){
   const extra=[]; if(it.basis?.length) extra.push(`근거로 쓴 사실: ${esc(it.basis.join(', '))}`);
   if(it.needed?.length) extra.push(`필요한 정보: ${esc(it.needed.join(', '))}`);
-  if(it.ai_reason) extra.push(`AI 판단 근거: ${esc(it.ai_reason)}`);
+  if(it.ai_reason) extra.push(`AI 판단 근거: ${esc(it.ai_reason)}${it.ai_law?` (조항 ${esc(it.ai_law)}, 사실: ${esc(it.ai_fact)})`:''}`);
   else if(it.status==='pending') extra.push(it.ai_error?`<span class="wait-note">AI 응답 대기 중 (${esc(it.ai_error)})</span>`:'<span class="wait-note">AI 응답 대기 중</span> 법 조항 해당 여부는 AI가 판단해요.');
   const src=it.source==='records'?'<span class="chip">근무 기록</span>':'';
   return `<div class="result ${it.status}"><div class="head"><span class="law">${esc(it.law)} ${src}</span><span class="tag ${it.status}">${LABEL[it.status]}</span></div>
     <p>${esc(it.text)}</p>${extra.map(x=>`<p class="basis">${x}</p>`).join('')}${articleHTML(it.article)}${refsHTML(it.refs)}</div>`;
 }
 // 에이전트가 거친 단계 (입력, 판단, 도구 실행, 결과)
+// 에이전트가 일하는 동안: 새로 남는 동작 기록을 불러와 단계별로 보여 준다
+async function agent(box, run){
+  const el=$(box); let last=0, stop=false;
+  try{ last=(await api('GET','/api/agent/last')).id; }catch(e){}
+  el.innerHTML='<div class="live"><p class="wait-note live-head">에이전트가 일하는 중이에요</p><div class="live-steps"></div></div>';
+  (async()=>{ while(!stop){
+    try{ const rows=await api('GET',`/api/agent/live?after=${last}`);
+      if(rows.length && !stop){ last=rows[rows.length-1].id;
+        el.querySelector('.live-steps')?.insertAdjacentHTML('beforeend',rows.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail.slice(0,120))}</div>`).join('')); } }catch(e){}
+    await new Promise(r=>setTimeout(r,700)); } })();
+  try{ return await run(); }catch(e){ el.innerHTML=''; throw e; }finally{ stop=true; }
+}
 function traceHTML(trace){
   if(!trace?.length) return '';
   return `<details class="more trace"><summary>에이전트 동작 보기 (${trace.length}단계)</summary>${trace.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail)}</div>`).join('')}</details>`;
 }
 $('#seekRun').onclick=async()=>{
   $('#seekErr').textContent='';
-  try{ const r=await api('POST','/api/seek/check',seekInput());
+  try{ const r=await agent('#seekTrace',()=>api('POST','/api/seek/check',seekInput()));
     $('#seekItems').innerHTML=r.items.map(itemHTML).join('');
     $('#seekQs').innerHTML=r.questions.map(q=>`<li>${esc(q)}</li>`).join('');
     $('#seekTrace').innerHTML=traceHTML(r.trace);
@@ -637,7 +649,8 @@ function payHTML(r){
     <span>가산수당 (야간 ${fmtH(e.night_min)}, 연장 ${fmtH(e.overtime_min)})</span><span class="num">${won(e.premium)}</span>
     <span class="total">받아야 할 금액</span><span class="total num">${won(e.total)}</span>
     <span>받은 금액</span><span class="num">${r.paid==null?'미입력':won(r.paid)}</span></div>
-    <div class="result ${c.status}" style="margin-top:12px"><div class="head"><span class="law">비교 결과</span><span class="tag ${c.status}">${LABEL[c.status]}</span></div><p>${esc(c.text)}</p></div>
+    <div class="result ${c.status}" style="margin-top:12px"><div class="head"><span class="law">비교 결과</span><span class="tag ${c.status}">${LABEL[c.status]}</span></div><p>${esc(c.text)}</p>${c.ai_reason?`<p class="basis">AI 판단 근거: ${esc(c.ai_reason)} (조항 ${esc(c.ai_law)}, 사실: ${esc(c.ai_fact)})</p>`
+      :c.status==='pending'?`<p class="basis"><span class="wait-note">AI 응답 대기 중</span> 체불인지는 AI가 판단해요.</p>`:''}</div>
     ${e.notes.map(n=>`<p class="hint">${esc(n)}</p>`).join('')}`;
 }
 // 급여 점검 탭
@@ -653,7 +666,7 @@ async function loadPayslips(){
     try{ await api('DELETE',`/api/jobs/${state.current}/payslips/${b.dataset.del}`); await loadPay(); await loadPayslips(); toast('지웠어요'); }catch(e){ toast(e.message); } });
 }
 $('#payMonth').onchange=()=>{ $('#payTrace').innerHTML=''; loadPay().catch(e=>toast(e.message)); };
-$('#payRun').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/agent/payday?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); toast('에이전트가 급여를 점검했어요'); }catch(e){ toast(e.message); } };
+$('#payRun').onclick=async()=>{ try{ const r=await agent('#payTrace',()=>api('POST',`/api/jobs/${state.current}/agent/payday?month=${$('#payMonth').value}`)); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); toast('에이전트가 급여를 점검했어요'); }catch(e){ toast(e.message); } };
 // 명세서 사진: 고르면 바로 원본 저장 후 AI가 읽어 금액과 달을 채운다. 사용자가 확인하고 저장한다.
 let payslipEv=null;
 $('#payFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f);
@@ -669,7 +682,7 @@ $('#payFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; cons
 $('#paySave').onclick=async()=>{
   const amt=$('#payAmount').value; if(!amt){ toast('받은 금액을 입력해 주세요'); return; }
   const fd=new FormData(); fd.append('month',$('#payMonth').value); fd.append('amount',amt); if(payslipEv) fd.append('evidence_id',payslipEv);
-  try{ const r=await api('POST',`/api/jobs/${state.current}/payslip`,fd,true); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace);
+  try{ const r=await agent('#payTrace',()=>api('POST',`/api/jobs/${state.current}/payslip`,fd,true)); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace);
     $('#payAmount').value=''; $('#payFile').value=''; $('#payOcr').textContent=''; payslipEv=null; await loadPayslips(); toast('저장하고 비교했어요'); }catch(e){ toast(e.message); }
 };
 
@@ -717,7 +730,7 @@ function saveFields(jobId){ return api('PUT',`/api/jobs/${jobId}/contract/fields
 $('#fieldsBox').addEventListener('input',()=>{ fieldsCache[state.current]=readFields(); });
 $('#checkRun').onclick=async()=>{
   fieldsCache[state.current]=readFields(); pendingSaves.delete(`fields-${state.current}`); clearTimeout(saveTimers[`fields-${state.current}`]);
-  try{ await saveFields(state.current); $('#fieldsSaved').textContent='자동 저장됨'; const r=await api('POST',`/api/jobs/${state.current}/check`);
+  try{ await saveFields(state.current); $('#fieldsSaved').textContent='자동 저장됨'; const r=await agent('#checkTrace',()=>api('POST',`/api/jobs/${state.current}/check`));
     renderCheck(r.items); $('#checkTrace').innerHTML=traceHTML(r.trace); await loadLog(); toast('점검을 마쳤어요'); }catch(e){ toast(e.message); }
 };
 
@@ -737,7 +750,7 @@ $('#evFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const
   try{ await api('POST',`/api/jobs/${state.current}/evidence`,fd,true); await loadDocs(); toast('자료를 원본으로 저장했어요'); }catch(err){ toast(err.message); } e.target.value=''; };
 $('#reportBtn').onclick=async()=>{
   const w=window.open('','_blank');  // 팝업 차단을 피하려고 누른 순간 창을 먼저 연다
-  try{ const r=await api('POST',`/api/jobs/${state.current}/report`); if(w) w.location=r.url; else location.href=r.url;
+  try{ const r=await agent('#reportTrace',()=>api('POST',`/api/jobs/${state.current}/report`)); if(w) w.location=r.url; else location.href=r.url;
     await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace); toast(r.summary_ai?'상담 사전 자료를 만들었어요':'AI 응답 대기 중이라 사건 요약 없이 만들었어요'); }
   catch(e){ if(w) w.close(); toast(e.message); } };
 
@@ -760,7 +773,7 @@ function renderGuard(g){
 const MSG_SOURCE={ai:'AI가 이번 상황에 맞게 작성한 문구예요. 고쳐 써도 돼요.',
   waiting:'AI 응답 대기 중이라 기본 문구를 보여 드려요. AI가 응답하면 상황에 맞는 문구로 바뀌어요.',custom:'직접 고친 문구예요.'};
 function msgSource(src){ const n=$('#msgSource'); n.textContent=MSG_SOURCE[src]||''; n.classList.toggle('wait',src==='waiting'); }
-$('#reported').onchange=async e=>{ try{ const g=await api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked}); renderGuard(g); $('#guardTrace').innerHTML=traceHTML(g.trace); }catch(err){ toast(err.message); } };
+$('#reported').onchange=async e=>{ try{ const g=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked})); renderGuard(g); $('#guardTrace').innerHTML=traceHTML(g.trace); }catch(err){ toast(err.message); } };
 async function saveKeywords(list){ try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/keywords`,{keywords:list})); }catch(e){ toast(e.message); } }
 $('#kwAdd').onclick=()=>{ const v=$('#kwInput').value.trim(); if(!v){ toast('검색어를 넣어 주세요'); return; }
   $('#kwInput').value=''; saveKeywords([...(state.keywords||[]), ...v.split(',').map(x=>x.trim()).filter(Boolean)]); };
@@ -773,7 +786,7 @@ $('#msgReset').onclick=async()=>{ if(!confirm('고친 문구를 지우고 원래
   try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/message`,{message:''})); $('#msgSaved').textContent='원래 문구로 되돌렸어요'; }catch(e){ toast(e.message); } };
 $('#copyMsg').onclick=()=>{ const t=$('#warnMsg').value; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('안내 문구를 복사했어요'),()=>toast('직접 선택해 복사해 주세요')); };
 $('#postAdd').onclick=async()=>{ const url=$('#postUrl').value.trim(); if(!url){ toast('게시물 주소를 넣어 주세요'); return; }
-  try{ const r=await api('POST',`/api/jobs/${state.current}/guard/posts`,{url}); $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast('주소와 확인 시각을 보존했어요'); }catch(e){ toast(e.message); } };
-$('#postSearch').onclick=async()=>{ try{ const r=await api('POST',`/api/jobs/${state.current}/guard/search`); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
+  try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/posts`,{url})); $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast('주소와 확인 시각을 보존했어요'); }catch(e){ toast(e.message); } };
+$('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/search`)); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
 
 boot();

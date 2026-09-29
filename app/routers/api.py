@@ -224,7 +224,7 @@ def set_quit(job_id: int, data: QuitIn, u: User = Depends(current_user), s: Sess
     job.status, job.quit_date, job.paid_after_quit = "quit", data.quit_date, None
     s.add(job)
     s.commit()
-    return settlement(job_id, u, s)
+    return {"settlement": core.run_quit_check(s, u.id, job_id)}
 
 
 class PaidIn(BaseModel):
@@ -237,13 +237,30 @@ def set_paid(job_id: int, data: PaidIn, u: User = Depends(current_user), s: Sess
     job.paid_after_quit = data.paid
     s.add(job)
     s.commit()
-    return settlement(job_id, u, s)
+    return {"settlement": core.run_quit_check(s, u.id, job_id)}
+
+
+def _saved_judgment(s: Session, job_id: int, kind: str, now: dict, same) -> dict:
+    """코드가 방금 계산한 값에, 같은 사실로 저장된 AI 판단이 있으면 붙인다 (화면을 다시 열 때마다 AI를 부르지 않음)."""
+    rows = s.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == kind)
+                  .order_by(CheckRun.id.desc())).all()
+    for row in rows:
+        saved = json.loads(row.results_json)
+        if same(saved):
+            return saved
+    return now
 
 
 @router.get("/jobs/{job_id}/settlement")
 def settlement(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """지급 기한은 코드가 다시 계산하고, 위반 판단은 저장된 에이전트 판단을 쓴다 (없으면 AI 응답 대기 중)."""
     own_job(s, u, job_id)
-    return {"settlement": core.run_quit_check(s, u.id, job_id)}
+    st = make_tools(s, u.id, job_id)["settlement"]()
+    if not st:
+        return {"settlement": None}
+    saved = _saved_judgment(s, job_id, "quit", st, lambda x: x.get("due") == st["due"]
+                            and x.get("rule_status") == st["rule_status"] and x.get("left") == st["left"])
+    return {"settlement": saved}
 
 
 # ---------- 출퇴근 ----------
@@ -519,7 +536,9 @@ def pay(job_id: int, month: str, u: User = Depends(current_user), s: Session = D
     t = make_tools(s, u.id, job_id)
     exp = t["calc_pay"](month)
     paid = t["get_payslip"](month)
-    return {"expected": exp, "paid": paid, "compare": t["compare_pay"](exp, paid)}
+    now = {"month": month, "expected": exp, "paid": paid, "compare": t["compare_pay"](exp, paid)}
+    return _saved_judgment(s, job_id, "payday", now, lambda x: x.get("month") == month and x.get("paid") == paid
+                           and x.get("expected") == json.loads(json.dumps(exp, default=str)))
 
 
 @router.post("/jobs/{job_id}/agent/payday")
@@ -640,6 +659,22 @@ def add_post(job_id: int, data: PostIn, u: User = Depends(current_user), s: Sess
 def guard_search(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
     return core.run_guard_search(s, u.id, job_id)
+
+
+# ---------- 에이전트 진행 상황 (화면에 단계별로 보여 주기) ----------
+@router.get("/agent/last")
+def agent_last(u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """지금까지 남은 이 사용자의 마지막 동작 기록 번호. 이 뒤의 기록이 새로 시작한 에이전트의 단계다."""
+    row = s.exec(select(AgentLog).where(AgentLog.user_id == u.id).order_by(AgentLog.id.desc())).first()
+    return {"id": row.id if row else 0}
+
+
+@router.get("/agent/live")
+def agent_live(after: int = 0, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """after 번호 뒤에 새로 남은 동작 기록 (에이전트가 일하는 동안 화면이 불러 간다)."""
+    rows = s.exec(select(AgentLog).where(AgentLog.user_id == u.id, AgentLog.id > after)
+                  .order_by(AgentLog.id).limit(50)).all()
+    return [{"id": r.id, "event": r.event, "step": r.step, "detail": r.detail[:300]} for r in rows]
 
 
 # ---------- AI 연결 상태 ----------

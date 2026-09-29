@@ -215,6 +215,7 @@ def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "
     out = r.agent(goal, {})
     st = r.state.get("settlement") or r.call("settlement")
     st = apply_one(session, st, out, r.ai_error)
+    r.tools["save_check"]("quit", st)
     if not r.ai_used:
         unpaid = st["rule_status"] != "ok"  # 받았다고 기록하지 않음
         if unpaid and st["left"] < 0:
@@ -316,10 +317,14 @@ def run_guard_search(session: Session, user_id: int, job_id: int, trigger: str =
 
 
 def run_guard_review(session: Session, user_id: int, job_id: int, trigger: str = "user", r: Run | None = None) -> dict:
-    """판별 대기 게시물 판별 (게시물을 보존한 뒤, 또는 AI 응답 대기 중이던 일을 다시 맡길 때)."""
+    """판별 대기 게시물 판별 (게시물을 보존한 뒤, 또는 AI 응답 대기 중이던 일을 다시 맡길 때).
+    AI가 쓴 안내 문구가 아직 없으면 함께 맡긴다."""
     r = r or Run(session, user_id, job_id, "guard_review", trigger)
-    if r.tools["pending_posts"]():
-        r.agent(Goal(POST_GOAL, POST_TOOLS, DONE), {"보복 금지 관련 조항": _retaliation_laws()})
+    no_msg = r.tools["get_job"]().reported and not r.tools["get_job"]().guard_ai_message
+    if r.tools["pending_posts"]() or no_msg:
+        text = (POST_GOAL + (" 아직 AI가 쓴 보복 금지 안내 문구가 없으니 save_warning_message로 함께 저장해 주세요." if no_msg else ""))
+        r.agent(Goal(text, POST_TOOLS + (["save_warning_message"] if no_msg else []), DONE),
+                {"보복 금지 관련 조항": _retaliation_laws()})
     return _posts_result(r)
 
 
