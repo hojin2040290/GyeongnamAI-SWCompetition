@@ -8,6 +8,7 @@ AI가 없거나 응답하지 않으면 정해 둔 순서로 사실만 정리하�
 import dataclasses
 import json
 import uuid
+from contextvars import ContextVar
 from datetime import date
 
 from sqlmodel import Session
@@ -21,6 +22,7 @@ from app.law.lookup import known_law
 from app.models import AgentLog
 
 MAX_STEPS = 10  # AI 응답이 없을 때 정해 둔 순서의 도구 호출 수 제한
+FOLLOWUP_NOTE: ContextVar[str] = ContextVar("followup_note", default="")  # 예약한 확인을 실행할 때 그 이유
 
 S = {"type": "string"}
 JUDGE_ONE = {"status": {"type": "string", "enum": ["ok", "warn", "bad"], "description": "정상, 확인 필요, 위반 의심"},
@@ -40,13 +42,14 @@ class Run:
         self.run_id = uuid.uuid4().hex[:8]
         self.tools = make_tools(session, user_id, job_id)
         self.state: dict = {"event": event, "run_id": self.run_id}  # AI가 도구로 만든 결과 (검토 항목, 급여 비교 등)
+        self.followup = FOLLOWUP_NOTE.get()
         self.steps = 0
         self.ai_used = False
         self.ai_tried = False  # AI에게 맡기려 했는지 (결과 기록에 AI 몫이 빠졌는지 적기 위해)
         self.ai_error = ""
         self.trace: list[dict] = []
         label = {"user": "사용자 입력", "schedule": "정해진 시점 (자동 점검)", "agent": "에이전트가 시작",
-                 "answer": "사용자가 에이전트의 질문에 답함",
+                 "answer": "사용자가 에이전트의 질문에 답함", "followup": "에이전트가 예약한 확인",
                  "retry": "AI 응답 대기 중이던 일 다시 맡김"}
         self.log("시작", label.get(trigger, trigger))
 
@@ -67,8 +70,12 @@ class Run:
         if self.job_id is not None:  # 지난 메모와 진행 상황을 넘기고, 기억 남기기와 조언을 쓸 수 있게 한다
             context = {**context, "진행 상황": case.progress(self.s, self.tools["get_job"]()),
                        "지난 메모": case.memories(self.s, self.job_id) or "아직 없음",
-                       "질문과 답": case.questions(self.s, self.job_id) or "아직 없음"}
-            goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice", "ask_user", "get_answers"])
+                       "질문과 답": case.questions(self.s, self.job_id) or "아직 없음",
+                       "예약한 확인": case.followups(self.s, self.job_id) or "없음"}
+            if self.followup:
+                context["이번에 할 일"] = f"지난번에 예약한 확인이에요: {self.followup}"
+            goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice", "ask_user", "get_answers",
+                                                    "schedule_followup"])
         out = run_agent(self, goal, tools, context)
         self.ai_tried, self.ai_used = True, out is not None
         if not self.ai_used:
@@ -423,19 +430,32 @@ RESUME = {"contract_check": "contract_check", "shift_check": "contract_check", "
           "guard_search": "guard_review", "guard_preserve": "guard_review", "guard_review": "guard_review"}
 
 
-def run_answer(session: Session, user_id: int, job_id: int, event: str, context: dict) -> dict:
-    """답을 받아 질문했던 점검을 다시 시작한다 (퇴근 점검은 그 주만 보므로 계약서 점검으로 이어 간다)."""
-    kind = RESUME.get(event, "contract_check")
+def run_again(session: Session, user_id: int, job_id: int, kind: str, month: str, trigger: str) -> dict:
+    """점검 하나를 다시 시작한다 (질문에 답했을 때, 예약한 확인의 때가 됐을 때)."""
     if kind == "payday":
-        return run_payday(session, user_id, job_id, context.get("month") or today_kst().strftime("%Y-%m"), "answer")
+        return run_payday(session, user_id, job_id, month or today_kst().strftime("%Y-%m"), trigger)
     if kind == "quit_check":
-        st = run_quit_check(session, user_id, job_id, "answer")
+        st = run_quit_check(session, user_id, job_id, trigger)
         return {"settlement": st, "trace": []}
     if kind == "report":
-        return run_report(session, user_id, job_id, "answer")
+        return run_report(session, user_id, job_id, trigger)
     if kind == "daily":
         return run_daily(session, user_id, job_id)
     if kind == "guard_review":
-        r = Run(session, user_id, job_id, "guard_review", "answer")
+        r = Run(session, user_id, job_id, "guard_review", trigger)
         return r.done({"classify": run_guard_review(session, user_id, job_id, r=r)}, "게시물 판별 다시")
-    return run_contract_check(session, user_id, job_id, "answer")
+    return run_contract_check(session, user_id, job_id, trigger)
+
+
+def run_answer(session: Session, user_id: int, job_id: int, event: str, context: dict) -> dict:
+    """답을 받아 질문했던 점검을 다시 시작한다 (퇴근 점검은 그 주만 보므로 계약서 점검으로 이어 간다)."""
+    return run_again(session, user_id, job_id, RESUME.get(event, "contract_check"), context.get("month", ""), "answer")
+
+
+def run_followup(session: Session, task) -> dict:
+    """에이전트가 예약한 확인을 실행한다. 예약한 이유를 이번 실행의 상황에 넘긴다."""
+    token = FOLLOWUP_NOTE.set(task.note)
+    try:
+        return run_again(session, task.user_id, task.job_id, task.kind, task.month, "followup")
+    finally:
+        FOLLOWUP_NOTE.reset(token)

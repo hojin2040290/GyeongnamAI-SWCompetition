@@ -10,7 +10,7 @@ from app.calc.timeutil import now_kst
 from app.config import AI_RETRY_MIN, AI_RETRY_PER_DAY, LAW_OC, OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
 from app.db import engine
 from app.llm import client as llm_client
-from app.models import AgentLog, CheckRun, GuardPost, Job, Report, WorkRecord
+from app.models import AgentLog, AgentTask, CheckRun, GuardPost, Job, Report, WorkRecord
 
 scheduler = BackgroundScheduler(timezone=TIMEZONE)
 
@@ -112,11 +112,28 @@ def retry_waiting() -> dict:
     return {"retried": done}
 
 
+def run_due_followups() -> dict:
+    """에이전트가 예약한 확인 중 때가 된 것을 실행한다 (AI가 없으면 정해 둔 순서로, 판단은 대기)."""
+    done: list[int] = []
+    with Session(engine) as s:
+        due = s.exec(select(AgentTask).where(AgentTask.status == "pending", AgentTask.due_at <= now_kst())
+                     .order_by(AgentTask.due_at)).all()
+        for task in due:
+            task.status, task.done_at = "done", now_kst()  # 실행 중 오류가 나도 같은 확인을 되풀이하지 않게 먼저 표시
+            s.add(task)
+            s.commit()
+            core.run_followup(s, task)
+            done.append(task.id)
+    return {"followups": done}
+
+
 def start() -> None:
     if not scheduler.running:
         scheduler.add_job(daily_check, "cron", hour=SCHEDULE_HOUR, minute=0, id="daily_check", replace_existing=True)
         scheduler.add_job(open_record_check, "interval", minutes=30, id="open_record_check", replace_existing=True)
         scheduler.add_job(retry_waiting, "interval", minutes=AI_RETRY_MIN, id="retry_waiting", replace_existing=True)
+        scheduler.add_job(run_due_followups, "interval", minutes=AI_RETRY_MIN, id="run_due_followups",
+                          replace_existing=True)
         scheduler.start()
 
 
