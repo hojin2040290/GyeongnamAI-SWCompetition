@@ -12,6 +12,7 @@ from typing import Callable
 from app.llm import client
 
 MAX_STEPS = 10  # AI 판단 반복 최대 횟수
+REFLECT_MAX = 2  # 검증 장치가 판단을 돌려보내 다시 판단하게 하는 최대 횟수
 RESULT_MAX = 6000  # AI에게 돌려주는 도구 결과 글자 수
 AI_WAITING = "AI 응답 대기 중"
 
@@ -50,6 +51,7 @@ class Goal:
     finish: dict = field(default_factory=dict)
     finish_required: list = field(default_factory=list)
     check: Callable[[dict], str | None] | None = None  # 문제가 있으면 AI에게 돌려줄 말
+    review: Callable[[dict], list[dict]] | None = None  # 검증 장치: 판단마다 문제를 찾아 AI에게 돌려준다
 
     def finish_spec(self) -> dict:
         return Tool("finish", "목표를 이뤘을 때 결과를 내고 끝낸다.", lambda **_: None,
@@ -116,11 +118,20 @@ def run_agent(run, goal: Goal, tools: dict[str, Tool], context: dict) -> dict | 
             name, args = call["function"]["name"], _args(call)
             if name == "finish":
                 problem = goal.check(args) if goal.check else None
-                if problem is None:
+                feedback = goal.review(args) if goal.review and problem is None else []
+                if problem is None and feedback and run.state.get("reflect", 0) < REFLECT_MAX:
+                    run.state["reflect"] = run.state.get("reflect", 0) + 1
+                    result = {"검증 장치": feedback,
+                              "요청": "문제가 된 판단의 근거를 다시 확인하고 finish로 다시 판단해 주세요. "
+                                      "다시 봐도 같다면 이유를 reason에 적어 같은 판단을 내도 돼요."}
+                    run.log(f"검증 장치 {run.state['reflect']}", "다시 판단 요청: " + "; ".join(
+                        f"{f.get('i', '')} {f['문제']}" for f in feedback)[:280])
+                elif problem is None:
                     run.log("AI 끝냄", _dump(args)[:300])
                     return args
-                result = {"error": problem}
-                run.log("끝내기 전 확인", problem)
+                else:
+                    result = {"error": problem}
+                    run.log("끝내기 전 확인", problem)
             else:
                 result = use_tool(run, tools, goal.tools, name, args)
             messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "name": name, "content": _dump(result)})

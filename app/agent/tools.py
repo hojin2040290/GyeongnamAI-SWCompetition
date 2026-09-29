@@ -48,6 +48,29 @@ def for_ai(items: list[dict]) -> list[dict]:
             for i, it in enumerate(items)]
 
 
+def user_info_missing(it: dict) -> list[str]:
+    """판단에 필요한데 기록에 없는 사용자 정보 (AI 몫은 뺀다)."""
+    return [n for n in it.get("needed", []) if "AI" not in n]
+
+
+def judgment_problems(session: Session, it: dict, j: dict) -> list[str]:
+    """검증 장치: AI 판단 하나가 받아들일 수 없거나 다시 볼 필요가 있는 이유."""
+    status, law, fact = j.get("status"), str(j.get("law", "")).strip(), str(j.get("fact", "")).strip()
+    out = []
+    if status not in (engine.OK, engine.WARN, engine.BAD):
+        out.append("status는 ok, warn, bad 중 하나여야 해요")
+    if law != it.get("law") and not known_law(session, law):
+        out.append(f"근거 조항 '{law}'이 법 기준표에 없어요. get_article로 확인한 조항을 써 주세요")
+    if not fact:
+        out.append("근거로 쓴 사실(fact)이 없어요")
+    if status == engine.OK and it.get("rule_status") == engine.BAD:
+        out.append("정상이라 했지만 코드 계산과 법 기준 대조로는 위반이 의심돼요. 사실: "
+                   + ", ".join(map(str, it.get("basis", [])))[:200])
+    if status in (engine.OK, engine.BAD) and user_info_missing(it):
+        out.append(f"판단에 필요한 정보({', '.join(user_info_missing(it))})가 기록에 없어요. 추측하지 말고 warn으로 두세요")
+    return out
+
+
 def make_tools(session: Session, user_id: int, job_id: int | None):
     def get_user() -> User:
         return session.get(User, user_id)
@@ -144,6 +167,23 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
             if it["status"] == engine.PENDING and "ai_error" not in it:
                 it["ai_error"] = "AI가 이 항목을 판단하지 않았어요"
         return engine.cross_check(items)
+
+    def review_judgments(items: list[dict], judgments) -> list[dict]:
+        """검증 장치가 AI에게 돌려줄 문제 목록 (항목 번호와 문제). 판단하지 않은 항목도 알려 준다."""
+        out, seen = [], set()
+        for j in judgments if isinstance(judgments, list) else []:
+            i = j.get("i") if isinstance(j, dict) else None
+            if not (isinstance(i, int) and 0 <= i < len(items)):
+                out.append({"i": i, "문제": "없는 항목 번호예요"})
+                continue
+            seen.add(i)
+            out += [{"i": i, "조항": items[i]["law"], "문제": p} for p in judgment_problems(session, items[i], j)]
+        out += [{"i": i, "조항": it["law"], "문제": "이 항목을 판단하지 않았어요"}
+                for i, it in enumerate(items) if i not in seen]
+        return out
+
+    def review_one(target: dict, j: dict) -> list[dict]:
+        return [{"문제": p} for p in judgment_problems(session, target, j or {})]
 
     def read_contract_image(evidence_id: int) -> dict:
         """계약서 사진 읽기 (비전 모델). 읽은 값은 사용자가 확인한 뒤 저장한다."""
@@ -272,6 +312,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         "get_records": get_records, "get_record": get_record, "find_open_record": find_open_record,
         "judge_job": judge_job, "judge_records": judge_records, "judge_shift": judge_shift, "judge_seek": judge_seek,
         "attach_law": attach_law, "wait_ai": wait_ai, "apply_judgments": apply_judgments,
+        "review_judgments": review_judgments, "review_one": review_one,
         "calc_pay": calc_pay, "get_payslip": get_payslip, "compare_pay": compare_pay, "settlement": settlement,
         "save_check": save_check, "notify": notify, "counsel_for_age": counsel_for_age, "build_report": build_report,
         "set_reported": set_reported, "warning_message": warning_message, "search_posts": search_posts,

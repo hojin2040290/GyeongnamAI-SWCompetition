@@ -46,8 +46,12 @@ def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
             return reply([("check_rules", {})], "먼저 검토할 항목을 받아 볼게요.")
         if "get_article" not in names:
             return reply([("get_article", {"label": items[0]["조항"]})])
-        judgments = [{"i": it["i"], "status": "ok", "law": it["조항"], "fact": (it["사실"] or ["입력 정보"])[0],
-                      "reason": "테스트"} for it in items]
+        # 처음에는 모두 정상이라 하고, 검증 장치가 돌려보낸 항목은 확인 필요로 다시 판단한다
+        fb = called(done, "finish") or {}
+        flagged = {f["i"] for f in fb.get("검증 장치", [])}
+        judgments = [{"i": it["i"], "status": "warn" if it["i"] in flagged else "ok", "law": it["조항"],
+                      "fact": (it["사실"] or ["입력 정보"])[0],
+                      "reason": "검증 장치 의견 반영" if it["i"] in flagged else "테스트"} for it in items]
         return reply([("finish", {"judgments": judgments, "extra_questions": ["주휴수당을 주나요"]})])
     if "compare_pay" in tools:
         month = re.search(r"\d{4}-\d{2}", goal).group()

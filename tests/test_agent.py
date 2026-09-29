@@ -57,7 +57,8 @@ def test_agent_chooses_tools_and_finishes(env, monkeypatch):
     a, ja, *_ = env
     agent = use(monkeypatch, smart_policy)
     r = a.post(f"/api/jobs/{ja}/check").json()
-    assert r["ai_agent"] and len(agent.payloads) == 3  # check_rules → get_article → finish
+    # check_rules → get_article → finish(검증 장치가 돌려보냄) → finish(다시 판단)
+    assert r["ai_agent"] and len(agent.payloads) == 4
     assert agent.payloads[0]["tool_choice"] == "auto"
     first = agent.payloads[0]["messages"][1]["content"]
     assert first.startswith("목표:") and "check_rules" in first
@@ -65,6 +66,29 @@ def test_agent_chooses_tools_and_finishes(env, monkeypatch):
     tool_msgs = [m for m in agent.payloads[1]["messages"] if m["role"] == "tool"]
     assert tool_msgs[0]["name"] == "check_rules" and "rule_status" not in tool_msgs[0]["content"]
     assert [t["step"] for t in r["trace"]].count("AI 판단 1") == 1
+    feedback = json.loads([m for m in agent.payloads[3]["messages"] if m["role"] == "tool"][-1]["content"])
+    assert any("위반이 의심돼요" in f["문제"] for f in feedback["검증 장치"])
+    night = [i for i in r["items"] if i["law"] == "근로기준법 제70조"][0]
+    assert night["status"] == "warn" and night["ai_reason"] == "검증 장치 의견 반영"
+    assert any(t["step"] == "검증 장치 1" for t in r["trace"])
+
+
+def test_reflection_is_limited(env, monkeypatch):
+    """AI가 같은 판단을 고집해도 검증 장치는 REFLECT_MAX번만 돌려보내고, 받은 뒤 확인 필요로 되돌린다."""
+    a, ja, *_ = env
+
+    def stubborn(goal, done, tools):
+        items = called(done, "check_rules")
+        if items is None:
+            return reply([("check_rules", {})])
+        return reply([("finish", {"judgments": [{"i": it["i"], "status": "ok", "law": it["조항"],
+                                                 "fact": (it["사실"] or ["입력 정보"])[0], "reason": "고집"}
+                                                for it in items]})])
+    agent = use(monkeypatch, stubborn)
+    r = a.post(f"/api/jobs/{ja}/check").json()
+    assert len(agent.payloads) == 2 + loop.REFLECT_MAX and r["ai_agent"]
+    night = [i for i in r["items"] if i["law"] == "근로기준법 제70조"][0]
+    assert night["status"] == "warn"
 
 
 def test_step_limit_falls_back_to_waiting(env, monkeypatch):

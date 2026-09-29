@@ -119,7 +119,8 @@ def apply_one(s: Session, target: dict, out: dict | None, error: str = "") -> di
 def _judge_items(r: Run, goal_text: str, tools: list[str], make_items, context: dict, finish_extra: dict | None = None):
     """검토 항목 판단 (계약서, 퇴근, 지원 전 공통): AI가 check_rules로 항목을 받아 판단한다."""
     goal = Goal(goal_text, ["check_rules", *tools], {**JUDGMENTS, **(finish_extra or {})}, ["judgments"],
-                check=r.need("items", "먼저 check_rules로 검토 항목을 받아 주세요"))
+                check=r.need("items", "먼저 check_rules로 검토 항목을 받아 주세요"),
+                review=lambda a: r.tools["review_judgments"](r.state["items"], a.get("judgments")))
     out = r.agent(goal, context, [r.rules_tool(make_items, "법 기준표와 대조해 검토할 항목과 근거 사실을 받는다.")])
     if out:
         return r.tools["apply_judgments"](r.state["items"], out.get("judgments")), out
@@ -189,7 +190,8 @@ def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger:
     goal = Goal(f"{month} 급여를 계산한 금액과 받은 금액을 compare_pay로 비교하고, 체불이 의심되는지 판단해 finish에 담아 주세요. "
                 "금액은 도구 결과만 쓰세요. 적게 받았거나 받은 금액이 없으면 사용자에게 알림을 보내 주세요.",
                 ["get_profile", "calc_pay", "get_payslip", "compare_pay", "calc_work_days", "get_article", "notify"],
-                JUDGE_ONE, list(JUDGE_ONE), check=r.need("pay", "먼저 compare_pay로 금액을 비교해 주세요"))
+                JUDGE_ONE, list(JUDGE_ONE), check=r.need("pay", "먼저 compare_pay로 금액을 비교해 주세요"),
+                review=lambda a: r.tools["review_one"](r.state["pay"]["compare"], a))
     out = r.agent(goal, {"달": month})
     pay = r.state.get("pay")
     if not pay:
@@ -214,7 +216,8 @@ def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "
     goal = Goal("사용자가 일을 그만뒀어요. settlement로 임금 지급 기한을 확인하고, 기한 안에 받지 못한 것이 의심되는지 판단해 "
                 "finish에 담아 주세요. 기한이 지났거나 3일 안으로 다가왔는데 받았다는 기록이 없으면 사용자에게 알려 주세요.",
                 ["get_profile", "settlement", "get_article", "notify"], JUDGE_ONE, list(JUDGE_ONE),
-                check=r.need("settlement", "먼저 settlement로 지급 기한을 확인해 주세요"))
+                check=r.need("settlement", "먼저 settlement로 지급 기한을 확인해 주세요"),
+                review=lambda a: r.tools["review_one"](r.state["settlement"], a))
     out = r.agent(goal, {})
     st = r.state.get("settlement") or r.call("settlement")
     st = apply_one(session, st, out, r.ai_error)
