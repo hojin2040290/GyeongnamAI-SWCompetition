@@ -323,3 +323,9 @@ em.hint.bad{color:var(--bad)}
 .tag.pending{color:var(--blue);background:var(--blue-soft)}
 .result.pending{border-color:#8fa3e3}
 .summary .pending strong{color:var(--blue)}
+
+/* 참고 판례·해석 */
+.ref{border-top:1px solid var(--line);padding:8px 0}
+.ref:first-of-type{border-top:0}
+.ref-head{font-size:13.5px}
+.ref-sum{margin:4px 0 0;font-size:13px;color:var(--ink-soft);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}

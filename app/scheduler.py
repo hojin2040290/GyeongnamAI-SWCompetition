@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.agent import core
 from app.calc.timeutil import today_kst
-from app.config import OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
+from app.config import LAW_OC, OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
 from app.db import engine
 from app.models import Job, WorkRecord
 
@@ -30,7 +30,24 @@ def daily_check() -> dict:
             if job.reported:
                 core.run_guard_search(s, job.user_id, job.id, trigger="schedule")
                 done["guard"] += 1
+    done["law_changed"] = refresh_law_table()
     return done
+
+
+def refresh_law_table() -> list[str] | str:
+    """법령 현행 판이 바뀌었으면 법 기준표를 새로 만든다 (법제처 키가 없으면 건너뜀)."""
+    if not LAW_OC:
+        return "법제처 키가 없어 건너뜀"
+    import httpx
+    from app.law import fetch
+    try:
+        with httpx.Client(timeout=30, follow_redirects=True) as client, Session(engine) as s:
+            changed = fetch.refresh_if_changed(s, client)
+            if changed:
+                fetch.fetch_min_wage(s, client)
+            return changed
+    except Exception as exc:  # 법제처 오류로 다른 자동 점검이 멈추지 않게
+        return f"법제처 확인 실패: {type(exc).__name__}"
 
 
 def open_record_check() -> dict:

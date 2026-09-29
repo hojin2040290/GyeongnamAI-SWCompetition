@@ -18,7 +18,7 @@ from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
 from app.config import OPEN_RECORD_ALERT_HOURS, PUNCH_CONFIRM_SEC
 from app.db import get_session
-from app.law.lookup import attach_articles, table_status
+from app.law.lookup import attach_articles, attach_refs, table_status
 from app.llm import client as llm_client
 from app.models import (AgentLog, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, Report,
                         User, WorkRecord)
@@ -434,7 +434,7 @@ def last_check(job_id: int, u: User = Depends(current_user), s: Session = Depend
     own_job(s, u, job_id)
     row = s.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "contract")
                  .order_by(CheckRun.id.desc())).first()
-    items = attach_articles(s, json.loads(row.results_json)) if row else None
+    items = attach_refs(s, attach_articles(s, json.loads(row.results_json))) if row else None
     return {"items": items, "created_at": row.created_at.isoformat() if row else None}
 
 

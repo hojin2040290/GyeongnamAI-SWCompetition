@@ -53,7 +53,10 @@ evaluation/          정답 사례 묶음(cases.json)과 목표 성능 측정
 연결 방법: `.env.example`을 `.env`로 복사하고 `LLM_ENABLED=true`, `LLM_BASE_URL`, `LLM_MODEL`(비전 모델이면 사진 읽기도 같은 모델)을 채운 뒤 서버를 다시 켠다.
 
 ## 외부 API (없으면 해당 기능만 건너뜀)
-- `LAW_OC`: 법제처 국가법령정보 공동활용. `python -m app.law.probe`로 신청한 API 응답 확인, `python -m app.law.fetch`로 조문 저장
+- `LAW_OC`: 법제처 국가법령정보 공동활용 (신청할 때 등록한 IP에서만 호출됨)
+  - `python -m app.law.probe`: 신청한 API의 응답 구조 확인 (결과는 law_probe_result.txt)
+  - `python -m app.law.fetch`: 법 기준표 만들기. 근로 관련 법령 7개의 현행 조문과 별표, 고용노동부 최저임금 고시의 시간급(law_params.json보다 우선), 점검 주제별 판례·법제처 해석례·고용노동부 해석·노동위원회 결정문
+  - 매일 자동 점검 때 법령 현행 판이 바뀌었으면 바뀐 법령만 다시 받는다
 - `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`: 공개 게시물 검색
 - 게시물 화면 캡처: `pip install playwright && playwright install chromium`
 
