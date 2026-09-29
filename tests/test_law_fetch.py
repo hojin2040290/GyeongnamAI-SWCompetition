@@ -35,12 +35,20 @@ LAW_BODY = """<법령><기본정보><법령ID>001872</법령ID><법령명_한글
 </조문><별표><별표단위><별표번호>0001</별표번호><별표가지번호>00</별표가지번호><별표구분>별표</별표구분>
 <별표제목>테스트 별표</별표제목><별표내용>별표 내용&lt;br/&gt;둘째 줄</별표내용></별표단위></별표></법령>"""
 
-ADMRUL_LIST = """<AdmRulSearch>
-<admrul id='1'><행정규칙일련번호>1</행정규칙일련번호><행정규칙명>2026년 선원 최저임금 고시</행정규칙명><소관부처명>해양수산부</소관부처명><현행연혁구분>현행</현행연혁구분><시행일자>20260101</시행일자></admrul>
-<admrul id='2'><행정규칙일련번호>2</행정규칙일련번호><행정규칙명>2026년 적용 최저임금 고시</행정규칙명><소관부처명>고용노동부</소관부처명><현행연혁구분>현행</현행연혁구분><발령번호>2025-40</발령번호><시행일자>20260101</시행일자></admrul>
-</AdmRulSearch>"""
-ADMRUL_BODY = """<AdmRulService><행정규칙기본정보><행정규칙명>2026년 적용 최저임금 고시</행정규칙명><발령번호>2025-40</발령번호>
-<시행일자>20260101</시행일자></행정규칙기본정보><조문내용>1. 최저임금액 가. 모든 산업 : 시간급 10,320원</조문내용></AdmRulService>"""
+def admrul(i, name, ministry, status, date, number=""):
+    return (f"<admrul id='{i}'><행정규칙일련번호>{i}</행정규칙일련번호><행정규칙명>{name}</행정규칙명><소관부처명>{ministry}</소관부처명>"
+            f"<현행연혁구분>{status}</현행연혁구분><발령번호>{number}</발령번호><시행일자>{date}</시행일자></admrul>")
+
+
+# 실제 검색 결과(2026년 9월)와 같은 이름들. 번호는 테스트용
+ADMRUL_LIST = "<AdmRulSearch>" + "".join([
+    admrul(1, "2026년 선원 최저임금 고시", "해양수산부", "현행", "20260101"),
+    admrul(2, "2026년 적용 최저임금 고시", "고용노동부", "현행", "20260101", "2025-40"),
+    admrul(3, "2027년 적용 최저임금 고시", "고용노동부", "연혁", "20270101", "2026-50"),
+    admrul(4, "2027년 적용 최저임금안 고시", "고용노동부", "연혁", "20270101"),
+    admrul(5, "최저임금법 제5조에 따른 단순노무직종 근로자 지정 고시", "고용노동부", "현행", "20180320"),
+]) + "</AdmRulSearch>"
+ADMRUL_BODY = "<AdmRulService><행정규칙기본정보><행정규칙명>테스트</행정규칙명></행정규칙기본정보><조문내용></조문내용></AdmRulService>"
 
 PREC_LIST = "<PrecSearch><prec id='1'><판례일련번호>241229</판례일련번호><사건명>테스트 사건</사건명><사건번호>2021다00000</사건번호><선고일자>2024.07.25</선고일자></prec></PrecSearch>"
 PREC_BODY = "<PrecService><판례정보일련번호>241229</판례정보일련번호><판시사항>테스트 판시사항&lt;br/&gt;둘째 줄</판시사항><판결요지>테스트 요지</판결요지></PrecService>"
@@ -74,7 +82,7 @@ def client():
     init_db()
     with httpx.Client(transport=httpx.MockTransport(handler)) as c:
         yield c
-    params.set_overrides({})
+    params.set_notices({})
 
 
 def test_parse_law_body():
@@ -94,11 +102,9 @@ def test_current_law_skips_scheduled_version():
     assert lp.current_law(rows, "근로기준") is None
 
 
-def test_min_wage_notice_excludes_seafarers():
+def test_min_wage_notice_picks_yearly_moel_notices_only():
     rows = lp.pick_min_wage_notices(lp.parse_admrul_list(ADMRUL_LIST))
-    assert [r["id"] for r in rows] == ["2"]
-    assert lp.find_hourly_min_wage("가. 모든 산업 : 시간급 10,320원") == 10320
-    assert lp.find_hourly_min_wage("월 2,000,000원") is None
+    assert [(r["id"], r["year"]) for r in rows] == [("2", 2026), ("3", 2027)]  # 선원, 최저임금안, 단순노무직종 지정 제외
 
 
 def test_error_response_raises():
@@ -114,9 +120,12 @@ def test_build_table_min_wage_refs_and_refresh(client):
         assert info["built"] and "테스트용 호" in info["text"]
         assert lookup.article_info(s, "근로기준법 제76조의2")["built"]
 
-        saved = fetch.fetch_min_wage(s, client)
-        assert saved[0].startswith("2026년 10,320원") and "고용노동부 고시 제2025-40호" in saved[0]
-        assert params.min_wage(2026) == (10320, "2026년 적용 최저임금 고시 (고용노동부 고시 제2025-40호)")
+        lines = fetch.fetch_min_wage_notices(s, client)
+        assert lines[0] == "2026년 10,320원 (law_params.json), 근거 고시: 2026년 적용 최저임금 고시 (고용노동부 고시 제2025-40호)"
+        assert "2027년 고시가 있는데 law_params.json에 2027년 값이 없어요" in lines[1]  # 사람이 채우도록 알림
+        # 금액은 law_params.json 그대로, 근거만 고시로
+        assert params.min_wage(2026) == (10320, "근거 고시: 2026년 적용 최저임금 고시 (고용노동부 고시 제2025-40호)")
+        assert params.min_wage(2027) == (None, "")
 
         counts = fetch.fetch_refs(s, client)
         assert counts["신고 후 불리한 처우"] == 3  # 노동위원회, 판례, 고용노동부 해석 1건씩
@@ -138,7 +147,7 @@ def test_check_result_has_law_text_and_refs(client):
     from app.main import app
     with Session(engine) as s:
         fetch.build_law_table(s, client, ["근로기준법"])
-        fetch.fetch_min_wage(s, client)
+        fetch.fetch_min_wage_notices(s, client)
         fetch.fetch_refs(s, client)
     with TestClient(app) as c:
         c.post("/api/auth/register", json={"email": "law@example.com", "password": "test1234", "birth_date": "2010-05-01"})
@@ -150,11 +159,12 @@ def test_check_result_has_law_text_and_refs(client):
         mw = [i for i in items if i["law"] == "최저임금법 제5조"][0]
         assert any("고용노동부 고시 제2025-40호" in b for b in mw["basis"])
         status = c.get("/api/law/status").json()
-        assert status["min_wage"]["value"] == 10320 and status["refs"] > 0
+        assert status["min_wage"]["value"] == 10320 and status["min_wage"]["year"] == 2026 and status["refs"] > 0
+        assert status["min_wage_missing_years"] == [2027]
         html = c.get(c.post(f"/api/jobs/{jid}/report").json()["url"]).text
         assert "참고 판례와 해석" in html and "테스트 판시사항" in html
     with Session(engine) as s:  # 다른 테스트에 영향 없게 정리
-        for m in (LawArticle, LawDoc, LawSource):
+        for m in (LawArticle, LawDoc, LawSource):  # noqa: B007
             for r in s.exec(select(m)).all():
                 s.delete(r)
         s.commit()

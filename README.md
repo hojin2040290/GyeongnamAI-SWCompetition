@@ -55,7 +55,8 @@ evaluation/          정답 사례 묶음(cases.json)과 목표 성능 측정
 ## 외부 API (없으면 해당 기능만 건너뜀)
 - `LAW_OC`: 법제처 국가법령정보 공동활용 (신청할 때 등록한 IP에서만 호출됨)
   - `python -m app.law.probe`: 신청한 API의 응답 구조 확인 (결과는 law_probe_result.txt)
-  - `python -m app.law.fetch`: 법 기준표 만들기. 근로 관련 법령 7개의 현행 조문과 별표, 고용노동부 최저임금 고시의 시간급(law_params.json보다 우선), 점검 주제별 판례·법제처 해석례·고용노동부 해석·노동위원회 결정문
+  - `python -m app.law.fetch`: 법 기준표 만들기. 근로 관련 법령 7개의 현행 조문과 별표, 연도별 고용노동부 최저임금 고시(근거로만, 금액은 law_params.json), 점검 주제별 판례·법제처 해석례·고용노동부 해석·노동위원회 결정문
+  - 새해 고시가 나왔는데 law_params.json에 그 해 금액이 없으면 fetch 결과와 계약서 탭 상태 줄에 알려 준다. 고시 원문(첨부파일)을 보고 `min_wage.by_year`에 채운다
   - 매일 자동 점검 때 법령 현행 판이 바뀌었으면 바뀐 법령만 다시 받는다
 - `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`: 공개 게시물 검색
 - 게시물 화면 캡처: `pip install playwright && playwright install chromium`

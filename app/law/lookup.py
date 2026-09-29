@@ -9,7 +9,8 @@ from sqlmodel import Session, select
 
 from app.law.parse import DOC_LABEL
 from app.law.topics import TOPICS
-from app.models import LawArticle, LawDoc, LawSource, LawValue
+from app.calc import params
+from app.models import LawArticle, LawDoc, LawSource
 
 _LABEL = re.compile(r"^(?P<law>.+?)\s*제(?P<no>\d+)조(?:의(?P<branch>\d+))?")
 
@@ -61,10 +62,16 @@ def table_status(session: Session) -> dict:
     for r in rows:
         counts[r.law_name] = counts.get(r.law_name, 0) + 1
     sources = {r.law_name: r.enforce_date for r in session.exec(select(LawSource)).all()}
-    mw = session.exec(select(LawValue).where(LawValue.key == "min_wage").order_by(LawValue.year.desc())).first()
+    notices = session.exec(select(LawDoc).where(LawDoc.kind == "admrul").order_by(LawDoc.date.desc())).all()
+    # law_params.json에 금액이 있는 가장 최근 해 (다음 해 고시만 있고 금액이 아직 없는 경우는 건너뜀)
+    notice = next((d for d in notices if d.date[:4].isdigit() and params.min_wage(int(d.date[:4]))[0]), None)
+    year = int(notice.date[:4]) if notice else None
+    value = params.min_wage(year)[0] if year else None
+    missing = [int(d.date[:4]) for d in notices if d.date[:4].isdigit() and not params.min_wage(int(d.date[:4]))[0]]
     return {"built": bool(rows), "laws": counts, "enforce_dates": sources,
-            "refs": len(session.exec(select(LawDoc)).all()),
-            "min_wage": {"year": mw.year, "value": mw.value, "source": mw.source} if mw else None}
+            "refs": len(session.exec(select(LawDoc).where(LawDoc.kind != "admrul")).all()),
+            "min_wage": {"year": year, "value": value, "source": notice.summary} if notice else None,
+            "min_wage_missing_years": missing}
 
 
 def topics_for(label: str) -> list[str]:
