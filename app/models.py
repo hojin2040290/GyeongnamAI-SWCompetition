@@ -150,3 +150,38 @@ class LawArticle(SQLModel, table=True):
     title: str = ""
     text: str
     fetched_at: datetime
+
+
+class LawSource(SQLModel, table=True):
+    """법 기준표를 만든 법령의 판 정보. 매일 현행 판이 바뀌었는지 비교한다."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    law_name: str = Field(index=True, unique=True)
+    law_id: str
+    mst: str  # 법령일련번호 (판마다 다름)
+    enforce_date: str = ""
+    promul_no: str = ""
+    fetched_at: datetime
+
+
+class LawValue(SQLModel, table=True):
+    """고시 원문에서 가져온 기준값 (예: 연도별 최저임금). law_params.json보다 우선한다."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key: str = Field(index=True)  # min_wage
+    year: int
+    value: int
+    source: str  # 예: 2026년 적용 최저임금 고시 (고용노동부 고시 제2025-00호)
+    fetched_at: datetime
+
+
+class LawDoc(SQLModel, table=True):
+    """판례, 법제처 해석례, 고용노동부 해석, 노동위원회 결정문 (점검 주제별로 미리 받아 둔 참고 자료)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    kind: str = Field(index=True)  # prec, expc, moelCgmExpc, nlrc
+    doc_id: str
+    topic: str = Field(index=True)
+    title: str
+    number: str = ""
+    date: str = ""
+    summary: str = ""
+    fields_json: str = "{}"
+    fetched_at: datetime

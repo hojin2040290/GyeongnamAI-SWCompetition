@@ -384,6 +384,14 @@ function articleHTML(a){
   if(!a.built) return `<p class="basis"><span class="chip muted">법 기준표 미구축</span> 법제처 API로 조문을 불러오면 원문이 붙어요.</p>`;
   return `<details class="law-text"><summary>조문 원문 보기${a.title?` (${esc(a.title)})`:''}</summary><pre>${esc(a.text)}</pre></details>`;
 }
+// 법제처에서 받아 둔 판례, 해석례, 결정문 (참고용)
+function refsHTML(refs){
+  if(!refs?.length) return '';
+  return `<details class="law-text"><summary>참고 판례·해석 ${refs.length}건</summary>${refs.map(r=>`<div class="ref">
+    <div class="ref-head"><span class="chip">${esc(r.kind)}</span> <b>${esc(r.title)}</b></div>
+    <div class="sub">${esc(r.number)}${r.date?`, ${esc(r.date)}`:''}</div>${r.summary?`<p class="ref-sum">${esc(r.summary)}</p>`:''}</div>`).join('')}
+    <p class="sub">비슷한 사례라도 사실관계에 따라 결과가 다를 수 있어요.</p></details>`;
+}
 function itemHTML(it){
   const extra=[]; if(it.basis?.length) extra.push(`근거로 쓴 사실: ${esc(it.basis.join(', '))}`);
   if(it.needed?.length) extra.push(`필요한 정보: ${esc(it.needed.join(', '))}`);
@@ -391,7 +399,7 @@ function itemHTML(it){
   else if(it.status==='pending') extra.push(it.ai_error?`AI 판단 실패: ${esc(it.ai_error)}`:'법 조항 해당 여부는 AI가 판단해요. 지금은 AI 연결 전이라 확인 중이에요.');
   const src=it.source==='records'?'<span class="chip">근무 기록</span>':'';
   return `<div class="result ${it.status}"><div class="head"><span class="law">${esc(it.law)} ${src}</span><span class="tag ${it.status}">${LABEL[it.status]}</span></div>
-    <p>${esc(it.text)}</p>${extra.map(x=>`<p class="basis">${x}</p>`).join('')}${articleHTML(it.article)}</div>`;
+    <p>${esc(it.text)}</p>${extra.map(x=>`<p class="basis">${x}</p>`).join('')}${articleHTML(it.article)}${refsHTML(it.refs)}</div>`;
 }
 // 에이전트가 거친 단계 (입력, 판단, 도구 실행, 결과)
 function traceHTML(trace){
@@ -674,7 +682,8 @@ async function loadCheck(){
   $$('#fieldsBox input').forEach(i=>i.addEventListener('input',()=>autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved')));
   const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items); $('#checkTrace').innerHTML='';
   const ls=await api('GET','/api/law/status');
-  $('#lawStatus').textContent=ls.built?`법 기준표: ${Object.entries(ls.laws).map(([k,v])=>`${k} ${v}개 조문`).join(', ')} (법제처 API)`
+  const mw=ls.min_wage?` 최저임금 ${ls.min_wage.year}년 시간급 ${won(ls.min_wage.value)}, 출처: ${ls.min_wage.source}.`:'';
+  $('#lawStatus').textContent=ls.built?`법 기준표: 법제처 현행 법령 ${Object.keys(ls.laws).length}개, 조문 ${Object.values(ls.laws).reduce((a,b)=>a+b,0)}개, 참고 판례·해석 ${ls.refs}건.${mw}`
     :'법 기준표 미구축: 법제처 API 키를 등록하고 조문을 불러오면 결과마다 조문 원문이 붙어요.';
   await loadLog();
 }

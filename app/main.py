@@ -8,13 +8,17 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import scheduler
 from app.config import BASE_DIR, SECRET_KEY
-from app.db import init_db
+from app.db import engine, init_db
+from app.law.fetch import load_overrides
+from sqlmodel import Session
 from app.routers.api import router as api_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    with Session(engine) as s:
+        load_overrides(s)  # 법제처에서 불러온 최저임금 고시 값
     scheduler.start()
     yield
     scheduler.stop()

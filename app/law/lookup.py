@@ -7,7 +7,9 @@ import re
 
 from sqlmodel import Session, select
 
-from app.models import LawArticle
+from app.law.parse import DOC_LABEL
+from app.law.topics import TOPICS
+from app.models import LawArticle, LawDoc, LawSource, LawValue
 
 _LABEL = re.compile(r"^(?P<law>.+?)\s*제(?P<no>\d+)조(?:의(?P<branch>\d+))?")
 
@@ -58,4 +60,42 @@ def table_status(session: Session) -> dict:
     counts: dict[str, int] = {}
     for r in rows:
         counts[r.law_name] = counts.get(r.law_name, 0) + 1
-    return {"built": bool(rows), "laws": counts}
+    sources = {r.law_name: r.enforce_date for r in session.exec(select(LawSource)).all()}
+    mw = session.exec(select(LawValue).where(LawValue.key == "min_wage").order_by(LawValue.year.desc())).first()
+    return {"built": bool(rows), "laws": counts, "enforce_dates": sources,
+            "refs": len(session.exec(select(LawDoc)).all()),
+            "min_wage": {"year": mw.year, "value": mw.value, "source": mw.source} if mw else None}
+
+
+def topics_for(label: str) -> list[str]:
+    """조항 이름(예: 근로기준법 제104조 제2항)에 해당하는 점검 주제."""
+    parsed = parse_label(label)
+    if not parsed:
+        return []
+    return [topic for topic, laws, _ in TOPICS if any(parse_label(x) == parsed for x in laws)]
+
+
+def refs_for(session: Session, label: str, limit: int = 4) -> list[dict]:
+    """미리 받아 둔 판례, 해석례, 결정문 중 이 조항 주제에 맞는 것 (종류별로 골고루)."""
+    topics = topics_for(label)
+    if not topics:
+        return []
+    rows = session.exec(select(LawDoc).where(LawDoc.topic.in_(topics)).order_by(LawDoc.id)).all()
+    picked, seen_kinds = [], set()
+    for r in rows:  # 먼저 종류마다 하나씩, 남으면 순서대로
+        if r.kind not in seen_kinds:
+            picked.append(r)
+            seen_kinds.add(r.kind)
+    picked += [r for r in rows if r not in picked]
+    return [{"kind": DOC_LABEL.get(r.kind, r.kind), "title": r.title, "number": r.number, "date": r.date,
+             "summary": r.summary} for r in picked[:limit]]
+
+
+def attach_refs(session: Session, items: list[dict]) -> list[dict]:
+    cache: dict[str, list[dict]] = {}
+    for it in items:
+        label = it.get("law", "")
+        if label not in cache:
+            cache[label] = refs_for(session, label)
+        it["refs"] = cache[label]
+    return items

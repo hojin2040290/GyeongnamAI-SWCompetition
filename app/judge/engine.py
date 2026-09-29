@@ -14,6 +14,7 @@ from app.calc import bizno
 from app.calc import records as rec
 from app.calc import schedule as sch
 from app.calc.age import age_on, is_youth_protection
+from app.calc import params
 from app.calc.params import P
 
 OK, WARN, BAD, PENDING = "ok", "warn", "bad", "pending"  # PENDING: AI 판단 전 (확인 중)
@@ -64,7 +65,7 @@ def verify(items: list[Item], facts: Facts) -> list[Item]:
 
 
 def _min_wage(year: int):
-    return P()["min_wage"]["by_year"].get(str(year))
+    return params.min_wage(year)[0]
 
 
 def judge(facts: Facts, stage: str) -> list[Item]:
@@ -104,7 +105,7 @@ def judge(facts: Facts, stage: str) -> list[Item]:
         items.append(Item(law_mw, WARN, f"{facts.on.year}년 최저임금이 법 기준표에 없어요.", needed=["최저임금 기준값"]))
     else:
         pb = P()["probation"]
-        basis = [f"시급 {facts.wage:,}원", f"{facts.on.year}년 최저임금 {mw:,}원"]
+        basis = [f"시급 {facts.wage:,}원", f"{facts.on.year}년 최저임금 {mw:,}원 ({params.min_wage(facts.on.year)[1]})"]
         if facts.wage >= mw:
             items.append(Item(law_mw, OK, "시급이 최저임금 이상이에요.", basis=basis))
         elif facts.wage < mw * pb["rate"]:

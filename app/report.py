@@ -10,7 +10,7 @@ from app.calc import schedule as sch
 from app.calc.age import age_on
 from app.calc.timeutil import now_kst, today_kst
 from app.config import REPORT_DIR
-from app.law.lookup import article_info
+from app.law.lookup import article_info, refs_for
 from app.models import CheckRun, Evidence, Report, WorkRecord
 
 LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심", "pending": "확인 중(AI 판단 전)"}
@@ -104,7 +104,21 @@ def build(session: Session, user_id: int, job_id: int) -> Report:
         rows.append(f"<p>법 기준표 미구축: {e(', '.join(missing))}. 법제처 API로 조문을 불러오면 원문이 함께 들어가요.</p>")
     if not articles:
         rows.append("<p>점검 결과가 없어 첨부할 조문이 없어요.</p>")
-    rows.append("<p class='s'>이 자료는 법적 판단이 아닌 참고 자료예요.</p>")
+
+    rows.append("<h2>8. 참고 판례와 해석</h2>")
+    refs, seen = [], set()
+    for label in articles:
+        for ref in refs_for(session, label):
+            key = (ref["kind"], ref["number"], ref["title"])
+            if key not in seen:
+                seen.add(key)
+                refs.append((label, ref))
+    for label, ref in refs:
+        rows.append(f"<h3>{e(ref['kind'])} {e(ref['number'])} ({e(ref['date'])})</h3><p><b>{e(ref['title'])}</b></p>"
+                    f"<p>{e(ref['summary'])}</p><p class='s'>관련 조항: {e(label)}. 법제처 국가법령정보 API</p>")
+    if not refs:
+        rows.append("<p>붙일 참고 자료가 없어요. 법제처 API로 참고 자료를 불러오면 함께 들어가요.</p>")
+    rows.append("<p class='s'>이 자료는 법적 판단이 아닌 참고 자료예요. 비슷한 사례라도 사실관계에 따라 결과가 다를 수 있어요.</p>")
 
     doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>상담 사전 자료</title>
 <style>body{{font-family:sans-serif;max-width:820px;margin:24px auto;padding:0 16px;line-height:1.6}}

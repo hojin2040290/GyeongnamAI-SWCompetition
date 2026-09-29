@@ -13,7 +13,7 @@ from app.calc import schedule as sch
 from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
-from app.law.lookup import attach_articles
+from app.law.lookup import attach_articles, attach_refs
 from app import ocr, storage
 from app.llm import client
 from app.models import CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User, WorkRecord
@@ -118,7 +118,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
 
     def attach_law(items: list[dict]) -> list[dict]:
         """판단 결과마다 법 기준표의 조문 원문을 붙인다. 없으면 '법 기준표 미구축'."""
-        return attach_articles(session, items)
+        return attach_refs(session, attach_articles(session, items))
 
     def ai_judge(items: list[dict]) -> list[dict]:
         """조항 해당 여부 판단 (AI). 연결 전이면 '확인 중'으로 두고, 연결 후에는 AI 판단을 검증 장치로 다시 확인한다."""

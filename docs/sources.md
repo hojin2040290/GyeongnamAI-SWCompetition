@@ -9,7 +9,7 @@
 ## 외부 API
 | 이름 | 용도 | 출처 |
 |---|---|---|
-| 법제처 국가법령정보 공동활용 OPEN API | 조문 원문 | https://open.law.go.kr |
+| 법제처 국가법령정보 공동활용 OPEN API | 현행법령(시행일) 조문과 별표, 최저임금 고시(행정규칙), 판례, 법제처 법령해석례, 고용노동부 법령해석, 노동위원회 결정문 | https://open.law.go.kr |
 | 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com |
 | vLLM OpenAI 호환 API (/v1/chat/completions) | 조항 판단, 계약서와 급여명세서 사진 읽기 (비전 모델 하나가 글자 인식과 항목 정리를 함께 함) | https://docs.vllm.ai | 모델 이름과 라이선스는 선정 후 기록 |
 
