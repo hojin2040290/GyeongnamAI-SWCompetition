@@ -17,12 +17,18 @@ from app.models import GuardPost, Job
 from tests.fake_agent import FakeAgent, called, reply, smart_policy
 
 
-def use(monkeypatch, policy) -> FakeAgent:
-    agent = FakeAgent(policy)
+def use(monkeypatch, policy, plan_first: bool = True) -> FakeAgent:
+    agent = FakeAgent(policy, plan_first)
     monkeypatch.setattr(client, "LLM_ENABLED", True)
     monkeypatch.setattr(client, "LLM_MODEL", "fake")
     monkeypatch.setattr(client, "_post", agent)
     return agent
+
+
+def results(payload: dict, name: str | None = None) -> list:
+    """요청에 담긴 도구 결과 (이름으로 거르기)."""
+    return [json.loads(m["content"]) for m in payload["messages"]
+            if m["role"] == "tool" and (name is None or m["name"] == name)]
 
 
 def _login(cl: TestClient, email: str, job: dict) -> int:
@@ -57,14 +63,38 @@ def test_agent_chooses_tools_and_finishes(env, monkeypatch):
     a, ja, *_ = env
     agent = use(monkeypatch, smart_policy)
     r = a.post(f"/api/jobs/{ja}/check").json()
-    assert r["ai_agent"] and len(agent.payloads) == 3  # check_rules → get_article → finish
+    # make_plan → check_rules → get_article → finish(검증 장치가 돌려보냄) → finish(다시 판단)
+    assert r["ai_agent"] and len(agent.payloads) == 5 and r["plan"]
     assert agent.payloads[0]["tool_choice"] == "auto"
     first = agent.payloads[0]["messages"][1]["content"]
     assert first.startswith("목표:") and "check_rules" in first
     # 두 번째 요청에는 AI가 부른 도구 결과가 들어 있다
-    tool_msgs = [m for m in agent.payloads[1]["messages"] if m["role"] == "tool"]
-    assert tool_msgs[0]["name"] == "check_rules" and "rule_status" not in tool_msgs[0]["content"]
+    tool_msgs = [m for m in agent.payloads[2]["messages"] if m["role"] == "tool"]
+    assert tool_msgs[1]["name"] == "check_rules" and "rule_status" not in tool_msgs[1]["content"]
     assert [t["step"] for t in r["trace"]].count("AI 판단 1") == 1
+    feedback = results(agent.payloads[4], "finish")[-1]
+    assert any("위반이 의심돼요" in f["문제"] for f in feedback["검증 장치"])
+    night = [i for i in r["items"] if i["law"] == "근로기준법 제70조"][0]
+    assert night["status"] == "warn" and night["ai_reason"] == "검증 장치 의견 반영"
+    assert any(t["step"] == "검증 장치 1" for t in r["trace"])
+
+
+def test_reflection_is_limited(env, monkeypatch):
+    """AI가 같은 판단을 고집해도 검증 장치는 REFLECT_MAX번만 돌려보내고, 받은 뒤 확인 필요로 되돌린다."""
+    a, ja, *_ = env
+
+    def stubborn(goal, done, tools):
+        items = called(done, "check_rules")
+        if items is None:
+            return reply([("check_rules", {})])
+        return reply([("finish", {"judgments": [{"i": it["i"], "status": "ok", "law": it["조항"],
+                                                 "fact": (it["사실"] or ["입력 정보"])[0], "reason": "고집"}
+                                                for it in items]})])
+    agent = use(monkeypatch, stubborn)
+    r = a.post(f"/api/jobs/{ja}/check").json()
+    assert len(agent.payloads) == 3 + loop.REFLECT_MAX and r["ai_agent"]  # 계획, 항목 받기, 끝내기 + 다시 판단
+    night = [i for i in r["items"] if i["law"] == "근로기준법 제70조"][0]
+    assert night["status"] == "warn"
 
 
 def test_step_limit_falls_back_to_waiting(env, monkeypatch):
@@ -86,9 +116,27 @@ def test_finish_too_early_is_sent_back(env, monkeypatch):
         return smart_policy(goal, [d for d in done if d[0] != "finish"], tools)
     agent = use(monkeypatch, policy)
     r = a.post(f"/api/jobs/{ja}/check").json()
-    first_result = [m for m in agent.payloads[1]["messages"] if m["role"] == "tool"][0]
-    assert "check_rules" in json.loads(first_result["content"])["error"]
+    assert "check_rules" in results(agent.payloads[2], "finish")[0]["error"]
     assert r["ai_agent"] and any(t["step"] == "끝내기 전 확인" for t in r["trace"])
+
+
+def test_plan_is_required_first(env, monkeypatch):
+    """계획 없이 도구를 부르면 돌려보내고, 계획을 세운 뒤에야 도구를 실행한다."""
+    a, ja, *_ = env
+
+    def policy(goal, done, tools):
+        names = [n for n, _ in done]
+        if not names:
+            return reply([("check_rules", {})])
+        if "make_plan" not in names:
+            return reply([("make_plan", {"steps": ["검토 항목 받기", "판단하기"]})])
+        return smart_policy(goal, [d for d in done if d[0] != "make_plan" and "error" not in d[1]], tools)
+    agent = use(monkeypatch, policy, plan_first=False)
+    r = a.post(f"/api/jobs/{ja}/check").json()
+    assert "make_plan" in results(agent.payloads[1], "check_rules")[0]["error"]
+    steps = [t["step"] for t in r["trace"]]
+    assert steps.index("계획 전 확인") < steps.index("계획") < steps.index("도구 check_rules")
+    assert r["ai_agent"] and r["plan"] == ["검토 항목 받기", "판단하기"]
 
 
 def test_unknown_law_citation_is_rejected(env, monkeypatch):
@@ -115,8 +163,8 @@ def test_tool_not_in_goal_and_bad_input_are_errors(env, monkeypatch):
         return smart_policy(goal, [d for d in done if d[0] not in ("delete_everything", "get_age_on")], tools)
     agent = use(monkeypatch, policy)
     a.post(f"/api/jobs/{ja}/check")
-    results = [json.loads(m["content"]) for m in agent.payloads[1]["messages"] if m["role"] == "tool"]
-    assert "쓸 수 없는 도구" in results[0]["error"] and "입력이 맞지 않아요" in results[1]["error"]
+    assert "쓸 수 없는 도구" in results(agent.payloads[2], "delete_everything")[0]["error"]
+    assert "입력이 맞지 않아요" in results(agent.payloads[2], "get_age_on")[0]["error"]
 
 
 def test_other_users_post_is_blocked(env, monkeypatch):
@@ -132,8 +180,7 @@ def test_other_users_post_is_blocked(env, monkeypatch):
         return reply([("finish", {})])
     agent = use(monkeypatch, policy)
     a.post(f"/api/jobs/{ja}/guard/posts", json={"url": "https://example.com/mine", "title": "내 글"})
-    res = [json.loads(m["content"]) for m in agent.payloads[-1]["messages"] if m["role"] == "tool"][0]
-    assert "게시물이 아니에요" in res["error"]
+    assert "게시물이 아니에요" in results(agent.payloads[-1], "set_post_status")[0]["error"]
     with Session(engine) as s:
         assert s.get(GuardPost, other_id).status == "pending"
 

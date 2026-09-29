@@ -18,8 +18,9 @@ def reply(calls: list[tuple[str, dict]] | None = None, content: str | None = Non
 
 
 class FakeAgent:
-    def __init__(self, policy):
-        self.policy = policy
+    """plan_first면 먼저 make_plan으로 계획을 세우고, 그다음부터 정책에 맡긴다 (정책에는 계획 결과를 빼고 보여 줌)."""
+    def __init__(self, policy, plan_first: bool = True):
+        self.policy, self.plan_first = policy, plan_first
         self.payloads: list[dict] = []
 
     def __call__(self, payload: dict) -> dict:
@@ -28,6 +29,11 @@ class FakeAgent:
         goal = msgs[1]["content"] if len(msgs) > 1 else ""
         done = [(m["name"], json.loads(m["content"])) for m in msgs if m["role"] == "tool"]
         tools = [t["function"]["name"] for t in payload.get("tools", [])]
+        if self.plan_first and "make_plan" in tools:
+            if not any(n == "make_plan" for n, _ in done):
+                return reply([("make_plan", {"steps": ["기록 확인", "도구로 사실과 계산 확인", "판단하고 끝내기"]})],
+                             "먼저 계획을 세울게요.")
+            done = [(n, r) for n, r in done if n != "make_plan"]
         return self.policy(goal, done, tools)
 
 
@@ -46,8 +52,12 @@ def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
             return reply([("check_rules", {})], "먼저 검토할 항목을 받아 볼게요.")
         if "get_article" not in names:
             return reply([("get_article", {"label": items[0]["조항"]})])
-        judgments = [{"i": it["i"], "status": "ok", "law": it["조항"], "fact": (it["사실"] or ["입력 정보"])[0],
-                      "reason": "테스트"} for it in items]
+        # 처음에는 모두 정상이라 하고, 검증 장치가 돌려보낸 항목은 확인 필요로 다시 판단한다
+        fb = called(done, "finish") or {}
+        flagged = {f["i"] for f in fb.get("검증 장치", [])}
+        judgments = [{"i": it["i"], "status": "warn" if it["i"] in flagged else "ok", "law": it["조항"],
+                      "fact": (it["사실"] or ["입력 정보"])[0],
+                      "reason": "검증 장치 의견 반영" if it["i"] in flagged else "테스트"} for it in items]
         return reply([("finish", {"judgments": judgments, "extra_questions": ["주휴수당을 주나요"]})])
     if "compare_pay" in tools:
         month = re.search(r"\d{4}-\d{2}", goal).group()

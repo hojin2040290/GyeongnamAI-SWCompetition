@@ -12,6 +12,7 @@ from typing import Callable
 from app.llm import client
 
 MAX_STEPS = 10  # AI 판단 반복 최대 횟수
+REFLECT_MAX = 2  # 검증 장치가 판단을 돌려보내 다시 판단하게 하는 최대 횟수
 RESULT_MAX = 6000  # AI에게 돌려주는 도구 결과 글자 수
 AI_WAITING = "AI 응답 대기 중"
 
@@ -24,7 +25,9 @@ AGENT_SYSTEM = (
     "- 판단에 필요한 정보가 기록에 없으면 추측하지 말고 확인 필요(warn)로 두세요.\n"
     "- 판단마다 근거로 쓴 조항(law)과 사실(fact)을 함께 내세요.\n"
     "- 법적 판단을 확정하지 말고 참고 의견으로 쓰세요. 사용자에게 보내는 글은 청소년이 이해하기 쉬운 존댓말로 쓰세요.\n"
+    "- 도구를 쓰기 전에 make_plan으로 할 일 계획을 세우세요. 도구 결과를 보고 계획이 바뀌면 make_plan으로 고치세요.\n"
     "- 목표를 이루면 finish 도구로 끝내세요.")
+PLAN_MAX = 8  # 계획 단계 수
 
 
 @dataclass
@@ -50,6 +53,7 @@ class Goal:
     finish: dict = field(default_factory=dict)
     finish_required: list = field(default_factory=list)
     check: Callable[[dict], str | None] | None = None  # 문제가 있으면 AI에게 돌려줄 말
+    review: Callable[[dict], list[dict]] | None = None  # 검증 장치: 판단마다 문제를 찾아 AI에게 돌려준다
 
     def finish_spec(self) -> dict:
         return Tool("finish", "목표를 이뤘을 때 결과를 내고 끝낸다.", lambda **_: None,
@@ -89,12 +93,29 @@ def use_tool(run, tools: dict[str, Tool], allowed: list[str], name: str, args: d
     return result
 
 
+def plan_tool(run) -> Tool:
+    """할 일 계획을 세우거나 고치는 도구. 계획은 동작 기록과 화면에 남는다."""
+    def make_plan(steps: list) -> str:
+        steps = [str(x).strip()[:120] for x in steps or [] if str(x).strip()][:PLAN_MAX]
+        if not steps:
+            raise ValueError("계획 단계가 비어 있어요")
+        revised = "plan" in run.state
+        run.state["plan"] = steps
+        run.state["plans"] = run.state.get("plans", 0) + 1
+        run.log("계획 수정" if revised else "계획", " → ".join(f"{n}. {x}" for n, x in enumerate(steps, 1)))
+        return "계획을 고쳤어요" if revised else "계획을 세웠어요"
+    return Tool("make_plan", "할 일 계획을 세우거나 고친다. 다른 도구를 쓰기 전에 먼저 부른다.", make_plan,
+                {"steps": {"type": "array", "items": {"type": "string"}, "description": "할 일을 순서대로"}}, ["steps"])
+
+
 def run_agent(run, goal: Goal, tools: dict[str, Tool], context: dict) -> dict | None:
     """AI가 목표를 이룰 때까지 도구를 고르고 실행하는 반복. 끝내면 finish 입력을, 못 하면 None을 돌려준다."""
     if not client.available():
         run.log("AI", f"{AI_WAITING}: AI 모델이 연결되지 않았어요")
         return None
-    specs = [tools[n].spec() for n in goal.tools if n in tools] + [goal.finish_spec()]
+    tools = {**tools, "make_plan": plan_tool(run)}
+    allowed = ["make_plan", *goal.tools]
+    specs = [tools[n].spec() for n in allowed if n in tools] + [goal.finish_spec()]
     messages = [{"role": "system", "content": AGENT_SYSTEM},
                 {"role": "user", "content": f"목표: {goal.text}\n상황: {_dump(context)}"}]
     for turn in range(1, MAX_STEPS + 1):
@@ -114,15 +135,27 @@ def run_agent(run, goal: Goal, tools: dict[str, Tool], context: dict) -> dict | 
         messages.append({"role": "assistant", "content": content, "tool_calls": calls})
         for call in calls:
             name, args = call["function"]["name"], _args(call)
-            if name == "finish":
+            if name != "make_plan" and "plan" not in run.state:
+                result = {"error": "먼저 make_plan으로 할 일 계획을 세워 주세요"}
+                run.log("계획 전 확인", f"{name} 요청을 돌려보냄: 계획이 없어요")
+            elif name == "finish":
                 problem = goal.check(args) if goal.check else None
-                if problem is None:
+                feedback = goal.review(args) if goal.review and problem is None else []
+                if problem is None and feedback and run.state.get("reflect", 0) < REFLECT_MAX:
+                    run.state["reflect"] = run.state.get("reflect", 0) + 1
+                    result = {"검증 장치": feedback,
+                              "요청": "문제가 된 판단의 근거를 다시 확인하고 finish로 다시 판단해 주세요. "
+                                      "다시 봐도 같다면 이유를 reason에 적어 같은 판단을 내도 돼요."}
+                    run.log(f"검증 장치 {run.state['reflect']}", "다시 판단 요청: " + "; ".join(
+                        f"{f.get('i', '')} {f['문제']}" for f in feedback)[:280])
+                elif problem is None:
                     run.log("AI 끝냄", _dump(args)[:300])
                     return args
-                result = {"error": problem}
-                run.log("끝내기 전 확인", problem)
+                else:
+                    result = {"error": problem}
+                    run.log("끝내기 전 확인", problem)
             else:
-                result = use_tool(run, tools, goal.tools, name, args)
+                result = use_tool(run, tools, allowed, name, args)
             messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "name": name, "content": _dump(result)})
     run.ai_error = f"반복 {MAX_STEPS}회 안에 끝내지 못했어요"
     run.log("멈춤", f"{AI_WAITING}: {run.ai_error}")
