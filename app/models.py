@@ -12,6 +12,8 @@ class User(SQLModel, table=True):
     password_hash: str
     birth_date: date
     mode: str = "work"  # seek, work, quit : 처음 고른 상황
+    gps_consent: bool = False  # 출퇴근 때 위치를 함께 기록하는 데 동의했는지
+    last_job_id: Optional[int] = None  # 마지막으로 보던 일하는 곳 (다시 열면 이곳부터)
     created_at: datetime
 
 
@@ -43,6 +45,7 @@ class Job(SQLModel, table=True):
     owner: str = ""
     reported: bool = False
     guard_keywords: str = ""  # 게시물 검색어 (쉼표로 구분, 예: 본인 이름, 별명)
+    guard_message: str = ""  # 사용자가 고친 보복 금지 안내 문구 (비어 있으면 기본 문구)
     created_at: datetime
 
 
