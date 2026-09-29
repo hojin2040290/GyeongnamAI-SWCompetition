@@ -277,7 +277,12 @@ details.law-text pre{white-space:pre-wrap;font-family:inherit;background:var(--b
 details.trace{margin-top:12px}
 
 /* 실수로 표시한 출퇴근 기록 */
-.rec-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+/* 근무 기록 한 줄: 날짜와 시간 | 위치 기록 여부(가운데) | 실수로 누름(오른쪽) */
+#records li{display:grid;grid-template-columns:minmax(0,max-content) minmax(max-content,1fr) auto;align-items:center;column-gap:8px}
+#records .rec-gps,#records .rec-act{white-space:nowrap}
+#records .rec-gps{justify-self:center}
+#records .rec-act{justify-self:end}
+#records li.void{grid-template-columns:minmax(0,1fr) auto}
 .list li.void strong,.list li.void .rec-time{text-decoration:line-through;color:var(--ink-soft)}
 .void-note{color:var(--warn)}
 .open-alert{border:2px solid #d9a21b}
