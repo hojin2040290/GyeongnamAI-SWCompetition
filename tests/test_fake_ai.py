@@ -61,3 +61,11 @@ def test_fake_text_shows_what_ai_received():
                          for n in ("make_plan", "compare_pay", "finish")]}
     msg = fake.respond(payload)["choices"][0]["message"]
     assert msg["content"].startswith(f"{fake.PREFIX} (") and "compare_pay" in msg["content"] and "급여를" in msg["content"]
+
+
+def test_fake_mode_auto():
+    """기본(auto)은 실제 모델 설정이 없을 때만 가짜 AI. true는 늘, false는 쓰지 않음."""
+    from app.config import fake_mode
+    assert fake_mode("auto", False, "") and fake_mode("", True, "")  # 모델 이름이 없으면 실제 모델을 못 씀
+    assert not fake_mode("auto", True, "qwen")
+    assert fake_mode("true", True, "qwen") and not fake_mode("false", False, "")

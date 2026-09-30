@@ -1,4 +1,4 @@
-"""상담 사전 자료 만들기. 모인 기록을 정리하고, 맨 앞에 AI가 쓴 사건 요약을 붙인다 (AI 응답이 없으면 대기 중으로 표시)."""
+"""상담 사전 자료 만들기. 모인 기록을 정리하고, 맨 앞에 AI가 쓴 요약을 붙인다 (AI 응답이 없으면 대기 중으로 표시)."""
 import html
 import json
 
@@ -17,12 +17,12 @@ LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심", "pendi
 
 
 def summary_html(summary: dict | None) -> str:
-    """사건 요약 (AI 작성). AI 응답이 없으면 'AI 응답 대기 중'과 이유를 적는다."""
+    """AI 요약. AI 응답이 없으면 'AI 응답 대기 중'과 이유를 적는다."""
     e = html.escape
-    out = ["<h2>사건 요약 (AI 작성)</h2>"]
+    out = ["<h2>AI 요약</h2>"]
     if not summary or not summary.get("ai"):
         reason = (summary or {}).get("reason") or "AI 응답 대기 중"
-        out.append(f"<p class='w'>{e(reason)}</p><p class='s'>아래 기록은 코드가 정리한 사실이에요. "
+        out.append(f"<p class='w wait'>{e(reason)}</p><p class='s'>아래 기록은 코드가 정리한 사실이에요. "
                    "AI가 연결된 뒤 자료를 다시 만들면 요약이 들어가요.</p>")
         return "".join(out)
     out.append(f"<p>{e(summary['summary'])}</p>")
@@ -142,7 +142,7 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
     doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>상담 사전 자료</title>
 <style>body{{font-family:sans-serif;max-width:820px;margin:24px auto;padding:0 16px;line-height:1.6}}
 table{{border-collapse:collapse;width:100%;margin:8px 0}}th,td{{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;font-size:14px}}
-th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}.w{{color:#3355cc;background:#eef2ff;padding:8px 10px;border-radius:8px}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
+th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}.w{{color:#3355cc;background:#eef2ff;padding:8px 10px;border-radius:8px}}.wait::before{{content:"";display:inline-block;width:.8em;height:.8em;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}}@keyframes spin{{to{{transform:rotate(360deg)}}}}@media print{{.wait::before{{display:none}}}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
 <body><h1>상담 사전 자료</h1><p class="s">작성 시각 {now_kst()}</p>{''.join(rows)}</body></html>"""
     path = storage.save_report(user_id, job_id, now_kst().strftime('%Y%m%d%H%M%S'), doc)
     rep = Report(user_id=user_id, job_id=job_id, path=path, ai_summary=bool(summary and summary.get("ai")),

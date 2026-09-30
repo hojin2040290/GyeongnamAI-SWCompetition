@@ -8,4 +8,6 @@ os.environ["UPLOAD_DIR"] = os.path.join(_tmp, "uploads")
 os.environ["REPORT_DIR"] = os.path.join(_tmp, "reports")
 os.environ["NAVER_CLIENT_ID"] = ""
 os.environ["NAVER_CLIENT_SECRET"] = ""
+os.environ["LLM_FAKE"] = "false"  # 테스트는 AI가 없을 때(대기)와 가짜 AI를 각각 따로 켜서 확인한다
+os.environ["LLM_ENABLED"] = "false"
 os.environ["DEV_TOOLS"] = "true"  # 시연용 주소 테스트 (끈 경우는 test_flow에서 따로 확인)

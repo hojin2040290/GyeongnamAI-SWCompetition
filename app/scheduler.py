@@ -73,7 +73,7 @@ def _latest(s: Session, job_id: int, kind: str) -> list[CheckRun]:
 
 
 def waiting_work(s: Session, job: Job) -> list[tuple[str, str]]:
-    """이 사업장에서 AI 응답 대기 중인 일: (사건, 달)."""
+    """이 사업장에서 AI 응답 대기 중인 일: (할 일 종류, 달)."""
     work: list[tuple[str, str]] = []
     check = next(iter(_latest(s, job.id, "contract")), None)
     if check and any(it["status"] == "pending" for it in json.loads(check.results_json)):

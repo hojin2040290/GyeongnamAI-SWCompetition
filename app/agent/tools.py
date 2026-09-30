@@ -307,7 +307,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         return [c for c in P()["counsel"] if c["min_age"] <= age <= c["max_age"]]
 
     def build_report(summary: dict | None = None) -> dict:
-        """상담 사전 자료 문서 만들기. summary는 AI가 쓴 사건 요약 (없으면 'AI 응답 대기 중')."""
+        """상담 사전 자료 문서 만들기. summary는 AI가 쓴 요약 (없으면 'AI 응답 대기 중')."""
         from app import report  # report가 이 모듈을 쓰므로 여기서 불러온다
         rep = report.build(session, user_id, job_id, summary)
         return {"id": rep.id, "url": f"/api/reports/{rep.id}"}
@@ -497,10 +497,10 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         return "저장함"
 
     def build_report(summary: str, points: list, basis: list) -> dict:
-        """상담 사전 자료 만들기. 사건 요약과 상담 때 물어볼 점을 넣는다."""
+        """상담 사전 자료 만들기. 상황 요약과 상담 때 물어볼 점을 넣는다."""
         bad = [x for x in basis or [] if not known_law(session, str(x))]
         if not str(summary).strip():
-            raise ValueError("사건 요약이 비어 있어요")
+            raise ValueError("요약이 비어 있어요")
         check_output(summary, *(points or []))
         if bad:
             raise ValueError(f"근거 조항이 법 기준표에 없어요: {', '.join(map(str, bad))}")
@@ -650,7 +650,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         Tool("give_advice", "사용자에게 조언한다. 관련 화면이 있으면 next_tab은 check(계약서 점검), pay(급여 점검), "
              "docs(상담 사전 자료), guard(신고 후 보호) 중 바로 가기할 화면.", give_advice,
              {"advice": S, "next_tab": {"type": "string", "enum": ["", "check", "pay", "docs", "guard"]}}, ["advice"]),
-        Tool("build_report", "상담 사전 자료 문서를 만든다. 사건 요약, 상담 때 물어볼 점, 근거 조항을 넣는다.", build_report,
+        Tool("build_report", "상담 사전 자료 문서를 만든다. 상황 요약, 상담 때 물어볼 점, 근거 조항을 넣는다.", build_report,
              {"summary": S, "points": {"type": "array", "items": S}, "basis": LAW_LIST},
              ["summary", "points", "basis"]),
     ]

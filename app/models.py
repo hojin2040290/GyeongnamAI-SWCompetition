@@ -119,7 +119,7 @@ class Report(SQLModel, table=True):
     user_id: int = Field(index=True)
     job_id: int
     path: str
-    ai_summary: bool = False  # AI가 쓴 사건 요약이 들어갔는지 (아니면 AI 응답 대기 중)
+    ai_summary: bool = False  # AI가 쓴 요약이 들어갔는지 (아니면 AI 응답 대기 중)
     created_at: datetime
 
 
@@ -155,7 +155,7 @@ class AgentQuestion(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     job_id: int = Field(index=True)
-    event: str  # 질문한 사건 (답하면 이 사건을 다시 시작)
+    event: str  # 질문한 일 (답하면 이 일을 다시 시작)
     run_id: str = ""
     question: str
     options_json: str = "[]"
@@ -178,7 +178,7 @@ class AgentTask(SQLModel, table=True):
     note: str  # 왜 다시 확인하는지 (다시 시작할 때 에이전트에게 넘김)
     due_at: datetime
     status: str = "pending"  # pending(예약), done(실행함), cancelled(취소)
-    event: str = ""  # 예약한 사건
+    event: str = ""  # 예약한 일
     run_id: str = ""
     created_at: datetime
     done_at: Optional[datetime] = None

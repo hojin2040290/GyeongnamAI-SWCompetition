@@ -1,6 +1,6 @@
 """에이전트 실행.
 
-사건(사용자 입력 또는 정해진 시점)이 생기면 시작한다. AI에게는 사건의 목표와 쓸 수 있는 도구만 주고,
+사용자 입력이나 정해진 시점이 되면 시작한다. AI에게는 그 일의 목표와 쓸 수 있는 도구만 주고,
 AI가 도구를 고르고 결과를 보며 다음 행동을 정한다 (app/agent/loop.py).
 AI가 없거나 응답하지 않으면 정해 둔 순서로 사실만 정리하고, 판단할 부분은 'AI 응답 대기 중'으로 둔다.
 모든 흐름은 입력, AI 판단, 도구 실행, 결과를 동작 기록(AgentLog)에 남기고 화면에도 돌려준다.
@@ -288,7 +288,7 @@ def run_report(session: Session, user_id: int, job_id: int, trigger: str = "user
     r = Run(session, user_id, job_id, "report", trigger)
     r.log("입력", "상담 사전 자료 만들기")
     goal = Goal("사용자가 노동 상담 기관에 가져갈 상담 사전 자료를 만들어 주세요. 저장된 점검 결과와 기록을 확인하고, "
-                "사건 요약과 상담 때 물어볼 점을 build_report에 넣어 문서를 만든 뒤, 사용자에게 알리고 finish로 끝내 주세요. "
+                "상황 요약과 상담 때 물어볼 점을 build_report에 넣어 문서를 만든 뒤, 사용자에게 알리고 finish로 끝내 주세요. "
                 "요약에는 기록에 있는 사실만 쓰고, 숫자는 도구 결과를 그대로 옮기세요.",
                 ["get_profile", "get_contract", "get_saved_checks", "calc_work_days", "settlement", "list_evidence",
                  "counsel_for_age", "get_article", "find_refs", "build_report", "notify"], DONE,
@@ -297,12 +297,12 @@ def run_report(session: Session, user_id: int, job_id: int, trigger: str = "user
     counsel = r.tools["counsel_for_age"]()
     rep = r.state.get("report")
     if not rep:
-        rep = r.call("build_report", {"ai": False, "reason": f"{AI_WAITING}: {r.ai_error or 'AI가 연결되면 사건 요약을 작성해요'}"})
-        r.call("notify", "상담 사전 자료를 만들었어요 (사건 요약은 AI 응답 대기 중)",
-               "기록을 정리한 자료를 만들었어요. AI가 쓰는 사건 요약은 아직 빠져 있고, AI가 응답하면 요약을 넣어 다시 만들어요.")
+        rep = r.call("build_report", {"ai": False, "reason": f"{AI_WAITING}: {r.ai_error or 'AI가 응답하면 요약을 넣어 다시 만들어요'}"})
+        r.call("notify", "상담 사전 자료를 만들었어요 (AI 요약은 응답 대기 중)",
+               "기록을 정리한 자료를 만들었어요. AI가 쓰는 요약은 아직 빠져 있고, AI가 응답하면 요약을 넣어 다시 만들어요.")
     return r.done({**rep, "counsel": counsel, "summary_ai": r.ai_used},
-                  "상담 사전 자료 작성 완료 (AI 사건 요약 포함)" if r.ai_used
-                  else f"기록만 정리한 상담 사전 자료 작성, 사건 요약은 {AI_WAITING}")
+                  "상담 사전 자료 작성 완료 (AI 요약 포함)" if r.ai_used
+                  else f"기록만 정리한 상담 사전 자료 작성, AI 요약은 {AI_WAITING}")
 
 
 # ---------- 신고 후 보호 ----------
