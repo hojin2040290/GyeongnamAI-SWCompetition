@@ -472,3 +472,35 @@ def test_other_user_cannot_touch_payslip(env):
     assert b.put(f"/api/payslips/{pid}", json={"amount": 1}).status_code == 404
     assert b.delete(f"/api/payslips/{pid}").status_code == 404
     assert a.delete(f"/api/payslips/{pid}").json()["ok"]
+
+
+def test_bad_tool_input_goes_back_to_ai(env, monkeypatch):
+    """실제 모델처럼 도구 입력 모양이 틀려도 요청이 멈추지 않고, AI에게 오류로 돌려준다."""
+    a, ja, b, jb = env
+    bad = {"label": ["근로기준법"], "month": 202608, "post_id": [1], "text": {"a": 1}, "steps": "계획"}
+
+    def policy(goal, done, tools):
+        if len(done) < 6:
+            name = [t for t in tools if t not in ("finish", "make_plan")][len(done) % 3]
+            return reply([(name, bad)])
+        return reply([("finish", {"judgments": "모두 정상", "status": 3, "note": ["x"]})])
+    agent = use(monkeypatch, policy)
+    for method, url in (("post", f"/api/jobs/{ja}/check"), ("post", f"/api/jobs/{ja}/agent/payday?month=2026-08"),
+                        ("post", f"/api/jobs/{ja}/report"), ("post", "/api/seek/check")):
+        r = getattr(a, method)(url, json={"wage": 9000} if "seek" in url else None)
+        assert r.status_code == 200, (url, r.text)
+    errors = [x for p in agent.payloads for x in results(p) if isinstance(x, dict) and "error" in x]
+    assert any("도구 입력이 맞지 않아요" in e["error"] for e in errors)
+
+
+def test_evidence_list_shows_all_saved(env):
+    """자료 탭에는 올린 파일, 사업장 등록 전 공고, 주소만 보존한 게시물이 모두 보인다."""
+    a, ja, b, jb = env
+    a.post("/api/evidence", data={"kind": "notice"}, files={"file": ("공고.png", b"png", "image/png")})
+    with Session(engine) as s:
+        s.add(GuardPost(job_id=ja, url="https://example.com/p/1", title="가상 게시물", source="user", found_at=now_kst()))
+        s.commit()
+    evs = a.get(f"/api/jobs/{ja}/evidence").json()
+    assert any(e["kind"] == "notice" and e["before_job"] for e in evs)
+    assert any(e["kind"] == "post_link" and e["note"] == "https://example.com/p/1" and not e["file"] for e in evs)
+    assert not any(e["kind"] == "notice" for e in b.get(f"/api/jobs/{jb}/evidence").json())  # 다른 사람 것은 안 보임

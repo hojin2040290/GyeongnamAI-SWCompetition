@@ -78,7 +78,13 @@ class Run:
                 context["이번에 할 일"] = f"지난번에 예약한 확인이에요: {self.followup}"
             goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice", "ask_user", "get_answers",
                                                     "schedule_followup"])
-        out = run_agent(self, goal, tools, context)
+        try:
+            out = run_agent(self, goal, tools, context)
+        except Exception as exc:  # 예상 못 한 오류는 요청을 멈추지 않고 AI 없이 하는 방식으로 넘긴다
+            self.s.rollback()
+            self.ai_error = f"에이전트 실행 중 오류가 났어요 ({type(exc).__name__})"
+            self.log("오류", self.ai_error)
+            out = None
         self.ai_tried, self.ai_used = True, out is not None
         if not self.ai_used:
             self.log("대기", f"{AI_WAITING}: 정해 둔 순서로 사실만 정리해요")

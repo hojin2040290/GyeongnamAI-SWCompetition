@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+import pytest
+
 from app.calc import schedule as sch
 from app.calc.age import age_on, is_youth_protection
 from app.calc.pay import calc_month, settlement_status
@@ -117,3 +119,23 @@ def test_payday_month_end():
     assert is_payday(31, date(2026, 2, 28)) and not is_payday(31, date(2026, 2, 27))
     assert is_payday(30, date(2026, 2, 28)) and is_payday(10, date(2026, 9, 10)) and not is_payday(None, date(2026, 9, 10))
     assert payday_text(31) == "말일" and payday_text(10) == "10일" and payday_text(None) == ""
+
+
+def test_break_any_minutes():
+    """쉬는 시간은 정해진 선택지가 아니어도 몇 분이든 적을 수 있다."""
+    from app.calc import schedule as sch
+    assert sch.parse_break("19분") == 19
+    assert sch.parse_break("3시간") == 180
+    assert sch.parse_break("1시간 15분") == 75
+    assert sch.parse_break("1시간15분") == 75
+    assert sch.parse_break("없음") == 0
+    assert sch.parse_break("모름") is None and sch.parse_break("조금") is None and sch.parse_break("") is None
+    assert [sch.break_text(m) for m in (0, 15, 60, 75, 180)] == ["없음", "15분", "1시간", "1시간 15분", "3시간"]
+    # 계산에 그대로 쓰인다: 17:00~21:00에 19분 쉬면 221분
+    assert sch.work_min({"start": "17:00", "end": "21:00", "brk": "19분"}) == 221
+    # 저장할 때 모양을 맞추고, 일하는 시간보다 길면 막는다
+    out = sch.clean({"월": {"start": "09:00", "end": "18:00", "brk": "90분"}, "화": {"start": "10:00", "end": "11:00", "brk": "모름"}})
+    assert out["월"]["brk"] == "1시간 30분" and out["화"]["brk"] == "모름"
+    for bad in ("4시간", "5시간 1분", "잠깐"):
+        with pytest.raises(ValueError):
+            sch.clean({"월": {"start": "17:00", "end": "21:00", "brk": bad}})

@@ -38,7 +38,10 @@ def _post(payload: dict) -> dict:
         r.raise_for_status()
     except httpx.HTTPError as exc:
         raise LLMError(f"AI 모델에 연결하지 못했어요 ({type(exc).__name__})") from exc
-    return r.json()
+    try:
+        return r.json()
+    except ValueError as exc:
+        raise LLMError("AI 모델 응답을 읽지 못했어요") from exc
 
 
 def chat(messages: list[dict], tools: list[dict] | None = None, model: str | None = None) -> dict:
@@ -51,7 +54,7 @@ def chat(messages: list[dict], tools: list[dict] | None = None, model: str | Non
     data = _post(payload)
     try:
         return data["choices"][0]["message"]
-    except (KeyError, IndexError) as exc:
+    except (KeyError, IndexError, TypeError) as exc:
         raise LLMError("AI 모델 응답 형식이 달라요") from exc
 
 

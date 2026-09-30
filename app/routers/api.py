@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app import config, guard, input_rules, login_guard
 from app.agent import core
@@ -49,9 +49,12 @@ def user_out(u: User) -> dict:
 
 @router.post("/auth/register")
 def register(data: RegisterIn, request: Request, s: Session = Depends(get_session)):
+    data.email = data.email.strip().lower()
+    if problem := input_rules.email_problem(data.email):
+        raise HTTPException(400, problem)
     if len(data.password) < 4:
         raise HTTPException(400, "비밀번호는 4자 이상으로 정해 주세요")
-    if s.exec(select(User).where(User.email == data.email)).first():
+    if s.exec(select(User).where(func.lower(User.email) == data.email)).first():
         raise HTTPException(400, "이미 가입한 이메일이에요. 로그인해 주세요")
     u = User(email=data.email, password_hash=hash_password(data.password), birth_date=data.birth_date,
              mode=data.mode, created_at=now_kst())
@@ -65,9 +68,10 @@ def register(data: RegisterIn, request: Request, s: Session = Depends(get_sessio
 def login(data: LoginIn, request: Request, s: Session = Depends(get_session)):
     """로그인. 여러 번 틀리면 잠시 막는다 (비밀번호 대입 막기). 막힌 동안에는 비밀번호가 맞아도 들어갈 수 없다."""
     ip = request.client.host if request.client else ""
+    data.email = data.email.strip().lower()  # 형식 검사는 가입할 때만 (예전 계정도 들어올 수 있게)
     if minutes := login_guard.locked_minutes(s, data.email, ip):
         raise HTTPException(429, f"로그인을 너무 여러 번 틀렸어요. {minutes}분 뒤에 다시 시도해 주세요")
-    u = s.exec(select(User).where(User.email == data.email)).first()
+    u = s.exec(select(User).where(func.lower(User.email) == data.email)).first()  # 예전에 대문자로 가입한 계정도
     if not u or not check_password(data.password, u.password_hash):
         left = login_guard.record_fail(s, data.email, ip)
         msg = "이메일이나 비밀번호가 맞지 않아요"
@@ -493,9 +497,16 @@ async def upload_evidence_nojob(kind: str = Form("notice"), note: str = Form("")
 
 @router.get("/jobs/{job_id}/evidence")
 def list_evidence(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """이 사업장에 올린 파일, 사업장 등록 전에 올린 자료(채용공고), 화면 캡처 없이 주소와 시각만 보존한 게시물."""
     own_job(s, u, job_id)
-    rows = s.exec(select(Evidence).where(Evidence.job_id == job_id).order_by(Evidence.uploaded_at.desc())).all()
-    return [ev_out(e) for e in rows]
+    rows = s.exec(select(Evidence).where(Evidence.user_id == u.id)
+                  .where((Evidence.job_id == job_id) | (Evidence.job_id == None))).all()  # noqa: E711
+    out = [{**ev_out(e), "file": True, "before_job": e.job_id is None} for e in rows]
+    posts = s.exec(select(GuardPost).where(GuardPost.job_id == job_id, GuardPost.source == "user",
+                                           GuardPost.evidence_id == None)).all()  # noqa: E711
+    out += [{"id": None, "kind": "post_link", "filename": p.title or p.url, "uploaded_at": p.found_at.isoformat(),
+             "sha256": "", "size": 0, "note": p.url, "file": False, "before_job": False} for p in posts]
+    return sorted(out, key=lambda x: x["uploaded_at"], reverse=True)
 
 
 @router.get("/evidence/{ev_id}/file")

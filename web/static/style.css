@@ -185,6 +185,8 @@ div.field{margin-bottom:12px}
 .slot-grid .tilde{color:var(--ink-soft)}
 .slot .brk{margin-top:8px;display:flex;align-items:center;gap:8px;font-size:14px}
 .slot .brk select{flex:1;padding:8px}
+.slot .brk-custom{margin-top:8px;display:flex;align-items:center;gap:6px;font-size:14px;padding-left:62px}
+.slot .brk-custom .input{width:64px;padding:8px;text-align:right}
 .empty{color:var(--ink-soft);font-size:14px;text-align:center;padding:14px;border:1px dashed var(--line);border-radius:12px}
 .sheet-foot{position:sticky;bottom:0;background:var(--paper);padding:14px 0 calc(16px + env(safe-area-inset-bottom,0px));margin-top:14px;border-top:1px solid var(--line)}
 .totals{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}

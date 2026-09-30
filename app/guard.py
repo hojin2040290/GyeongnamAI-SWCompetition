@@ -79,16 +79,19 @@ def preserve(session: Session, user_id: int, job: Job, url: str, title: str = ""
     p = GuardPost(job_id=job.id, url=url, title=title, source="user", found_at=now_kst())
     session.add(p)
     session.commit()
+    why = ""
     try:
         ev = capture(session, user_id, p)
+        if ev is None:
+            why = "이 서버에 화면 캡처 프로그램(Playwright)이 없어요"
     except Exception as exc:  # 캡처 실패해도 주소와 시각은 남긴다
-        ev = None
-        p.title = p.title or f"캡처 실패: {type(exc).__name__}"
+        session.rollback()
+        ev, why = None, f"게시물 화면을 열지 못했어요 ({type(exc).__name__})"
     if ev:
         p.evidence_id = ev.id
     session.add(p)
     session.commit()
-    return {"id": p.id, "captured": ev is not None}
+    return {"id": p.id, "captured": ev is not None, "capture_error": why}
 
 
 def capture(session: Session, user_id: int, post: GuardPost) -> Evidence | None:
