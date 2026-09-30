@@ -370,6 +370,6 @@ em.hint.bad{color:var(--bad)}
 .pay-month .main{width:100%}
 .pay-item{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:14px}
 
-/* 입력 칸 안내: 쓸 수 없는 글자를 뺐을 때 잠시 빨갛게 */
-.field-hint{display:block;margin-top:4px;font-style:normal}
-.field-hint.bad{color:var(--bad);font-weight:600}
+/* 계약서에 적힌 내용: 무엇을 적는지 칸 안에 흐린 글씨로 (두 줄까지 보이게) */
+textarea.input.field-area{min-height:0;resize:none;line-height:1.45;overflow:hidden}
+#fieldsBox .input::placeholder{color:var(--ink-soft);opacity:.55}
