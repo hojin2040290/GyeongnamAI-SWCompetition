@@ -65,6 +65,12 @@ AI_RETRY_PER_DAY = int(os.getenv("AI_RETRY_PER_DAY", "3"))
 # 시연용 기능 (true일 때만 /api/dev/daily-check가 열림. 외부에 여는 서버에서는 false로 둔다)
 DEV_TOOLS = os.getenv("DEV_TOOLS", "false").lower() == "true"
 
+# 로그인 시도 제한: 같은 이메일로 LOGIN_MAX_FAILS번, 같은 접속 주소로 LOGIN_IP_MAX_FAILS번 틀리면
+# LOGIN_LOCK_MIN분 동안 로그인을 막는다 (틀린 횟수도 LOGIN_LOCK_MIN분 안의 것만 센다)
+LOGIN_MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", "5"))
+LOGIN_IP_MAX_FAILS = int(os.getenv("LOGIN_IP_MAX_FAILS", "20"))
+LOGIN_LOCK_MIN = int(os.getenv("LOGIN_LOCK_MIN", "15"))
+
 # 정기 점검 시각 (매일 이 시각에 에이전트가 스스로 시작)
 SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "9"))
 

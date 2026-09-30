@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app import guard
+from app import config, guard, login_guard
 from app.agent import core
 from app.agent.tools import keywords_of, make_tools
 from app.auth import check_password, current_user, hash_password
@@ -63,9 +63,20 @@ def register(data: RegisterIn, request: Request, s: Session = Depends(get_sessio
 
 @router.post("/auth/login")
 def login(data: LoginIn, request: Request, s: Session = Depends(get_session)):
+    """로그인. 여러 번 틀리면 잠시 막는다 (비밀번호 대입 막기). 막힌 동안에는 비밀번호가 맞아도 들어갈 수 없다."""
+    ip = request.client.host if request.client else ""
+    if minutes := login_guard.locked_minutes(s, data.email, ip):
+        raise HTTPException(429, f"로그인을 너무 여러 번 틀렸어요. {minutes}분 뒤에 다시 시도해 주세요")
     u = s.exec(select(User).where(User.email == data.email)).first()
     if not u or not check_password(data.password, u.password_hash):
-        raise HTTPException(400, "이메일이나 비밀번호가 맞지 않아요")
+        left = login_guard.record_fail(s, data.email, ip)
+        msg = "이메일이나 비밀번호가 맞지 않아요"
+        if left == 0:
+            msg += f". 너무 여러 번 틀려서 {config.LOGIN_LOCK_MIN}분 동안 로그인할 수 없어요"
+        elif left <= 2:
+            msg += f" ({left}번 더 틀리면 {config.LOGIN_LOCK_MIN}분 동안 로그인할 수 없어요)"
+        raise HTTPException(400, msg)
+    login_guard.record_success(s, data.email)
     request.session["uid"] = u.id
     return user_out(u)
 
