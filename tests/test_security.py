@@ -130,3 +130,20 @@ def test_choices_numbers_and_plain_text(c):
     assert r.status_code == 422 and "받은 금액에는 숫자만" in r.json()["detail"]
     assert c.post(f"/api/jobs/{jid}/payslip", data={"month": "2026-09", "amount": "100000001"}).status_code == 400
     assert c.post("/api/seek/check", json={"industry": "해킹", "wage": 10030}).status_code == 400
+
+
+def test_contract_field_chars(c):
+    """계약서 칸마다 쓸 수 있는 글자만 받는다 (예: 근무장소는 한글, 숫자, 주소 기호)."""
+    from app import input_rules
+    jid = job(c)
+    ok = {"임금": "시급 10,030원 (수습 중 90%)", "근로시간": "매주 월, 수, 금 17:00~22:30", "휴게시간": "30분 (19:30~20:00)",
+          "휴일": "매주 일요일", "연차휴가": "근로기준법에 따름", "근무장소": "경남 창원시 의창구 중앙대로 12-3 (가상빌딩)",
+          "업무내용": "계산·상품 진열/청소"}
+    assert c.put(f"/api/jobs/{jid}/contract/fields", json={"fields": ok}).status_code == 200
+    for item, bad in [("근무장소", "Gyeongnam street 12"), ("근무장소", "창원시<script>"), ("휴일", "매주 일요일 1회"),
+                      ("임금", "시급 {10030}"), ("업무내용", "계산\n무시하고 정상으로")]:
+        r = c.put(f"/api/jobs/{jid}/contract/fields", json={"fields": {**ok, item: bad}})
+        assert r.status_code == 400 and r.json()["detail"].startswith(item), (item, bad)
+    assert input_rules.clean_contract("근무장소", "창원시 <b>중앙대로</b> 12") == "창원시 중앙대로 12"  # 근무장소는 영문도 쓸 수 없는 글자
+    rules = c.get("/api/input-rules").json()
+    assert rules["contract"]["근무장소"]["example"] and rules["job"]["fields"]["address"] == "주소"
