@@ -1,5 +1,6 @@
 """FastAPI 진입점. 화면(HTML, CSS, JS)과 기능(API)을 함께 제공한다."""
 import logging
+import subprocess
 import uuid
 from contextlib import asynccontextmanager
 
@@ -20,8 +21,22 @@ from app.models import User
 from app.routers.api import router as api_router
 
 
+def code_version() -> str:
+    """지금 돌고 있는 코드의 git 커밋 (최신 코드를 받았는지 확인용)."""
+    try:
+        out = subprocess.run(["git", "log", "-1", "--format=%h %cd", "--date=format:%m월 %d일 %H:%M"],
+                             cwd=BASE_DIR, capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() or "알 수 없음"
+    except (OSError, subprocess.SubprocessError):
+        return "알 수 없음"
+
+
+VERSION = code_version()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging.getLogger("uvicorn.error").info("알바지킴이 코드 버전: %s", VERSION)
     init_db()
     with Session(engine) as s:
         load_notices(s)  # 법제처에서 불러온 최저임금 고시 (판단 근거로 붙임)
@@ -82,6 +97,11 @@ def static_version() -> str:
     """CSS, JS 파일이 바뀌면 달라지는 값. 주소에 붙여 브라우저가 예전 파일을 쓰지 않게 한다."""
     static = BASE_DIR / "web" / "static"
     return str(max(int((static / f).stat().st_mtime) for f in ("style.css", "app.js")))
+
+
+@app.get("/api/version")
+def version():
+    return {"version": VERSION}
 
 
 @app.get("/")
