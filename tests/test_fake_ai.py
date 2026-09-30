@@ -19,6 +19,7 @@ def c(monkeypatch):
     init_db()
     with TestClient(app) as cl:
         cl.post("/api/auth/register", json={"email": "fake.mode@example.com", "password": "test1234", "birth_date": "2009-05-01"})
+        cl.post("/api/auth/login", json={"email": "fake.mode@example.com", "password": "test1234"})  # 이미 가입했으면
         yield cl
 
 
@@ -69,3 +70,13 @@ def test_fake_mode_auto():
     assert fake_mode("auto", False, "") and fake_mode("", True, "")  # 모델 이름이 없으면 실제 모델을 못 씀
     assert not fake_mode("auto", True, "qwen")
     assert fake_mode("true", True, "qwen") and not fake_mode("false", False, "")
+
+
+def test_daily_check_notice_has_fake_advice(c):
+    """가짜 AI일 때 매일 자동 점검 알림에 에이전트 조언(테스트 답변)이 들어간다."""
+    from app import scheduler
+    j = c.post("/api/jobs", json={"name": "가상분식 매일점", "wage": 10320, "start_date": "2026-08-01"}).json()["id"]
+    uid = c.get("/api/me").json()["id"]
+    scheduler.daily_check(uid)
+    notes = [n for n in c.get(f"/api/notifications?job_id={j}").json() if n["title"].startswith("오늘 자동 점검")]
+    assert notes and "에이전트 조언: " + fake.PREFIX in notes[0]["body"]
