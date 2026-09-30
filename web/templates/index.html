@@ -43,9 +43,10 @@
       <div class="step">1 / 2 기본 정보</div>
       <h1>나이에 맞는 법 기준을 적용하려면 생년월일이 필요해요</h1>
       <p class="lead">근무일마다 만 나이를 계산해 적용할 조항을 고릅니다. 주민등록번호는 받지 않아요.</p>
+      <p class="hint hidden" id="regSigned">이미 가입한 계정이에요. 이메일과 생년월일이 맞는지 확인하고, 틀렸으면 고쳐 주세요.</p>
       <div class="panel">
         <label class="field"><span>이메일</span><input class="input" type="email" id="regEmail" autocomplete="email" inputmode="email" maxlength="254" placeholder="예: alba@example.com"></label>
-        <label class="field"><span>비밀번호</span><input class="input" type="password" id="regPw" autocomplete="new-password"></label>
+        <label class="field" id="regPwWrap"><span>비밀번호</span><input class="input" type="password" id="regPw" autocomplete="new-password" placeholder="4자 이상"></label>
         <label class="field"><span>생년월일</span><input class="input" type="date" id="birth"></label>
         <p class="err" id="regErr"></p>
       </div>
@@ -122,9 +123,9 @@
       <button type="button" class="back-btn ob-back" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>뒤로</button>
       <div class="step">내 정보</div>
       <h1>내 정보 수정</h1>
-      <p class="lead">생년월일로 근무일마다 만 나이를 계산해요. 바꾸면 점검 결과도 다시 확인해 주세요.</p>
+      <p class="lead">생년월일로 근무일마다 만 나이를 계산해요. 생년월일을 바꾸면 점검 결과도 다시 확인해 주세요.</p>
       <div class="panel">
-        <label class="field"><span>이메일</span><input class="input" id="meEmail" disabled></label>
+        <label class="field"><span>이메일</span><input class="input" type="email" id="meEmail" autocomplete="email" inputmode="email" maxlength="254" placeholder="예: alba@example.com"></label>
         <label class="field"><span>생년월일</span><input class="input" type="date" id="meBirth"></label>
         <p class="err" id="meErr"></p>
       </div>
@@ -370,7 +371,7 @@
     <div id="placeList" class="place-list" role="radiogroup" aria-labelledby="pickerTitle"></div>
     <div class="picker-foot">
       <button class="btn ghost block" id="addPlace">+ 새 일하는 곳 등록</button>
-      <button class="btn ghost block" style="margin-top:8px" id="editMe">내 정보(생년월일) 수정</button>
+      <button class="btn ghost block" style="margin-top:8px" id="editMe">내 정보(이메일, 생년월일) 수정</button>
       <button class="link muted" id="logoutBtn" style="margin-top:14px">로그아웃</button>
     </div>
   </div>

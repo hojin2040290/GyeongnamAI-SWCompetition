@@ -178,3 +178,17 @@ def test_register_checks_email():
         assert ok.status_code == 200 and ok.json()["email"] == "mail.check@example.com"
         c.post("/api/auth/logout")
         assert c.post("/api/auth/login", json={"email": "MAIL.CHECK@example.com", "password": "test1234"}).status_code == 200
+
+
+def test_update_email_checks_format():
+    """내 정보에서 이메일을 고칠 때도 형식과 중복을 확인한다."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as c, TestClient(app) as d:
+        c.post("/api/auth/register", json={"email": "me.fix@example.com", "password": "test1234", "birth_date": "2009-05-01"})
+        d.post("/api/auth/register", json={"email": "me.other@example.com", "password": "test1234", "birth_date": "2009-05-01"})
+        assert "@가 없어요" in c.put("/api/me", json={"birth_date": "2009-05-01", "email": "nofix"}).json()["detail"]
+        assert c.put("/api/me", json={"birth_date": "2009-05-01", "email": "ME.OTHER@example.com"}).status_code == 400
+        r = c.put("/api/me", json={"birth_date": "2009-05-01", "email": "Me.Fixed@example.com"})
+        assert r.status_code == 200 and r.json()["email"] == "me.fixed@example.com"
+        assert c.put("/api/me", json={"birth_date": "2009-05-01"}).json()["email"] == "me.fixed@example.com"  # 안 보내면 그대로

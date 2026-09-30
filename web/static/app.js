@@ -87,7 +87,7 @@ async function api(method, url, body, isForm){
 
 function show(id){
   ['ob0','ob1','obLogin','obSeek','ob2','obMe'].forEach(x=>$('#'+x).classList.toggle('hidden', x!==id));
-  state.curOb=id; if(id==='ob0') startScreen(); window.scrollTo(0,0); refreshNav();
+  state.curOb=id; if(id==='ob0') startScreen(); if(id==='ob1') prepBasic(); window.scrollTo(0,0); refreshNav();
 }
 function openOverlay(id){ $('#onboard').classList.remove('hidden'); show(id); }
 function closeOverlay(){ $('#onboard').classList.add('hidden'); state.curOb=null; refreshNav(); }
@@ -103,8 +103,9 @@ function backTarget(){
       case 'ob1': case 'obLogin': return ()=>show('ob0');
       case 'obSeek':
         if(visible('#seekResult')) return seekBackToForm;
-        return state.seekFromApp ? ()=>{ state.seekFromApp=false; closeOverlay(); } : ()=>show('ob0');
-      case 'ob2': return state.inApp ? cancelJobs : ()=>{ if(!confirmLeave()) return; clearCards(); show('ob0'); };
+        return state.seekFromApp ? ()=>{ state.seekFromApp=false; closeOverlay(); } : ()=>show('ob1');
+      // 처음 설정은 한 단계씩 되돌아간다 (2단계 → 1단계 기본 정보 → 처음 화면)
+      case 'ob2': return state.inApp ? cancelJobs : ()=>{ if(!confirmLeave()) return; clearCards(); show('ob1'); };
       case 'obMe': return closeOverlay;
       default: return null;
     }
@@ -218,7 +219,14 @@ function afterMode(){
   if (state.mode==='seek') { seekReset(); show('obSeek'); return; }
   clearCards(); prepJobForm(false); show('ob2'); const c=addCard(); if(state.mode==='quit') setSeg(c.node,'status','quit');
 }
-$('#modeNext').onclick = () => { if(state.me) afterMode(); else show('ob1'); };
+// 로그인한 상태여도 1단계(기본 정보)를 거친다: 가입한 이메일과 생년월일을 보여 주고 확인받는다
+$('#modeNext').onclick = () => show('ob1');
+function prepBasic(){
+  const signed=!!state.me; $('#regSigned').classList.toggle('hidden',!signed); $('#regPwWrap').classList.toggle('hidden',signed);
+  $('#regErr').textContent='';
+  if(signed){ $('#regEmail').value=state.me.email; $('#birth').value=state.me.birth_date; $('#regPw').value=''; }
+  if(signed && emailProblem(state.me.email)) $('#regErr').textContent=`${emailProblem(state.me.email)}. 고친 뒤 다음을 눌러 주세요`;
+}
 $('#obLogout').onclick = async () => { await api('POST','/api/auth/logout'); location.reload(); };
 $('#toLogin').onclick = () => show('obLogin');
 $('#toStart').onclick = () => show('ob0');
@@ -236,16 +244,18 @@ $('#regEmail').addEventListener('input',()=>{ if($('#regErr').textContent && !em
 $('#regBtn').onclick = async () => {
   $('#regErr').textContent='';
   const email=$('#regEmail').value.trim(), password=$('#regPw').value, birth_date=$('#birth').value;
-  if(!email||!password||!birth_date){ $('#regErr').textContent='이메일, 비밀번호, 생년월일을 모두 입력해 주세요'; return; }
+  if(!email||(!state.me&&!password)||!birth_date){ $('#regErr').textContent=state.me?'이메일과 생년월일을 입력해 주세요':'이메일, 비밀번호, 생년월일을 모두 입력해 주세요'; return; }
   const bad=emailProblem(email); if(bad){ $('#regErr').textContent=bad; $('#regEmail').focus(); return; }
   try {
-    state.me = await api('POST','/api/auth/register',{email,password,birth_date,mode:state.mode||'work'});
+    state.me = state.me ? await api('PUT','/api/me',{email,birth_date,mode:state.mode||'work'})
+      : await api('POST','/api/auth/register',{email,password,birth_date,mode:state.mode||'work'});
     afterMode();
   } catch(e) { $('#regErr').textContent=e.message; }
 };
 $('#logBtn').onclick = async () => {
   $('#logErr').textContent='';
   if(!$('#logEmail').value.trim()||!$('#logPw').value){ $('#logErr').textContent='이메일과 비밀번호를 입력해 주세요'; return; }
+  const bad=emailProblem($('#logEmail').value); if(bad){ $('#logErr').textContent=bad; $('#logEmail').focus(); return; }
   try {
     state.me = await api('POST','/api/auth/login',{email:$('#logEmail').value.trim(),password:$('#logPw').value});
     await loadJobs();
@@ -617,8 +627,10 @@ $('#pickerBg').onclick=e=>{ if(e.target.id==='pickerBg') goBack(); };
 $('#addPlace').onclick=()=>{ closePicker(); state.adding=true; clearCards(); prepJobForm('add'); openOverlay('ob2'); addCard(); };
 $('#editMe').onclick=()=>{ closePicker(); $('#meEmail').value=state.me.email; $('#meBirth').value=state.me.birth_date; $('#meErr').textContent=''; openOverlay('obMe'); };
 $('#meSave').onclick=async()=>{
-  const v=$('#meBirth').value; if(!v){ $('#meErr').textContent='생년월일을 입력해 주세요'; return; }
-  try{ state.me=await api('PUT','/api/me',{birth_date:v}); closeOverlay(); showTab(currentTab,false); toast('생년월일을 고쳤어요. 점검을 다시 해 보세요'); }
+  const v=$('#meBirth').value, email=$('#meEmail').value.trim(); if(!v){ $('#meErr').textContent='생년월일을 입력해 주세요'; return; }
+  const bad=emailProblem(email); if(bad){ $('#meErr').textContent=bad; $('#meEmail').focus(); return; }
+  const birthChanged=v!==state.me.birth_date;
+  try{ state.me=await api('PUT','/api/me',{birth_date:v,email}); closeOverlay(); showTab(currentTab,false); toast(birthChanged?'생년월일을 고쳤어요. 점검을 다시 해 보세요':'내 정보를 저장했어요'); }
   catch(e){ $('#meErr').textContent=e.message; }
 };
 $('#editJobBtn').onclick=()=>openJobEditor(curJob());
