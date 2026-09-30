@@ -6,6 +6,7 @@ from pathlib import Path
 from sqlmodel import Session, select
 
 from app.agent.tools import make_tools
+from app.calc import pay as paycalc
 from app.calc import schedule as sch
 from app.calc.age import age_on
 from app.calc.timeutil import now_kst, today_kst
@@ -60,7 +61,7 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
     sched_txt = ", ".join(f"{d} {sch.slot_text(x)}(쉬는 시간 {x.get('brk', '모름')})"
                           for d, v in sched.items() for x in sch.slots_of(v)) or "미입력"
     rows.append(f"<tr><th>계약상 근무</th><td>{e(sched_txt)}</td></tr>")
-    pay_parts = [p for p in (job.pay_cycle, f"{job.payday}일" if job.payday else "", job.pay_method,
+    pay_parts = [p for p in (job.pay_cycle, paycalc.payday_text(job.payday), job.pay_method,
                              f"공제 {job.deduction or '모름'}") if p]
     rows.append(f"<tr><th>임금 지급</th><td>{e(', '.join(pay_parts))}</td></tr></table>")
 

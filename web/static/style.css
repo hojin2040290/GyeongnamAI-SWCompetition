@@ -91,7 +91,7 @@ h3{font-size:16px;margin:24px 0 10px}
 /* 폼 */
 label.field{display:block;margin-bottom:12px;font-size:14px}
 label.field span{display:block;font-weight:500;margin-bottom:4px}
-.input{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fbfcfe}
+.input{box-sizing:border-box;width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fbfcfe}
 textarea.input{min-height:120px;resize:vertical;line-height:1.6}
 .row{display:flex;gap:10px}
 .row > *{flex:1}

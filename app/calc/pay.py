@@ -1,4 +1,5 @@
 """임금 계산. 금액 계산은 전부 여기서 코드로 한다 (AI에게 맡기지 않음)."""
+import calendar
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -98,3 +99,22 @@ def settlement_status(quit_date: date, today: date, paid) -> dict:
         status = "bad"
     return {"quit_date": quit_date.isoformat(), "due": due.isoformat(), "left": left, "status": status,
             "claim_years": P()["wage_claim"]["years"], "law": P()["settlement"]["law"]}
+
+
+# ---------- 월급날 ----------
+LAST_DAY = 31  # 월급날 31은 '말일(매달 마지막 날)'
+
+
+def payday_in(year: int, month: int, payday: int) -> date:
+    """그 달의 실제 월급날. 그 달에 없는 날(예: 2월 30일)이면 그 달 마지막 날로 본다."""
+    return date(year, month, min(payday, calendar.monthrange(year, month)[1]))
+
+
+def is_payday(payday: int | None, day: date) -> bool:
+    return bool(payday) and day == payday_in(day.year, day.month, payday)
+
+
+def payday_text(payday: int | None) -> str:
+    if not payday:
+        return ""
+    return "말일" if payday >= LAST_DAY else f"{payday}일"

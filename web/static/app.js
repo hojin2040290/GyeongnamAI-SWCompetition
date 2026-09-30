@@ -165,6 +165,20 @@ function bindChars(input, chars, onBad){
 function bindJobChars(root){ const j=state.rules?.job; if(!j) return;
   [['.f-name','name'],['.f-owner','owner'],['.f-addr','address'],['.f-work','work_desc']].forEach(([sel,f])=>{
     const el=root.querySelector(sel); bindChars(el, j.chars, ()=>toast(`${j.fields[f]}에는 ${j.allowed}만 쓸 수 있어요`)); }); }
+// 금액 칸(시급, 받은 금액): '55만원', '1만 2천원', '12,000원'처럼 적어도 된다. 칸을 벗어나면 숫자로 바꾼다
+function parseWon(text){
+  const t=String(text??'').replace(/[\s,원]/g,''); if(!t) return null; if(/^\d+$/.test(t)) return Number(t);
+  const unit={'만':10000,'천':1000,'백':100}; let total=0, used='', m; const re=/(\d+)(만|천|백)|(\d+)$/g;
+  while((m=re.exec(t))){ used+=m[0]; total+=m[1]?Number(m[1])*unit[m[2]]:Number(m[3]); }
+  return used===t?total:null;
+}
+document.addEventListener('input',e=>{ const el=e.target; if(!el.matches?.('input[data-num]')) return;
+  const v=el.value.replace(/[^0-9,만천백원 ]/g,''); if(v!==el.value){ el.value=v; toast(`${el.dataset.num}은(는) 숫자로 적어 주세요 (예: 12,000원, 55만원)`); } });
+document.addEventListener('change',e=>{ const el=e.target; if(!el.matches?.('input[data-num]')||el.value==='') return;
+  const n=parseWon(el.value), min=Number(el.dataset.min), max=Number(el.dataset.max);
+  if(n==null){ toast(`${el.dataset.num}을(를) 알아볼 수 없어요. 숫자로 적어 주세요 (예: 12,000원, 55만원)`); el.value=''; return; }
+  if(n<min||n>max){ toast(`${el.dataset.num}은(는) ${min.toLocaleString()}원부터 ${max.toLocaleString()}원까지 적을 수 있어요`); el.value=''; return; }
+  if(String(n)!==el.value){ toast(`${el.value} → ${n.toLocaleString()}원으로 적었어요`); el.value=String(n); } });
 async function boot(){
   await loadRules(); bindJobChars(seek.node);
   try {
@@ -215,6 +229,9 @@ $('#logBtn').onclick = async () => {
 function addCard(){
   const node=$('#jobTpl').content.firstElementChild.cloneNode(true);
   const card={node, schedule:{}}; state.cards.push(card); bindJobChars(node);
+  // 월급날: 1~30일과 말일(매달 마지막 날, 31로 저장). 그 달에 없는 날이면 그 달 마지막 날로 본다
+  node.querySelector('.f-payday').insertAdjacentHTML('beforeend',
+    Array.from({length:30},(_,i)=>`<option value="${i+1}">${i+1}일</option>`).join('')+'<option value="31">말일 (매달 마지막 날)</option>');
   const name=node.querySelector('.f-name');
   name.addEventListener('input',()=>{ node.querySelector('.job-title').textContent=name.value.trim()||'새 일하는 곳'; });
   node.querySelector('.remove').onclick=async()=>{
@@ -319,10 +336,10 @@ document.addEventListener('input',e=>{
 function yn(v){ return v==='yes'?true:(v==='no'?false:null); }
 function collect(card){
   const n=card.node, q=s=>n.querySelector(s);
-  const wage=q('.f-wage').value, payday=q('.f-payday').value;
+  const wage=parseWon(q('.f-wage').value), payday=q('.f-payday').value;
   return {
     name:q('.f-name').value.trim(), status:segVal(n,'status')||'working', quit_date:q('.f-quit').value||null,
-    industry:q('.f-type').value, work_desc:q('.f-work').value.trim(), wage:wage?Number(wage):null,
+    industry:q('.f-type').value, work_desc:q('.f-work').value.trim(), wage:wage||null,
     start_date:q('.f-start').value||null, end_date:q('.f-noend').checked?null:(q('.f-end').value||null), no_end:q('.f-noend').checked,
     contract_written:yn(segVal(n,'contract')), copy_received:yn(segVal(n,'copy')),
     probation:segVal(n,'probation')||'unknown', probation_months:q('.f-probmonths').value?Number(q('.f-probmonths').value):null,
@@ -436,9 +453,9 @@ $('#seekFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.le
   for(const f of files){ const fd=new FormData(); fd.append('file',f); fd.append('kind','notice');
     try{ await api('POST','/api/evidence',fd,true); ok++; }catch(err){ toast(`${f.name}: ${err.message}`); } }
   if(ok) toast(`공고 사진 ${ok}장을 원본으로 보관했어요`); e.target.value=''; };
-function seekInput(){ const n=seek.node, w=n.querySelector('.f-wage').value;
+function seekInput(){ const n=seek.node, w=parseWon(n.querySelector('.f-wage').value);
   return { name:n.querySelector('.f-name').value.trim(), industry:n.querySelector('.f-type').value, work_desc:n.querySelector('.f-work').value.trim(),
-    wage:w?Number(w):null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule,
+    wage:w||null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule,
     biz_no:n.querySelector('.f-bizno').value.trim() }; }
 function articleHTML(a){
   if(!a || a.na) return '';
@@ -810,7 +827,7 @@ $('#payFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; cons
     } else $('#payOcr').textContent=`명세서 원본을 저장했어요. ${r.reason}`;
   }catch(err){ $('#payOcr').textContent=''; toast(err.message); } };
 $('#paySave').onclick=async()=>{
-  const amt=$('#payAmount').value; if(!amt){ toast('받은 금액을 입력해 주세요'); return; }
+  const amt=parseWon($('#payAmount').value); if(amt==null){ toast('받은 금액을 입력해 주세요 (예: 557,280원, 55만원)'); return; }
   const fd=new FormData(); fd.append('month',$('#payMonth').value); fd.append('amount',amt); if(payslipEv) fd.append('evidence_id',payslipEv);
   if(!$('#payModeWrap').classList.contains('hidden')) fd.append('mode',segVal($('#payModeWrap'),'paymode')||'add');
   try{ const r=await agent('#payTrace',()=>api('POST',`/api/jobs/${state.current}/payslip`,fd,true)); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace);
