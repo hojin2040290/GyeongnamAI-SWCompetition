@@ -371,7 +371,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
                 "시급": job.wage, "사업장 인원": job.size, "수습": job.probation, "수습 개월": job.probation_months,
                 "근무 시작": job.start_date, "계약 끝": job.end_date, "기간 정함 없음": job.no_end,
                 "계약상 근무": sch.parse(job.schedule_json), "계약서 작성": job.contract_written,
-                "사본 받음": job.copy_received, "보호자 서류": job.consent or "모름", "월급날": job.payday,
+                "사본 받음": job.copy_received, "보호자 서류": job.consent or "모름", "월급날": paycalc.payday_text(job.payday) or "모름",
                 "상태": "그만둠" if job.status == "quit" else "일하는 중", "그만둔 날": job.quit_date,
                 "신고함": job.reported}
 

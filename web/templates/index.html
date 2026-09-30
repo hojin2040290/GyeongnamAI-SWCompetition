@@ -85,7 +85,7 @@
           </select></label>
         <label class="field"><span>하는 일</span><input class="input f-work" maxlength="200" placeholder="공고에 적힌 업무"></label>
         <label class="field"><span>공고에 적힌 시급</span>
-          <div class="suffix"><input class="input f-wage" type="number" min="1" max="1000000" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
+          <div class="suffix"><input class="input f-wage" type="text" inputmode="numeric" data-num="시급" data-min="1" data-max="1000000" placeholder="예: 10,030원"><em>원</em></div></label>
         <div class="field"><span>수습 기간</span>
           <div class="seg" data-name="probation"><button type="button" data-v="yes">있어요</button><button type="button" data-v="no">없어요</button><button type="button" data-v="unknown">모름</button></div></div>
         <div class="field"><span>근무 요일과 시간</span>
@@ -225,7 +225,7 @@
       </div>
       <h3>받은 급여 올리기</h3>
       <div class="panel">
-        <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="number" id="payAmount" min="0" max="100000000" inputmode="numeric"><em>원</em></div></label>
+        <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="text" id="payAmount" inputmode="numeric" data-num="받은 금액" data-min="0" data-max="100000000" placeholder="예: 557,280원 또는 55만원"><em>원</em></div></label>
         <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf">
           <em class="hint" id="payOcr">사진을 고르면 원본으로 저장하고, AI가 금액을 읽어 채워요.</em></label>
         <div class="field hidden" id="payModeWrap"><span id="payModeLabel">이 달에 이미 저장한 금액이 있어요</span>
@@ -393,7 +393,7 @@
         <option>사무 보조</option><option>기타</option>
       </select></label>
     <label class="field"><span>하는 일</span><input class="input f-work" maxlength="200" placeholder="예: 음료 제조, 계산, 매장 정리"></label>
-    <label class="field"><span>약속한 시급</span><div class="suffix"><input class="input f-wage" type="number" min="1" max="1000000" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
+    <label class="field"><span>약속한 시급</span><div class="suffix"><input class="input f-wage" type="text" inputmode="numeric" data-num="시급" data-min="1" data-max="1000000" placeholder="예: 10,030원"><em>원</em></div></label>
     <div class="row">
       <label class="field"><span>근무 시작일</span><input class="input f-start" type="date"></label>
       <label class="field"><span>계약 종료일</span><input class="input f-end" type="date"></label>
@@ -414,7 +414,7 @@
       <div class="seg" data-name="size"><button type="button" data-v="5+">5명 이상</button><button type="button" data-v="lt5">5명 미만</button><button type="button" data-v="unknown">모름</button></div></div>
     <div class="field"><span>임금 받는 주기</span>
       <div class="seg" data-name="paytype"><button type="button" data-v="월급">월급</button><button type="button" data-v="주급">주급</button><button type="button" data-v="일급">일급</button></div></div>
-    <label class="field f-payday-wrap"><span>월급날</span><div class="suffix"><input class="input f-payday" type="number" min="1" max="31" placeholder="예: 10"><em>일</em></div></label>
+    <label class="field f-payday-wrap"><span>월급날</span><select class="input f-payday"><option value="">모름</option></select></label>
     <div class="field"><span>임금 받는 방법</span>
       <div class="seg" data-name="paymethod"><button type="button" data-v="계좌 이체">계좌 이체</button><button type="button" data-v="현금">현금</button></div>
       <p class="hint f-cash hidden">현금은 입금 내역이 남지 않아요. 받을 때마다 금액과 날짜를 기록해 두세요.</p></div>

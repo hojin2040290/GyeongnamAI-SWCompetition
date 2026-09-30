@@ -106,3 +106,14 @@ def test_split_shift_judged_per_slot():
     assert len(brk) == 1 and "13:30~18:30" in brk[0].basis[0]  # 4시간 이상인 시간대만 쉬는 시간이 필요
     hours = [i for i in items if i.law == "근로기준법 제69조"]
     assert hours and hours[0].status == "bad"  # 하루 3시간 30분 + 5시간: 연장해도 하루 8시간 한도를 넘음
+
+
+# ---------- 월급날 (그 달에 없는 날이면 그 달 마지막 날) ----------
+def test_payday_month_end():
+    from app.calc.pay import is_payday, payday_in, payday_text
+    assert payday_in(2026, 2, 31) == date(2026, 2, 28) and payday_in(2028, 2, 31) == date(2028, 2, 29)  # 말일
+    assert payday_in(2026, 2, 30) == date(2026, 2, 28) and payday_in(2026, 4, 30) == date(2026, 4, 30)
+    assert payday_in(2026, 4, 31) == date(2026, 4, 30) and payday_in(2026, 9, 10) == date(2026, 9, 10)
+    assert is_payday(31, date(2026, 2, 28)) and not is_payday(31, date(2026, 2, 27))
+    assert is_payday(30, date(2026, 2, 28)) and is_payday(10, date(2026, 9, 10)) and not is_payday(None, date(2026, 9, 10))
+    assert payday_text(31) == "말일" and payday_text(10) == "10일" and payday_text(None) == ""

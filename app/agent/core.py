@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
 from app.agent.safety import scrub
+from app.calc import pay as paycalc
 from app.agent.tools import agent_tools, for_ai, make_tools
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
@@ -413,7 +414,7 @@ def run_daily(session: Session, user_id: int, job_id: int) -> dict:
 
     def overview() -> dict:
         job, st = r.tools["get_job"](), r.tools["settlement"]()
-        return {"오늘": today, "월급날": job.payday, "오늘이 월급날": job.payday == today.day, "지난달": last_month,
+        return {"오늘": today, "월급날": paycalc.payday_text(job.payday) or "모름", "오늘이 월급날": paycalc.is_payday(job.payday, today), "지난달": last_month,
                 "상태": "그만둠" if job.status == "quit" else "일하는 중",
                 "퇴직 후 지급 기한까지 남은 날": st["left"] if st else None, "신고함": job.reported,
                 "판별 대기 게시물": r.tools["pending_posts"](), "오래된 출근 기록": r.tools["find_open_record"]()}
@@ -443,7 +444,7 @@ def run_daily(session: Session, user_id: int, job_id: int) -> dict:
                 ["get_overview", "run_pay_check", "run_quit_check", "run_post_search", "notify"], DONE)
     if r.agent(goal, {}, extra) is None and not ran:
         job = r.tools["get_job"]()
-        if job.status == "working" and job.payday == today.day:
+        if job.status == "working" and paycalc.is_payday(job.payday, today):  # 없는 날이면 그 달 마지막 날
             pay_check(last_month)
         if job.status == "quit":
             quit_check()
