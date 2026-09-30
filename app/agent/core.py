@@ -21,6 +21,7 @@ from app.agent.tools import agent_tools, for_ai, make_tools
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
 from app.law.lookup import known_law
+from app.llm import client
 from app.models import AgentLog, CaseNote
 
 MAX_STEPS = 10  # AI 응답이 없을 때 정해 둔 순서의 도구 호출 수 제한
@@ -391,7 +392,6 @@ ADVICE_TOOLS = ["get_profile", "get_contract", "get_saved_checks", "calc_work_da
 def run_advice(session: Session, user_id: int, job_id: int, trigger: str = "schedule") -> dict:
     """사용자에게서 얻은 기록과 에이전트가 만든 기록을 종합해 조언한다 (매일 한 번).
     지난 종합 조언 뒤로 달라진 기록이 없으면 AI를 부르지 않는다."""
-    from app.llm import client
     r = Run(session, user_id, job_id, "advice", trigger)
     key = case.data_key(session, r.tools["get_job"]())
     last = session.exec(select(CaseNote).where(CaseNote.job_id == job_id, CaseNote.kind == "advice",
@@ -463,6 +463,28 @@ def run_daily(session: Session, user_id: int, job_id: int) -> dict:
 RESUME = {"contract_check": "contract_check", "shift_check": "contract_check", "payday": "payday",
           "quit_check": "quit_check", "report": "report", "daily": "daily", "guard_on": "guard_review",
           "guard_search": "guard_review", "guard_preserve": "guard_review", "guard_review": "guard_review"}
+
+
+# ---------- 매일 자동 점검 결과 알림 ----------
+DAILY_KINDS = {"payday": "급여(지난달)", "quit": "퇴직 뒤 임금 지급 기한", "guard": "공개 게시물 검색과 판별"}
+
+
+def daily_notice(session: Session, user_id: int, job_id: int, ran: list[str], advised: bool) -> str:
+    """매일 자동 점검이 끝나면 사업장마다 알림 하나로 결과를 알린다 (점검할 게 없던 날도).
+    알림은 코드가 보내고, 조언 글은 AI가 give_advice로 남긴 것을 그대로 옮긴다."""
+    t = make_tools(session, user_id, job_id)
+    today = today_kst()
+    done = ", ".join(DAILY_KINDS.get(k, k) for k in ran)
+    lines = [f"실행한 점검: {done}." if done else "오늘 필요한 점검은 없었어요 (월급날, 그만둔 뒤 지급 기한, 신고 후 게시물 확인에 해당 없음)."]
+    adv = case.latest_advice(session, job_id)
+    if advised and adv:
+        lines.append(f"에이전트 조언: {adv.text}")
+    elif not client.available():
+        lines.append(f"종합 조언은 {AI_WAITING}이에요.")
+    else:
+        lines.append("지난 조언 뒤로 달라진 기록이 없어 새 조언은 없어요.")
+    lines.append("자세한 결과는 홈의 AI 에이전트 진행 상황에서 볼 수 있어요.")
+    return t["notify"](f"오늘 자동 점검 ({today.month}월 {today.day}일)", " ".join(lines))
 
 
 def run_again(session: Session, user_id: int, job_id: int, kind: str, month: str, trigger: str) -> dict:

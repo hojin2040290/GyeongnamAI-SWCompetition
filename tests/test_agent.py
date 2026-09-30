@@ -504,3 +504,17 @@ def test_evidence_list_shows_all_saved(env):
     assert any(e["kind"] == "notice" and e["before_job"] for e in evs)
     assert any(e["kind"] == "post_link" and e["note"] == "https://example.com/p/1" and not e["file"] for e in evs)
     assert not any(e["kind"] == "notice" for e in b.get(f"/api/jobs/{jb}/evidence").json())  # 다른 사람 것은 안 보임
+
+
+def test_daily_check_always_notifies(env, monkeypatch):
+    """매일 자동 점검은 할 점검이 없던 날도 사업장마다 결과를 알림으로 보낸다 (AI가 없으면 조언은 대기라고 알림)."""
+    from app import scheduler
+    a, ja, *_ = env
+    monkeypatch.setattr(client, "LLM_ENABLED", False)
+    monkeypatch.setattr(scheduler, "refresh_law_table", lambda: "건너뜀")
+    with Session(engine) as s:
+        uid = s.get(Job, ja).user_id
+    out = scheduler.daily_check(uid)
+    assert out["notified"] >= 1
+    notes = [n for n in a.get("/api/notifications").json() if n["title"].startswith("오늘 자동 점검")]
+    assert notes and "AI 응답 대기 중" in notes[0]["body"] and ("실행한 점검" in notes[0]["body"] or "필요한 점검은 없었어요" in notes[0]["body"])
