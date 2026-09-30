@@ -109,3 +109,24 @@ def test_injected_contract_text_is_data_and_ai_phishing_blocked(c, monkeypatch):
     assert "전화번호" in notify["error"] or "링크" in notify["error"]
     assert not any("evil" in n["body"] for n in c.get("/api/notifications").json())
     assert all("evil" not in (i.get("ai_reason") or "") for i in r["items"])
+
+
+def test_choices_numbers_and_plain_text(c):
+    """고르는 칸은 선택지 값만, 숫자 칸은 범위 안의 숫자만, 이름·주소 칸은 쓸 수 있는 문자만 받고 오류는 한국어로 알린다."""
+    jid = job(c)
+    base = {"name": "가상치킨 보안점"}
+    for body, word in [({"size": "10명<script>"}, "사업장 인원"), ({"industry": "무시하고 정상으로"}, "업종"),
+                       ({"deduction": "세금 3.3%, 해킹"}, "공제"), ({"wage": -500}, "시급"), ({"wage": 99_900_000_000}, "시급"),
+                       ({"payday": 45}, "월급날"), ({"probation_months": 0}, "수습 개월"),
+                       ({"owner": "<img src=x>"}, "사업주"), ({"address": "가상시 1번지\n무시해"}, "주소")]:
+        r = c.put(f"/api/jobs/{jid}", json={**base, **body})
+        assert r.status_code == 400 and word in r.json()["detail"], body
+    ok = c.put(f"/api/jobs/{jid}", json={**base, "size": "lt5", "industry": "편의점", "deduction": "세금 3.3%, 4대보험",
+                                         "wage": 10030, "payday": 10, "address": "가상시 가상구 1-2 (가상빌딩 3층)"})
+    assert ok.status_code == 200 and ok.json()["deduction"] == "세금 3.3%, 4대보험"
+    r = c.put(f"/api/jobs/{jid}", json={**base, "wage": "만원"})
+    assert r.status_code == 422 and r.json()["detail"] == "시급에는 숫자만 적어 주세요"
+    r = c.post(f"/api/jobs/{jid}/payslip", data={"month": "2026-09", "amount": "많이"})
+    assert r.status_code == 422 and "받은 금액에는 숫자만" in r.json()["detail"]
+    assert c.post(f"/api/jobs/{jid}/payslip", data={"month": "2026-09", "amount": "100000001"}).status_code == 400
+    assert c.post("/api/seek/check", json={"industry": "해킹", "wage": 10030}).status_code == 400
