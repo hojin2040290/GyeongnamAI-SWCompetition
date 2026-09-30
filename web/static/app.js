@@ -2,11 +2,10 @@
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const DAY_KEYS = ['월','화','수','목','금','토','일'];
-const TIMES = []; for (let h=0; h<24; h++) { TIMES.push(pad(h)+':00'); TIMES.push(pad(h)+':30'); }
 const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
 const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심', pending:'확인 중'};  // 확인 중: AI 판단 전
 const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
-  report:'상담 자료', guard_on:'보복 대응 시작', guard_off:'보복 대응 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존',
+  report:'상담 자료', guard_on:'신고 후 보호 시작', guard_off:'신고 후 보호 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존',
   guard_review:'게시물 판별', daily:'매일 자동 점검', advice:'매일 종합 조언'};
 const KIND = {contract:'근로계약서', payslip:'급여명세서', message:'사업주 메시지', schedule:'근무표', deposit:'입금 내역', post:'게시물 화면', notice:'채용공고', other:'기타'};
 
@@ -190,7 +189,10 @@ function addCard(){
   };
   node.querySelector('.schedule-btn').onclick=()=>openSheetFor(card);
   node.querySelector('.f-noend').onchange=e=>{ node.querySelector('.f-end').disabled=e.target.checked; };
-  node.querySelector('.f-start').addEventListener('change',()=>checkMinor(card));
+  const startEl=node.querySelector('.f-start');
+  startEl.max=todayStr();  // 달력에서 미래 날짜를 고를 수 없게
+  const syncMin=()=>{ node.querySelector('.f-end').min=startEl.value; node.querySelector('.f-quit').min=startEl.value; };
+  startEl.addEventListener('change',()=>{ checkMinor(card); syncMin(); });
   bindSeg(node,(n,v)=>{
     if(n==='status') node.querySelector('.f-quit-wrap').classList.toggle('hidden',v!=='quit');
     if(n==='probation') node.querySelector('.f-probmonths').classList.toggle('hidden',v!=='yes');
@@ -218,6 +220,7 @@ function fillCard(card, j){
   q('.f-bizno').value=j.biz_no||'';
   q('.f-type').value=j.industry||''; q('.f-work').value=j.work_desc||''; q('.f-wage').value=j.wage??'';
   q('.f-start').value=j.start_date||''; q('.f-end').value=j.end_date||'';
+  q('.f-end').min=j.start_date||''; q('.f-quit').min=j.start_date||'';
   q('.f-noend').checked=!!j.no_end; q('.f-end').disabled=!!j.no_end;
   if(ynV(j.contract_written)) setSeg(n,'contract',ynV(j.contract_written));
   if(ynV(j.copy_received)) setSeg(n,'copy',ynV(j.copy_received));
@@ -301,6 +304,7 @@ $('#saveJobsBtn').onclick=async()=>{
     const d=collect(c);
     if(!d.name){ c.node.scrollIntoView({block:'center'}); c.node.querySelector('.f-name').focus(); $('#jobErr').textContent='사업장 이름을 입력해 주세요'; return; }
     if(d.status==='quit'&&!d.quit_date){ c.node.scrollIntoView({block:'center'}); $('#jobErr').textContent='그만둔 날을 입력해 주세요'; return; }
+    const dp=dateProblem(d); if(dp){ c.node.scrollIntoView({block:'center'}); $('#jobErr').textContent=dp; return; }
   }
   try{
     if(state.editingJob){
@@ -335,9 +339,15 @@ function renderDays(){
   const box=$('#dayPicker'); box.innerHTML='';
   DAY_KEYS.forEach(k=>{ const b=document.createElement('button'); b.type='button'; b.className='day'; b.textContent=k;
     b.setAttribute('aria-pressed',draft[k]?'true':'false'); b.setAttribute('aria-label',`${k}요일`);
-    b.onclick=()=>{ if(draft[k]) delete draft[k]; else draft[k]={start:'18:00',end:'22:00',brk:'없음'}; renderDays(); renderSlots(); };
+    b.onclick=()=>{ if(draft[k]) delete draft[k]; else draft[k]=newSlot(); renderDays(); renderSlots(); };
     box.appendChild(b); });
 }
+// 새로 고른 요일은 이미 고른 요일의 시간을 그대로 가져온다 (처음이면 18:00~22:00)
+function newSlot(){ const k=DAY_KEYS.find(k=>draft[k]); return k?{...draft[k]}:{start:'18:00',end:'22:00',brk:'없음'}; }
+// 평일, 주말, 매일, 모두 해제: 그 요일들만 고른 상태로 만든다
+$$('#dayQuick [data-days]').forEach(b=>b.onclick=()=>{ const want=[...b.dataset.days];
+  const tpl=newSlot(); DAY_KEYS.forEach(k=>{ if(!want.includes(k)) delete draft[k]; else if(!draft[k]) draft[k]={...tpl}; });
+  renderDays(); renderSlots(); });
 function opts(list,sel){ return list.map(v=>`<option${v===sel?' selected':''}>${v}</option>`).join(''); }
 function renderSlots(){
   const box=$('#slotList'); box.innerHTML='';
@@ -345,12 +355,15 @@ function renderSlots(){
   $('#slotEmpty').classList.toggle('hidden',keys.length>0); $('#copyAll').classList.toggle('hidden',keys.length<2);
   keys.forEach(k=>{ const s=draft[k]; const el=document.createElement('div'); el.className='slot';
     el.innerHTML=`<div class="slot-day">${k}요일 <span class="hrs">${fmtH(slotMinutes(s))}</span></div>
-      <div class="slot-grid"><select class="input" aria-label="${k}요일 시작 시간">${opts(TIMES,s.start)}</select><span class="tilde">부터</span>
-      <select class="input" aria-label="${k}요일 끝 시간">${opts(TIMES,s.end)}</select></div>
+      <div class="slot-grid"><input type="time" class="input" step="1800" value="${s.start}" aria-label="${k}요일 시작 시간"><span class="tilde">부터</span>
+      <input type="time" class="input" step="1800" value="${s.end}" aria-label="${k}요일 끝 시간"></div>
       <div class="brk">쉬는 시간<select class="input" aria-label="${k}요일 쉬는 시간">${opts(BREAKS,s.brk)}</select></div>`;
-    const [st,en]=el.querySelectorAll('.slot-grid select'), br=el.querySelector('.brk select');
+    const [st,en]=el.querySelectorAll('.slot-grid input'), br=el.querySelector('.brk select');
     const up=()=>{ el.querySelector('.hrs').textContent=fmtH(slotMinutes(s)); totals(); };
-    st.onchange=()=>{s.start=st.value;up()}; en.onchange=()=>{s.end=en.value;up()}; br.onchange=()=>{s.brk=br.value;up()};
+    // 휴대폰 기본 시간 휠. 지우면 이전 값으로 되돌린다
+    st.onchange=()=>{ if(st.value) s.start=st.value; else st.value=s.start; up(); };
+    en.onchange=()=>{ if(en.value) s.end=en.value; else en.value=s.end; up(); };
+    br.onchange=()=>{s.brk=br.value;up()};
     box.appendChild(el); });
   totals();
 }
@@ -615,6 +628,14 @@ $('#punchBtn').onclick=async()=>{
 };
 
 // 근무 기록 (홈)
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+// 근무 기간 날짜 검사 (서버와 같은 규칙). 그만둔 날은 앞으로 그만둘 날일 수도 있어 오늘보다 뒤여도 된다
+function dateProblem(d){
+  if(d.start_date && d.start_date>todayStr()) return '근무 시작일은 오늘보다 뒤일 수 없어요';
+  if(d.start_date && d.end_date && d.end_date<d.start_date) return '계약 종료일은 근무 시작일보다 앞일 수 없어요';
+  if(d.start_date && d.status==='quit' && d.quit_date && d.quit_date<d.start_date) return '그만둔 날은 근무 시작일보다 앞일 수 없어요';
+  return '';
+}
 function thisMonth(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
 // 출퇴근 버튼 상태, 퇴근 잊음 안내, 기록 목록을 한 번에 새로 그린다
 async function refreshRecords(updateState=true){
@@ -678,10 +699,11 @@ async function renderQuit(){
     : `${f(st.quit_date)}에 그만뒀고 지급 기한 ${f(st.due)}이 지났어요. 아직 못 받았다면 상담을 준비하세요.`;
   $('#quitReport').classList.toggle('hidden',!(j.paid_after_quit===false||(st.status==='bad'&&j.paid_after_quit!==true)));
 }
-function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
+function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitDateMain').min=j.start_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
 function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen').classList.toggle('hidden',curJob().status==='quit'); refreshNav(); }
 $('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
 $('#quitSave').onclick=async()=>{ const v=$('#quitDateMain').value; if(!v){ toast('그만둔 날을 골라 주세요'); return; }
+  const st=curJob().start_date; if(st && v<st){ toast('그만둔 날은 근무 시작일보다 앞일 수 없어요'); return; }
   try{ await api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v}); await loadJobs(); closeQuitForm(); await loadHome(); toast('그만둔 날을 저장했어요'); }catch(e){ toast(e.message); } };
 async function setPaid(p){ try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p}); await loadJobs(); await renderQuit(); toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); }catch(e){ toast(e.message); } }
 $('#paidYes').onclick=()=>setPaid(true); $('#paidNo').onclick=()=>setPaid(false);
