@@ -190,7 +190,10 @@ function addCard(){
   };
   node.querySelector('.schedule-btn').onclick=()=>openSheetFor(card);
   node.querySelector('.f-noend').onchange=e=>{ node.querySelector('.f-end').disabled=e.target.checked; };
-  node.querySelector('.f-start').addEventListener('change',()=>checkMinor(card));
+  const startEl=node.querySelector('.f-start');
+  startEl.max=todayStr();  // 달력에서 미래 날짜를 고를 수 없게
+  const syncMin=()=>{ node.querySelector('.f-end').min=startEl.value; node.querySelector('.f-quit').min=startEl.value; };
+  startEl.addEventListener('change',()=>{ checkMinor(card); syncMin(); });
   bindSeg(node,(n,v)=>{
     if(n==='status') node.querySelector('.f-quit-wrap').classList.toggle('hidden',v!=='quit');
     if(n==='probation') node.querySelector('.f-probmonths').classList.toggle('hidden',v!=='yes');
@@ -218,6 +221,7 @@ function fillCard(card, j){
   q('.f-bizno').value=j.biz_no||'';
   q('.f-type').value=j.industry||''; q('.f-work').value=j.work_desc||''; q('.f-wage').value=j.wage??'';
   q('.f-start').value=j.start_date||''; q('.f-end').value=j.end_date||'';
+  q('.f-end').min=j.start_date||''; q('.f-quit').min=j.start_date||'';
   q('.f-noend').checked=!!j.no_end; q('.f-end').disabled=!!j.no_end;
   if(ynV(j.contract_written)) setSeg(n,'contract',ynV(j.contract_written));
   if(ynV(j.copy_received)) setSeg(n,'copy',ynV(j.copy_received));
@@ -301,6 +305,7 @@ $('#saveJobsBtn').onclick=async()=>{
     const d=collect(c);
     if(!d.name){ c.node.scrollIntoView({block:'center'}); c.node.querySelector('.f-name').focus(); $('#jobErr').textContent='사업장 이름을 입력해 주세요'; return; }
     if(d.status==='quit'&&!d.quit_date){ c.node.scrollIntoView({block:'center'}); $('#jobErr').textContent='그만둔 날을 입력해 주세요'; return; }
+    const dp=dateProblem(d); if(dp){ c.node.scrollIntoView({block:'center'}); $('#jobErr').textContent=dp; return; }
   }
   try{
     if(state.editingJob){
@@ -615,6 +620,14 @@ $('#punchBtn').onclick=async()=>{
 };
 
 // 근무 기록 (홈)
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+// 근무 기간 날짜 검사 (서버와 같은 규칙). 그만둔 날은 앞으로 그만둘 날일 수도 있어 오늘보다 뒤여도 된다
+function dateProblem(d){
+  if(d.start_date && d.start_date>todayStr()) return '근무 시작일은 오늘보다 뒤일 수 없어요';
+  if(d.start_date && d.end_date && d.end_date<d.start_date) return '계약 종료일은 근무 시작일보다 앞일 수 없어요';
+  if(d.start_date && d.status==='quit' && d.quit_date && d.quit_date<d.start_date) return '그만둔 날은 근무 시작일보다 앞일 수 없어요';
+  return '';
+}
 function thisMonth(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
 // 출퇴근 버튼 상태, 퇴근 잊음 안내, 기록 목록을 한 번에 새로 그린다
 async function refreshRecords(updateState=true){
@@ -678,10 +691,11 @@ async function renderQuit(){
     : `${f(st.quit_date)}에 그만뒀고 지급 기한 ${f(st.due)}이 지났어요. 아직 못 받았다면 상담을 준비하세요.`;
   $('#quitReport').classList.toggle('hidden',!(j.paid_after_quit===false||(st.status==='bad'&&j.paid_after_quit!==true)));
 }
-function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
+function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitDateMain').min=j.start_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
 function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen').classList.toggle('hidden',curJob().status==='quit'); refreshNav(); }
 $('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
 $('#quitSave').onclick=async()=>{ const v=$('#quitDateMain').value; if(!v){ toast('그만둔 날을 골라 주세요'); return; }
+  const st=curJob().start_date; if(st && v<st){ toast('그만둔 날은 근무 시작일보다 앞일 수 없어요'); return; }
   try{ await api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v}); await loadJobs(); closeQuitForm(); await loadHome(); toast('그만둔 날을 저장했어요'); }catch(e){ toast(e.message); } };
 async function setPaid(p){ try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p}); await loadJobs(); await renderQuit(); toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); }catch(e){ toast(e.message); } }
 $('#paidYes').onclick=()=>setPaid(true); $('#paidNo').onclick=()=>setPaid(false);

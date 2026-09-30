@@ -142,6 +142,22 @@ class JobIn(BaseModel):
     biz_no: str = ""
 
 
+def date_problem(start: date | None, end: date | None, quit_date: date | None, today: date) -> str | None:
+    """근무 기간 날짜 검사. 그만둔 날은 앞으로 그만둘 날일 수도 있어 오늘보다 뒤여도 된다."""
+    if start and start > today:
+        return "근무 시작일은 오늘보다 뒤일 수 없어요"
+    if start and end and end < start:
+        return "계약 종료일은 근무 시작일보다 앞일 수 없어요"
+    if start and quit_date and quit_date < start:
+        return "그만둔 날은 근무 시작일보다 앞일 수 없어요"
+    return None
+
+
+def check_dates(start: date | None, end: date | None, quit_date: date | None) -> None:
+    if msg := date_problem(start, end, quit_date, today_kst()):
+        raise HTTPException(400, msg)
+
+
 def own_job(s: Session, u: User, job_id: int) -> Job:
     job = s.get(Job, job_id)
     if not job or job.user_id != u.id:
@@ -186,6 +202,7 @@ def list_jobs(u: User = Depends(current_user), s: Session = Depends(get_session)
 def create_job(data: JobIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     if s.exec(select(Job).where(Job.user_id == u.id, Job.name == data.name.strip())).first():
         raise HTTPException(400, f"{data.name} 이름이 이미 있어요. 지점명까지 적어 주세요")
+    check_dates(data.start_date, None if data.no_end else data.end_date, data.quit_date if data.status == "quit" else None)
     job = Job(user_id=u.id, name=data.name, created_at=now_kst())
     apply_job(job, data)
     s.add(job)
@@ -199,6 +216,7 @@ def update_job(job_id: int, data: JobIn, u: User = Depends(current_user), s: Ses
     job = own_job(s, u, job_id)
     if s.exec(select(Job).where(Job.user_id == u.id, Job.name == data.name.strip(), Job.id != job_id)).first():
         raise HTTPException(400, f"{data.name} 이름이 이미 있어요. 지점명까지 적어 주세요")
+    check_dates(data.start_date, None if data.no_end else data.end_date, data.quit_date if data.status == "quit" else None)
     apply_job(job, data)
     s.add(job)
     s.commit()
@@ -221,6 +239,8 @@ class QuitIn(BaseModel):
 @router.post("/jobs/{job_id}/quit")
 def set_quit(job_id: int, data: QuitIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     job = own_job(s, u, job_id)
+    if job.start_date and data.quit_date < job.start_date:
+        raise HTTPException(400, "그만둔 날은 근무 시작일보다 앞일 수 없어요")
     job.status, job.quit_date, job.paid_after_quit = "quit", data.quit_date, None
     s.add(job)
     s.commit()

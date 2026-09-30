@@ -245,3 +245,22 @@ def test_pay_compare_facts_only(c):
     assert none["status"] == "warn" and "근무 기록이 없어" in none["text"]  # 0원인데 '거의 같아요'가 나오던 문제
     assert more["status"] == "pending" and "450,000원 더 받았어요" in more["text"] and not more["short"]
     assert less["status"] == "pending" and "50,000원 적게" in less["text"] and less["short"]
+
+
+def test_work_period_dates_are_checked(c):
+    """시작일은 오늘보다 뒤일 수 없고, 종료일과 그만둔 날은 시작일보다 앞일 수 없다. 그만둔 날은 미래여도 된다."""
+    from datetime import timedelta
+    from app.calc.timeutil import today_kst
+    t = today_kst()
+    base = {"name": "가상카페 날짜점", "wage": 10030}
+    r = c.post("/api/jobs", json={**base, "start_date": (t + timedelta(days=1)).isoformat()})
+    assert r.status_code == 400 and "오늘보다 뒤" in r.json()["detail"]
+    r = c.post("/api/jobs", json={**base, "start_date": "2026-03-02", "end_date": "2026-03-01"})
+    assert r.status_code == 400 and "계약 종료일" in r.json()["detail"]
+    r = c.post("/api/jobs", json={**base, "start_date": "2026-03-02", "status": "quit", "quit_date": "2026-03-01"})
+    assert r.status_code == 400 and "그만둔 날" in r.json()["detail"]
+    later = (t + timedelta(days=7)).isoformat()  # 앞으로 그만둘 날은 된다
+    job = c.post("/api/jobs", json={**base, "start_date": "2026-03-02", "status": "quit", "quit_date": later}).json()
+    assert job["quit_date"] == later
+    assert c.post(f"/api/jobs/{job['id']}/quit", json={"quit_date": "2026-03-01"}).status_code == 400
+    c.delete(f"/api/jobs/{job['id']}")
