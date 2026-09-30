@@ -62,6 +62,9 @@ OPEN_RECORD_ALERT_HOURS = int(os.getenv("OPEN_RECORD_ALERT_HOURS", "16"))  # 퇴
 AI_RETRY_MIN = int(os.getenv("AI_RETRY_MIN", "10"))
 AI_RETRY_PER_DAY = int(os.getenv("AI_RETRY_PER_DAY", "3"))
 
+# 시연용 기능 (true일 때만 /api/dev/daily-check가 열림. 외부에 여는 서버에서는 false로 둔다)
+DEV_TOOLS = os.getenv("DEV_TOOLS", "false").lower() == "true"
+
 # 정기 점검 시각 (매일 이 시각에 에이전트가 스스로 시작)
 SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "9"))
 

@@ -15,16 +15,19 @@ from app.models import AgentLog, AgentTask, CheckRun, GuardPost, Job, Report, Wo
 scheduler = BackgroundScheduler(timezone=TIMEZONE)
 
 
-def daily_check() -> dict:
+def daily_check(user_id: int | None = None) -> dict:
     """매일: 사업장마다 에이전트가 오늘 필요한 점검(급여, 퇴직 지급 기한, 공개 게시물)을 골라 실행하고,
-    끝에 기록을 종합해 조언한다. AI 응답이 없으면 정해 둔 조건(월급날, 그만둠, 신고함)으로 점검만 실행한다."""
+    끝에 기록을 종합해 조언한다. AI 응답이 없으면 정해 둔 조건(월급날, 그만둠, 신고함)으로 점검만 실행한다.
+    user_id가 있으면 그 사용자의 사업장만 점검하고 법 기준표 갱신은 하지 않는다 (시연용)."""
     done = {"payday": 0, "quit": 0, "guard": 0, "advice": 0}
+    q = select(Job) if user_id is None else select(Job).where(Job.user_id == user_id)
     with Session(engine) as s:
-        for job in s.exec(select(Job)).all():
+        for job in s.exec(q).all():
             for kind in core.run_daily(s, job.user_id, job.id)["ran"]:
                 done[kind] += 1
             done["advice"] += core.run_advice(s, job.user_id, job.id)["advised"]
-    done["law_changed"] = refresh_law_table()
+    if user_id is None:
+        done["law_changed"] = refresh_law_table()
     return done
 
 

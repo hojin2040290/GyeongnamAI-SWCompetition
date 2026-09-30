@@ -8,3 +8,4 @@ os.environ["UPLOAD_DIR"] = os.path.join(_tmp, "uploads")
 os.environ["REPORT_DIR"] = os.path.join(_tmp, "reports")
 os.environ["NAVER_CLIENT_ID"] = ""
 os.environ["NAVER_CLIENT_SECRET"] = ""
+os.environ["DEV_TOOLS"] = "true"  # 시연용 주소 테스트 (끈 경우는 test_flow에서 따로 확인)
