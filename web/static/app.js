@@ -820,20 +820,18 @@ $('#paySave').onclick=async()=>{
 // 점검
 async function loadCheck(){
   const f=await api('GET',`/api/jobs/${state.current}/contract/fields`);
-  // 칸마다 무엇을 적는지 안내하고, 쓸 수 없는 글자는 입력하는 동안 뺀다 (예: 근무장소는 한글, 숫자, 주소 기호)
+  // 무엇을 적는지는 칸 안의 흐린 안내 글(placeholder)로 보여 주고, 쓸 수 없는 글자는 입력하는 동안 뺀다
   const rules=state.rules?.contract||{};
-  const hintText=r=>r.hint?`${r.hint}. 쓸 수 있는 글자: ${r.allowed}`:'';
   $('#fieldsBox').innerHTML='<p class="hint" style="margin:0 0 10px">계약서에 적힌 대로 옮겨 적고, 계약서에 없는 칸은 비워 두세요.</p>'
-    +f.items.map(k=>{ const r=rules[k]||{};
-    return `<label class="field"><span>${esc(k)}</span><input class="input" data-k="${esc(k)}" value="${esc(f.fields[k]||'')}" placeholder="${esc(r.example||'계약서에 없으면 비워 두세요')}">
-      <em class="hint field-hint" data-hint="${esc(k)}">${esc(hintText(r))}</em></label>`; }).join('')
+    +f.items.map(k=>`<label class="field"><span>${esc(k)}</span><textarea class="input field-area" rows="2" data-k="${esc(k)}"
+      placeholder="${esc(rules[k]?.placeholder||'계약서에 없으면 비워 두세요')}">${esc(f.fields[k]||'')}</textarea></label>`).join('')
     +'<p class="hint save-state" id="fieldsSaved">입력하면 바로 저장돼요</p>';
   const jobId=state.current;
-  $$('#fieldsBox input').forEach(i=>{ const k=i.dataset.k, r=rules[k], h=$(`#fieldsBox [data-hint="${cssq(k)}"]`);
-    const run=bindChars(i, r?.chars, ()=>{ h.classList.add('bad'); h.textContent=`쓸 수 없는 글자는 뺐어요. 쓸 수 있는 글자: ${r.allowed}`;
-      clearTimeout(h._t); h._t=setTimeout(()=>{ h.classList.remove('bad'); h.textContent=hintText(r); },2500); });
-    run();  // 예전에 저장된 값에 쓸 수 없는 글자가 있으면 화면에서 빼 둔다 (점검하기를 누르면 이 값으로 저장)
-    i.addEventListener('input',()=>autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved')); });
+  $$('#fieldsBox [data-k]').forEach(i=>{ const k=i.dataset.k, r=rules[k];
+    const grow=()=>{ i.style.height='auto'; i.style.height=`${i.scrollHeight+2}px`; };
+    const run=bindChars(i, r?.chars, ()=>toast(`${k}에는 ${r.allowed}만 쓸 수 있어요`));
+    run(); grow();  // 예전에 저장된 값에 쓸 수 없는 글자가 있으면 화면에서 빼 둔다 (점검하기를 누르면 이 값으로 저장)
+    i.addEventListener('input',()=>{ grow(); autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved'); }); });
   const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items); $('#checkTrace').innerHTML='';
   const ls=await api('GET','/api/law/status');
   const mw=(ls.min_wage?` 최저임금 ${ls.min_wage.year}년 시간급 ${won(ls.min_wage.value)}, 근거 고시: ${ls.min_wage.source}.`:'')
@@ -863,7 +861,7 @@ $('#contractFile').onchange=async e=>{ const files=[...e.target.files]; if(!file
       const r=await api('POST',`/api/jobs/${state.current}/contract`,fd,true); trace=trace.concat(r.trace||[]);
       if(!r.ai){ reason=r.reason; continue; }
       ai=true; total=r.total;
-      $$('#fieldsBox input').forEach(inp=>{ const v=r.fields[inp.dataset.k]; if(v && !filled.has(inp.dataset.k)){ inp.value=v; filled.add(inp.dataset.k); } });
+      $$('#fieldsBox [data-k]').forEach(inp=>{ const v=r.fields[inp.dataset.k]; if(v && !filled.has(inp.dataset.k)){ inp.value=v; filled.add(inp.dataset.k); } });
     }
     found=filled.size;
     if(ai){
@@ -873,7 +871,7 @@ $('#contractFile').onchange=async e=>{ const files=[...e.target.files]; if(!file
     } else { $('#ocrNote').textContent=`계약서 원본 ${files.length}장을 저장했어요. ${reason}`; toast('계약서 원본을 저장했어요'); }
     $('#checkTrace').innerHTML=traceHTML(trace);
   }catch(err){ $('#ocrNote').textContent=''; toast(err.message); } e.target.value=''; };
-function readFields(){ const fields={}; $$('#fieldsBox input').forEach(i=>fields[i.dataset.k]=i.value.trim()); return fields; }
+function readFields(){ const fields={}; $$('#fieldsBox [data-k]').forEach(i=>fields[i.dataset.k]=i.value.replace(/\s+/g,' ').trim()); return fields; }
 // 입력하던 사업장 번호를 고정해 두어, 저장 전에 다른 곳으로 바꿔도 섞이지 않게 한다
 const fieldsCache={};
 function saveFields(jobId){ return api('PUT',`/api/jobs/${jobId}/contract/fields`,{fields:fieldsCache[jobId]}); }

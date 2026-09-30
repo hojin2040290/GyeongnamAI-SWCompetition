@@ -146,4 +146,19 @@ def test_contract_field_chars(c):
         assert r.status_code == 400 and r.json()["detail"].startswith(item), (item, bad)
     assert input_rules.clean_contract("근무장소", "창원시 <b>중앙대로</b> 12") == "창원시 중앙대로 12"  # 근무장소는 영문도 쓸 수 없는 글자
     rules = c.get("/api/input-rules").json()
-    assert rules["contract"]["근무장소"]["example"] and rules["job"]["fields"]["address"] == "주소"
+    assert "예:" in rules["contract"]["근무장소"]["placeholder"] and rules["job"]["fields"]["address"] == "주소"
+
+
+def test_junk_zero_in_saved_contract_shows_empty(c):
+    """예전 사진 읽기 오류로 저장된 '0' 같은 값은 빈칸으로 보여 준다 (AI에게도 빈칸)."""
+    from sqlmodel import Session as S
+    from app.db import engine
+    from app.models import ContractFields
+    from app.calc.timeutil import now_kst
+    jid = job(c)
+    with S(engine) as s:
+        s.add(ContractFields(job_id=jid, fields_json=json.dumps({"임금": "0", "휴일": "None", "근무장소": "창원시"}),
+                             confirmed_at=now_kst()))
+        s.commit()
+    f = c.get(f"/api/jobs/{jid}/contract/fields").json()["fields"]
+    assert f["임금"] == "" and f["휴일"] == "" and f["근무장소"] == "창원시"

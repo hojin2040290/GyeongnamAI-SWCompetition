@@ -95,7 +95,9 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
     def get_contract_fields() -> dict:
         row = session.exec(select(ContractFields).where(ContractFields.job_id == job_id)
                            .order_by(ContractFields.id.desc())).first()
-        return json.loads(row.fields_json) if row else {}
+        fields = json.loads(row.fields_json) if row else {}
+        # 예전 사진 읽기 오류로 저장된 '0', 'None' 같은 값은 빈칸으로 본다 (화면과 AI 모두)
+        return {k: ("" if str(v).strip() in ("0", "None", "none", "null", "undefined") else v) for k, v in fields.items()}
 
     def get_records() -> list[WorkRecord]:
         """계산과 점검에 쓰는 기록. 실수로 표시한 기록은 뺀다."""
