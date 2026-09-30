@@ -50,7 +50,7 @@ def progress(s: Session, job: Job) -> list[dict]:
 def memories(s: Session, job_id: int, limit: int = MEMORY_LIMIT) -> list[dict]:
     rows = s.exec(select(CaseNote).where(CaseNote.job_id == job_id, CaseNote.kind == "memory")
                   .order_by(CaseNote.id.desc()).limit(limit)).all()
-    return [{"날짜": r.created_at.strftime("%Y-%m-%d %H:%M"), "사건": r.event, "기억": r.text} for r in reversed(rows)]
+    return [{"날짜": r.created_at.strftime("%Y-%m-%d %H:%M"), "실행": r.event, "기억": r.text} for r in reversed(rows)]
 
 
 def latest_advice(s: Session, job_id: int) -> CaseNote | None:

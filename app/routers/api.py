@@ -840,7 +840,7 @@ def case_state(job_id: int, u: User = Depends(current_user), s: Session = Depend
     job = own_job(s, u, job_id)
     adv = case.latest_advice(s, job_id)
     return {"progress": case.progress(s, job), "memory": case.memories(s, job_id),
-            "followups": case.followups(s, job_id),
+            "followups": case.followups(s, job_id), "ai": llm_client.available(),
             "advice": {"text": adv.text, "next_tab": adv.next_tab, "event": adv.event,
                        "created_at": adv.created_at.isoformat()} if adv else None}
 

@@ -1,6 +1,6 @@
 """에이전트 판단 반복 (vLLM tool calling).
 
-AI에게는 사건의 목표와 쓸 수 있는 도구 목록만 준다.
+AI에게는 할 일의 목표와 쓸 수 있는 도구 목록만 준다.
 1. AI가 도구를 고른다  2. 코드가 도구를 실행한다  3. 결과를 AI에게 돌려준다  4. AI가 다음 행동을 정하거나 finish로 끝낸다.
 반복은 MAX_STEPS회로 제한하고, 매 단계의 AI 판단과 도구 호출을 동작 기록(AgentLog)에 남긴다.
 AI가 없거나 응답하지 않으면 None을 돌려주고, 부른 쪽은 사실만 정리해 'AI 응답 대기 중'으로 둔다.
@@ -60,7 +60,7 @@ class Tool:
 
 @dataclass
 class Goal:
-    """사건 하나의 목표. finish는 AI가 끝낼 때 내는 결과의 모양, check는 끝내기 전에 코드가 확인할 것."""
+    """할 일 하나의 목표. finish는 AI가 끝낼 때 내는 결과의 모양, check는 끝내기 전에 코드가 확인할 것."""
     text: str
     tools: list[str]
     finish: dict = field(default_factory=dict)

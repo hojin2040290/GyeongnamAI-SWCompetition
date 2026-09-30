@@ -59,7 +59,9 @@ window.addEventListener('beforeunload', e=>{
 });
 
 let tt;
-function toast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2600); }
+// 'AI 응답 대기 중' 글자에는 어디서든 도는 표시를 붙인다 (알림, 토스트 포함)
+function waitMark(text){ return esc(text).replace(/(AI )?응답 대기 중/g,m=>`<span class="wait-note">${m}</span>`); }
+function toast(msg){ const el=$('#toast'); el.innerHTML=waitMark(msg); el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2600); }
 
 // 서버가 이유를 적지 않은 오류 (연결 중간의 프록시, 터널이 돌려준 오류 등)
 function failText(status){
@@ -689,7 +691,9 @@ async function loadCase(){
   $('#caseAdvice').innerHTML=a?`<div class="advice"><div class="advice-head">에이전트 조언</div><p>${esc(a.text)}</p>
       ${a.next_tab&&NEXT_TAB[a.next_tab]?`<button class="btn ghost small" data-go="${esc(a.next_tab)}">${NEXT_TAB[a.next_tab]}</button>`:''}
       <div class="sub note-at">${a.event==='advice'?'매일 종합 조언':`${esc(EVENT[a.event]||a.event)} 뒤`} ${fmtDT(a.created_at)}</div></div>`
-    :'<p class="ai-note wait">AI 응답 대기 중: 에이전트가 점검을 마치면 조언해 드려요.</p>';
+    // 조언이 아직 없을 때: AI가 있으면 점검을 기다리는 것이지 AI를 기다리는 게 아니다 (도는 표시는 AI를 기다릴 때만)
+    :c.ai?'<p class="ai-note">아직 조언이 없어요. 계약서나 급여를 점검하면 에이전트가 조언을 남겨요.</p>'
+    :'<p class="ai-note wait">AI 응답 대기 중: AI가 연결되면 에이전트가 조언해 드려요.</p>';
   $$('#caseAdvice [data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
   const fdt=t=>{ const d=new Date(t.replace(' ','T')); return `${d.getMonth()+1}월 ${d.getDate()}일 ${d.getHours()}시`; };
   $('#caseFollow').innerHTML=c.followups.length?`<div class="follow"><div class="advice-head">에이전트가 예약한 확인</div>
@@ -698,14 +702,14 @@ async function loadCase(){
   $$('#caseFollow [data-cancel]').forEach(b=>b.onclick=async()=>{ if(!confirm('이 예약을 취소할까요?')) return;
     try{ await api('DELETE',`/api/followups/${b.dataset.cancel}`); await loadCase(); toast('예약을 취소했어요'); }catch(e){ toast(e.message); } });
   $('#caseMemWrap').classList.toggle('hidden',!c.memory.length);
-  $('#caseMem').innerHTML=c.memory.map(m=>`<div class="log"><b>${esc(EVENT[m['사건']]||m['사건'])}</b> ${esc(m['기억'])}<div class="sub note-at">${esc(m['날짜'])}</div></div>`).join('');
+  $('#caseMem').innerHTML=c.memory.map(m=>`<div class="log"><b>${esc(EVENT[m['실행']]||m['실행'])}</b> ${esc(m['기억'])}<div class="sub note-at">${esc(m['날짜'])}</div></div>`).join('');
 }
 // 알림: 지금 보고 있는 일하는 곳의 알림만 보여 준다
 async function loadAlerts(){
   const jid=state.current, ns=await api('GET',`/api/notifications?job_id=${jid}`);
   $('#alertsClear').classList.toggle('hidden',!ns.length);
   $('#alerts').innerHTML=ns.length?ns.map(n=>`<div class="alert"><span class="dot ${n.read?'read':''}"></span>
-      <div class="main"><strong>${esc(n.title)}</strong><div class="sub">${esc(n.body)}</div><div class="sub note-at">${fmtDT(n.at)}</div></div>
+      <div class="main"><strong>${waitMark(n.title)}</strong><div class="sub">${waitMark(n.body)}</div><div class="sub note-at">${fmtDT(n.at)}</div></div>
       <button class="note-x" data-note="${n.id}" aria-label="${esc(n.title)} 알림 지우기">×</button></div>`).join('')
     :'<p class="sub" style="margin:0">아직 알림이 없어요. 점검 결과가 생기면 여기에 알려드려요.</p>';
   if(ns.some(n=>!n.read)) api('POST',`/api/notifications/read?job_id=${jid}`);

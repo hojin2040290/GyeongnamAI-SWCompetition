@@ -50,7 +50,7 @@ def called(done: list, name: str):
 
 
 def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
-    """사건 목표에 맞게 도구를 차례로 부르는 가짜 AI."""
+    """목표에 맞게 도구를 차례로 부르는 가짜 AI."""
     names = [n for n, _ in done]
     if "check_rules" in tools:  # 계약서, 퇴근, 지원 전 점검: 모든 항목을 정상이라 해서 검증 장치가 되돌리는지 본다
         items = called(done, "check_rules")

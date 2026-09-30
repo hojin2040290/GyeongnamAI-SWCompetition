@@ -58,8 +58,14 @@ LLM_MODEL = os.getenv("LLM_MODEL", "")
 LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL", "")  # 사진 읽기용 모델 (비우면 LLM_MODEL 사용)
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")            # vLLM에 키를 걸었을 때만
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
-# 가짜 AI (시험용): true면 실제 모델 대신 app/llm/fake.py가 '테스트 답변입니다 (...)'로 답한다. 실제 서비스에서는 false
-LLM_FAKE = os.getenv("LLM_FAKE", "false").lower() == "true"
+# 가짜 AI (시험용): 실제 모델 대신 app/llm/fake.py가 '테스트 답변입니다 (...)'로 답한다.
+# auto(기본): 실제 모델 설정(LLM_ENABLED=true와 LLM_MODEL)이 없으면 가짜 AI를 쓴다. true: 늘 가짜 AI. false: 가짜 AI를 쓰지 않음
+def fake_mode(value: str, enabled: bool, model: str) -> bool:
+    value = (value or "auto").strip().lower()
+    return value == "true" or (value == "auto" and not (enabled and model))
+
+
+LLM_FAKE = fake_mode(os.getenv("LLM_FAKE", "auto"), LLM_ENABLED, LLM_MODEL)
 
 # 외부 API 키 (없으면 해당 기능은 건너뜀)
 LAW_OC = os.getenv("LAW_OC", "")
