@@ -7,15 +7,32 @@
 - 근로기준법 제36조 (금품 청산 14일), 상시 5인 미만 가산수당 미적용 (근로기준법 시행령 별표1)
 
 ## 외부 API
-| 이름 | 용도 | 출처 |
-|---|---|---|
-| 법제처 국가법령정보 공동활용 OPEN API | 현행법령(시행일) 조문과 별표, 최저임금 고시(행정규칙), 판례, 법제처 법령해석례, 고용노동부 법령해석, 노동위원회 결정문 | https://open.law.go.kr |
-| 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com |
-| vLLM OpenAI 호환 API (/v1/chat/completions) | 조항 판단, 계약서와 급여명세서 사진 읽기 (비전 모델 하나가 글자 인식과 항목 정리를 함께 함) | https://docs.vllm.ai | 모델 이름과 라이선스는 선정 후 기록 |
+| 이름 | 용도 | 출처 | 비고 |
+|---|---|---|---|
+| 법제처 국가법령정보 공동활용 OPEN API | 현행법령(시행일) 조문과 별표, 최저임금 고시(행정규칙), 판례, 법제처 법령해석례, 고용노동부 법령해석, 노동위원회 결정문 | https://open.law.go.kr | 이용 신청 필요 (등록한 IP에서만 호출) |
+| 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com | 이용 신청 필요 |
+| vLLM OpenAI 호환 API (/v1/chat/completions) | 조항 판단, 도구 호출(tool calling), 계약서와 급여명세서 사진 읽기 | https://docs.vllm.ai | 모델 이름과 라이선스는 선정 후 기록 |
 
 ## 라이브러리
-fastapi, uvicorn, sqlmodel, itsdangerous, python-multipart, jinja2, apscheduler, httpx, pytest, (선택) playwright
-설치 후 `pip freeze`로 버전과 라이선스를 이 표에 옮긴다.
+| 이름 | 용도 | 라이선스 |
+|---|---|---|
+| FastAPI | 웹 서버와 API | MIT |
+| Uvicorn | 웹 서버 실행 | BSD-3-Clause |
+| SQLModel | SQLite 테이블과 조회 | MIT |
+| itsdangerous | 로그인 쿠키 서명 | BSD-3-Clause |
+| python-multipart | 파일 올리기 | Apache-2.0 |
+| Jinja2 | 화면 틀 | BSD-3-Clause |
+| APScheduler (4 미만) | 매일 자동 점검, AI 대기 작업 재시도 | MIT |
+| httpx | 법제처, 네이버, vLLM 호출 | BSD-3-Clause |
+| pytest | 테스트 | MIT |
+| Playwright (선택) | 게시물 화면 캡처 보존, 개발 중 휴대폰 너비 화면 캡처 확인 | Apache-2.0 |
+
+설치한 버전은 `pip freeze`로 확인해 제출 전에 이 표에 옮긴다.
+
+## 도구
+| 이름 | 용도 | 출처 | 라이선스 |
+|---|---|---|---|
+| cloudflared (Cloudflare Tunnel) | 시연 때 내 컴퓨터의 서버를 https 주소로 외부에 열기 | https://github.com/cloudflare/cloudflared | Apache-2.0 |
 
 ## 글꼴
 IBM Plex Sans KR (Google Fonts, SIL Open Font License)
@@ -23,4 +40,10 @@ IBM Plex Sans KR (Google Fonts, SIL Open Font License)
 ## AI 활용
 | 도구 | 사용한 곳 | 직접 수정한 부분 |
 |---|---|---|
-| Claude (claude.ai, Claude Code) | 초기 코드 구조, 화면 초안, 테스트 작성 | 개발하면서 기록 |
+| Claude (claude.ai, Claude Code) | 초기 코드 구조, 화면 초안, 테스트 작성, 에이전트 반복 구조(계획, 검증 결과로 다시 판단, 질문, 후속 일정, 메모와 조언), 입력 검사와 프롬프트 인젝션 대비, 가짜 AI(시험용), 증거 저장 위치 점검, 실행 가이드 작성 | 개발하면서 기록 (직접 정한 요구사항과 고친 부분을 적는다) |
+
+## 제출 전에 채울 것
+- [ ] 쓴 AI 모델 이름, 크기, 라이선스 (vLLM에 띄운 모델)
+- [ ] `pip freeze` 결과의 라이브러리 버전
+- [ ] AI 활용 표의 '직접 수정한 부분' (요구사항을 정하고 결과를 확인해 고친 내용: 예: 월급날 말일, 쉬는 시간 직접 입력, 이메일 검사 누락 지적, 로그인 상태의 단계 건너뜀 발견)
+- [ ] law_params.json의 기준값 출처를 원문과 다시 대조 (verified=false 항목)
