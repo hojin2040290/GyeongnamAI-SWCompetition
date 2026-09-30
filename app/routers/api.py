@@ -183,10 +183,48 @@ TEXT_LIMITS = {"name": 60, "industry": 40, "work_desc": 200, "pay_cycle": 20, "p
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
+# 고르는 칸: 화면에 있는 선택지 값만 받는다 (API로 직접 보내도 아무 글자나 저장되지 않게)
+CHOICES = {
+    "status": {"working", "quit"},
+    "probation": {"yes", "no", "unknown"},
+    "size": {"5+", "lt5", "unknown"},
+    "pay_cycle": {"", "월급", "주급", "일급"},
+    "pay_method": {"", "계좌 이체", "현금"},
+    "consent": {"", "냈어요", "안 냈어요", "모름"},
+    "industry": {"", "음식점, 카페", "편의점", "판매, 마트", "배달", "교육, 학원", "물류, 택배", "사무 보조", "기타"},
+}
+DEDUCTIONS = {"없음", "세금 3.3%", "4대보험", "모름"}  # 여러 개를 ', '로 이어 받는다
+# 숫자 칸의 범위 (최솟값, 최댓값)
+NUMBER_RANGES = {"wage": (1, 1_000_000), "payday": (1, 31), "probation_months": (1, 12), "amount": (0, 100_000_000)}
+# 이름, 사업주, 주소, 하는 일 칸에 쓸 수 있는 문자: 한글, 영문, 숫자, 띄어쓰기와 .,-()·/&#
+PLAIN_TEXT = re.compile(r"^[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9 .,\-()·/&#]*$")
+PLAIN_FIELDS = {"name": "사업장 이름", "owner": "사업주", "address": "주소", "work_desc": "하는 일"}
+LABELS = {"wage": "시급", "payday": "월급날", "probation_months": "수습 개월", "amount": "받은 금액",
+          "status": "일하는 상태", "probation": "수습", "size": "사업장 인원", "pay_cycle": "급여 주기",
+          "pay_method": "지급 방법", "consent": "보호자 서류", "industry": "업종", "deduction": "공제"}
+
+
 def check_text(**fields) -> None:
     for k, v in fields.items():
         if isinstance(v, str) and len(v) > TEXT_LIMITS.get(k, 200):
             raise HTTPException(400, f"입력한 글이 너무 길어요 ({TEXT_LIMITS.get(k, 200)}자까지)")
+        if k in PLAIN_FIELDS and isinstance(v, str) and not PLAIN_TEXT.match(v):
+            raise HTTPException(400, f"{PLAIN_FIELDS[k]}에는 한글, 영문, 숫자, 띄어쓰기와 .,-()·/&# 만 쓸 수 있어요")
+
+
+def check_choices(**fields) -> None:
+    for k, v in fields.items():
+        if k in CHOICES and v not in CHOICES[k]:
+            raise HTTPException(400, f"{LABELS[k]} 값이 맞지 않아요. 화면의 선택지에서 골라 주세요")
+        if k == "deduction" and v and not set(x.strip() for x in v.split(",")) <= DEDUCTIONS:
+            raise HTTPException(400, "공제 값이 맞지 않아요. 화면의 선택지에서 골라 주세요")
+
+
+def check_numbers(**fields) -> None:
+    for k, v in fields.items():
+        lo, hi = NUMBER_RANGES[k]
+        if v is not None and not lo <= v <= hi:
+            raise HTTPException(400, f"{LABELS[k]}은(는) {lo:,}부터 {hi:,}까지 숫자로 적어 주세요")
 
 
 def check_month(month: str) -> str:
@@ -206,7 +244,10 @@ def apply_job(job: Job, data: JobIn) -> None:
     name = data.name.strip()
     if not name:
         raise HTTPException(400, "사업장 이름을 입력해 주세요")
-    check_text(**{k: v for k, v in data.model_dump().items() if isinstance(v, str)})
+    d = data.model_dump()
+    check_choices(**{k: d[k] for k in (*CHOICES, "deduction")})  # 선택지가 먼저: 더 알아보기 쉬운 오류 문구
+    check_text(**{k: v for k, v in d.items() if isinstance(v, str)})
+    check_numbers(wage=d["wage"], payday=d["payday"], probation_months=d["probation_months"])
     for k, v in data.model_dump().items():
         if k == "schedule":
             job.schedule_json = json.dumps(clean_schedule(v), ensure_ascii=False)
@@ -523,7 +564,9 @@ class SeekIn(BaseModel):
 
 @router.post("/seek/check")
 def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    check_choices(industry=data.industry, probation=data.probation)
     check_text(name=data.name, industry=data.industry, work_desc=data.work_desc, probation=data.probation)
+    check_numbers(wage=data.wage)
     data.schedule = clean_schedule(data.schedule)
     try:
         data.biz_no = bizno.normalize(data.biz_no)
@@ -540,8 +583,7 @@ async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(..
     """받은 금액 저장. 같은 달에 나눠 받았으면 따로 저장해 합친다 (mode=add). mode=replace면 그 달 금액을 이것으로 바꾼다."""
     own_job(s, u, job_id)
     check_month(month)
-    if amount < 0:
-        raise HTTPException(400, "받은 금액은 0원 이상이어야 해요")
+    check_numbers(amount=amount)
     ev_id = None
     if file is not None and file.filename:
         ev_id = (await store_upload(s, u, job_id, "payslip", file, f"{month} 급여")).id
@@ -592,8 +634,7 @@ class AmountIn(BaseModel):
 def edit_payslip(pid: int, data: AmountIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     """받은 금액 한 건 고치기. 고친 뒤 그 달을 다시 비교한다."""
     p = own_payslip(s, u, pid)
-    if data.amount < 0:
-        raise HTTPException(400, "받은 금액은 0원 이상이어야 해요")
+    check_numbers(amount=data.amount)
     p.amount = data.amount
     s.add(p)
     s.commit()

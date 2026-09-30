@@ -73,7 +73,7 @@
       <label class="upload" id="seekUpload"><input type="file" accept="image/*,.pdf" hidden multiple id="seekFile">
         <strong>채용공고 사진 올리기</strong>캡처나 사진, 여러 장도 돼요</label>
       <div class="panel" style="margin-top:14px" id="seekForm">
-        <label class="field"><span>사업장 이름</span><input class="input f-name" placeholder="예: 해맑음 편의점 용호점"></label>
+        <label class="field"><span>사업장 이름</span><input class="input f-name" maxlength="60" placeholder="예: 해맑음 편의점 용호점"></label>
         <label class="field"><span>사업자등록번호 (선택)</span><input class="input f-bizno" inputmode="numeric" maxlength="12" placeholder="000-00-00000" autocomplete="off">
           <em class="hint bizno-hint">계약서, 급여명세서, 가게 영수증에 적혀 있어요. 모르면 비워 두세요.</em></label>
         <label class="field"><span>업종</span>
@@ -83,9 +83,9 @@
             <option>배달</option><option>교육, 학원</option><option>물류, 택배</option>
             <option>사무 보조</option><option>기타</option>
           </select></label>
-        <label class="field"><span>하는 일</span><input class="input f-work" placeholder="공고에 적힌 업무"></label>
+        <label class="field"><span>하는 일</span><input class="input f-work" maxlength="200" placeholder="공고에 적힌 업무"></label>
         <label class="field"><span>공고에 적힌 시급</span>
-          <div class="suffix"><input class="input f-wage" type="number" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
+          <div class="suffix"><input class="input f-wage" type="number" min="1" max="1000000" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
         <div class="field"><span>수습 기간</span>
           <div class="seg" data-name="probation"><button type="button" data-v="yes">있어요</button><button type="button" data-v="no">없어요</button><button type="button" data-v="unknown">모름</button></div></div>
         <div class="field"><span>근무 요일과 시간</span>
@@ -225,7 +225,7 @@
       </div>
       <h3>받은 급여 올리기</h3>
       <div class="panel">
-        <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="number" id="payAmount" inputmode="numeric"><em>원</em></div></label>
+        <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="number" id="payAmount" min="0" max="100000000" inputmode="numeric"><em>원</em></div></label>
         <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf">
           <em class="hint" id="payOcr">사진을 고르면 원본으로 저장하고, AI가 금액을 읽어 채워요.</em></label>
         <div class="field hidden" id="payModeWrap"><span id="payModeLabel">이 달에 이미 저장한 금액이 있어요</span>
@@ -382,7 +382,7 @@
     <div class="field"><span>근무 상태</span>
       <div class="seg" data-name="status"><button type="button" data-v="working">일하고 있어요</button><button type="button" data-v="quit">그만뒀어요</button></div></div>
     <label class="field f-quit-wrap hidden"><span>그만둔 날</span><input class="input f-quit" type="date"></label>
-    <label class="field"><span>사업장 이름</span><input class="input f-name" placeholder="예: 푸른카페 상남점"></label>
+    <label class="field"><span>사업장 이름</span><input class="input f-name" maxlength="60" placeholder="예: 푸른카페 상남점"></label>
     <label class="field"><span>사업자등록번호 (선택)</span><input class="input f-bizno" inputmode="numeric" maxlength="12" placeholder="000-00-00000" autocomplete="off">
       <em class="hint bizno-hint">계약서, 급여명세서, 가게 영수증에 적혀 있어요. 모르면 비워 두세요.</em></label>
     <label class="field"><span>업종</span>
@@ -392,8 +392,8 @@
         <option>배달</option><option>교육, 학원</option><option>물류, 택배</option>
         <option>사무 보조</option><option>기타</option>
       </select></label>
-    <label class="field"><span>하는 일</span><input class="input f-work" placeholder="예: 음료 제조, 계산, 매장 정리"></label>
-    <label class="field"><span>약속한 시급</span><div class="suffix"><input class="input f-wage" type="number" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
+    <label class="field"><span>하는 일</span><input class="input f-work" maxlength="200" placeholder="예: 음료 제조, 계산, 매장 정리"></label>
+    <label class="field"><span>약속한 시급</span><div class="suffix"><input class="input f-wage" type="number" min="1" max="1000000" inputmode="numeric" placeholder="숫자만 입력"><em>원</em></div></label>
     <div class="row">
       <label class="field"><span>근무 시작일</span><input class="input f-start" type="date"></label>
       <label class="field"><span>계약 종료일</span><input class="input f-end" type="date"></label>
@@ -422,8 +422,8 @@
       <div class="seg wrap" data-name="deduct" data-multi="1"><button type="button" data-v="없음">없음</button><button type="button" data-v="세금 3.3%">세금 3.3%</button><button type="button" data-v="4대보험">4대보험</button><button type="button" data-v="모름">모름</button></div></div>
     <details class="more">
       <summary>상담 자료에 들어갈 정보 (선택)</summary>
-      <label class="field"><span>사업장 주소</span><input class="input f-addr" placeholder="예: 경남 창원시 ○○구 ○○로"></label>
-      <label class="field"><span>사장님 이름</span><input class="input f-owner" placeholder="모르면 비워 두세요"></label>
+      <label class="field"><span>사업장 주소</span><input class="input f-addr" maxlength="200" placeholder="예: 경남 창원시 ○○구 ○○로"></label>
+      <label class="field"><span>사장님 이름</span><input class="input f-owner" maxlength="40" placeholder="모르면 비워 두세요"></label>
     </details>
     <div class="field minor-only hidden"><span>보호자 동의서와 가족관계증명서를 가게에 냈나요</span>
       <div class="seg" data-name="consent"><button type="button" data-v="냈어요">냈어요</button><button type="button" data-v="안 냈어요">안 냈어요</button><button type="button" data-v="모름">모름</button></div>

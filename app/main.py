@@ -2,6 +2,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -31,6 +33,29 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "web" / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "web" / "templates")
 app.include_router(api_router)
+
+
+FIELD_NAMES = {"wage": "시급", "payday": "월급날", "probation_months": "수습 개월", "amount": "받은 금액",
+               "month": "달", "start_date": "근무 시작일", "end_date": "계약 종료일", "quit_date": "그만둔 날",
+               "birth_date": "생년월일", "schedule": "근무 시간", "email": "이메일", "password": "비밀번호"}
+
+
+@app.exception_handler(RequestValidationError)
+async def korean_validation_error(request: Request, exc: RequestValidationError):
+    """숫자 칸에 글자를 넣는 등 형식이 틀리면 한국어로 알려 준다."""
+    err = exc.errors()[0] if exc.errors() else {}
+    field = next((str(x) for x in reversed(err.get("loc", [])) if isinstance(x, str) and x not in ("body", "query", "form")), "")
+    name = FIELD_NAMES.get(field, "입력한 값")
+    kind = err.get("type", "")
+    if "int" in kind or "float" in kind or "number" in kind:
+        msg = f"{name}에는 숫자만 적어 주세요"
+    elif "date" in kind:
+        msg = f"{name}은(는) 날짜 형식으로 골라 주세요"
+    elif kind == "missing":
+        msg = f"{name}을(를) 입력해 주세요"
+    else:
+        msg = f"{name} 형식이 맞지 않아요"
+    return JSONResponse(status_code=422, content={"detail": msg})
 
 
 @app.middleware("http")
