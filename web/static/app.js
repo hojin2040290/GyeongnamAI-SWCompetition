@@ -17,6 +17,8 @@ function esc(t){ return String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','
 function toMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
 function brkMin(b){ return {'없음':0,'30분':30,'1시간':60,'1시간 30분':90,'2시간':120}[b] ?? 0; }
 function slotMinutes(s){ let a=toMin(s.start), b=toMin(s.end); if(b<=a) b+=1440; return Math.max(0,b-a-brkMin(s.brk)); }
+function slotsOf(v){ return Array.isArray(v)?v:(v?[v]:[]); }  // 한 요일의 시간대 목록 (예전 형식은 하나)
+function dayMinutes(v){ return slotsOf(v).reduce((a,s)=>a+slotMinutes(s),0); }
 function isNight(s){ let a=toMin(s.start), b=toMin(s.end); if(b<=a) b+=1440; for(let t=a;t<b;t+=30){ const x=t%1440; if(x>=1320||x<360) return true; } return false; }
 function fmtH(min){ const h=Math.floor(min/60), m=min%60; return m?`${h}시간 ${m}분`:`${h}시간`; }
 function fmtDT(iso){ const d=new Date(iso); return `${d.getMonth()+1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
@@ -120,15 +122,26 @@ function bindSeg(root, onChange){
     seg.querySelectorAll('button').forEach(btn => {
       btn.setAttribute('aria-pressed','false');
       btn.addEventListener('click', () => {
-        seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
-        btn.setAttribute('aria-pressed','true');
+        if(seg.dataset.multi){  // 여러 개 고르기 (예: 공제 항목). '없음', '모름'은 혼자만 고른다
+          const solo=v=>['없음','모름'].includes(v), on=btn.getAttribute('aria-pressed')!=='true';
+          seg.querySelectorAll('button').forEach(x=>{ if(on && (solo(btn.dataset.v)||solo(x.dataset.v))) x.setAttribute('aria-pressed','false'); });
+          btn.setAttribute('aria-pressed', on?'true':'false');
+        } else {
+          seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+          btn.setAttribute('aria-pressed','true');
+        }
         onChange && onChange(seg.dataset.name, btn.dataset.v);
       });
     });
   });
 }
-function segVal(root, name){ const b=root.querySelector(`.seg[data-name="${name}"] [aria-pressed="true"]`); return b?b.dataset.v:null; }
-function setSeg(root, name, v){ const b=root.querySelector(`.seg[data-name="${name}"] [data-v="${v}"]`); if(b) b.click(); }
+function segVal(root, name){ const seg=root.querySelector(`.seg[data-name="${name}"]`); if(!seg) return null;
+  const on=[...seg.querySelectorAll('[aria-pressed="true"]')].map(b=>b.dataset.v);
+  return on.length?(seg.dataset.multi?on.join(', '):on[0]):null; }
+function setSeg(root, name, v){ const seg=root.querySelector(`.seg[data-name="${name}"]`); if(!seg||v==null) return;
+  if(seg.dataset.multi){ seg.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));
+    String(v).split(',').map(x=>x.trim()).forEach(x=>seg.querySelector(`[data-v="${x}"]`)?.click()); return; }
+  seg.querySelector(`[data-v="${v}"]`)?.click(); }
 
 // ---------- 시작 ----------
 async function boot(){
@@ -327,9 +340,12 @@ $('#jobList').addEventListener('click',e=>{ if(e.target.closest('.seg button')) 
 $('#cancelJobsBtn').onclick=cancelJobs;
 
 // ---------- 근무 시간 선택 ----------
+// 한 요일에 시간대가 여러 개일 수 있다 (예: 10:00~14:00, 18:00~22:00 쪼개기 근무).
+// 편집 중에는 요일마다 시간대 목록으로 다루고, 저장할 때 하나면 예전처럼 시간대 하나로 저장한다.
 let editing=null, draft=null;
 function openSheetFor(target){
-  editing=target; draft=JSON.parse(JSON.stringify(target.schedule||{}));
+  editing=target; draft={};
+  DAY_KEYS.forEach(k=>{ const v=slotsOf(target.schedule?.[k]); if(v.length) draft[k]=JSON.parse(JSON.stringify(v)); });
   const nm=target.node.querySelector('.f-name')?.value.trim();
   $('#sheetJobName').textContent=nm?`${nm}에서 일하는 시간을 골라 주세요`:'일하는 시간을 골라 주세요';
   renderDays(); renderSlots(); $('#sheetBg').classList.remove('hidden'); document.body.style.overflow='hidden'; refreshNav();
@@ -339,46 +355,54 @@ function renderDays(){
   const box=$('#dayPicker'); box.innerHTML='';
   DAY_KEYS.forEach(k=>{ const b=document.createElement('button'); b.type='button'; b.className='day'; b.textContent=k;
     b.setAttribute('aria-pressed',draft[k]?'true':'false'); b.setAttribute('aria-label',`${k}요일`);
-    b.onclick=()=>{ if(draft[k]) delete draft[k]; else draft[k]=newSlot(); renderDays(); renderSlots(); };
+    b.onclick=()=>{ if(draft[k]) delete draft[k]; else draft[k]=newDay(); renderDays(); renderSlots(); };
     box.appendChild(b); });
 }
-// 새로 고른 요일은 이미 고른 요일의 시간을 그대로 가져온다 (처음이면 18:00~22:00)
-function newSlot(){ const k=DAY_KEYS.find(k=>draft[k]); return k?{...draft[k]}:{start:'18:00',end:'22:00',brk:'없음'}; }
+// 새로 고른 요일은 이미 고른 요일의 시간대를 그대로 가져온다 (처음이면 18:00~22:00)
+function newDay(){ const k=DAY_KEYS.find(k=>draft[k]); return k?JSON.parse(JSON.stringify(draft[k])):[{start:'18:00',end:'22:00',brk:'없음'}]; }
+// 같은 요일에 시간대를 더하면 앞 시간대가 끝난 1시간 뒤부터 4시간으로 시작한다
+function nextSlot(last){ const h=m=>`${pad(Math.floor(m/60)%24)}:${pad(m%60)}`, e=toMin(last.end)+60; return {start:h(e),end:h(e+240),brk:'없음'}; }
 // 평일, 주말, 매일, 모두 해제: 그 요일들만 고른 상태로 만든다
 $$('#dayQuick [data-days]').forEach(b=>b.onclick=()=>{ const want=[...b.dataset.days];
-  const tpl=newSlot(); DAY_KEYS.forEach(k=>{ if(!want.includes(k)) delete draft[k]; else if(!draft[k]) draft[k]={...tpl}; });
+  const tpl=newDay(); DAY_KEYS.forEach(k=>{ if(!want.includes(k)) delete draft[k]; else if(!draft[k]) draft[k]=JSON.parse(JSON.stringify(tpl)); });
   renderDays(); renderSlots(); });
 function opts(list,sel){ return list.map(v=>`<option${v===sel?' selected':''}>${v}</option>`).join(''); }
 function renderSlots(){
   const box=$('#slotList'); box.innerHTML='';
   const keys=DAY_KEYS.filter(k=>draft[k]);
   $('#slotEmpty').classList.toggle('hidden',keys.length>0); $('#copyAll').classList.toggle('hidden',keys.length<2);
-  keys.forEach(k=>{ const s=draft[k]; const el=document.createElement('div'); el.className='slot';
-    el.innerHTML=`<div class="slot-day">${k}요일 <span class="hrs">${fmtH(slotMinutes(s))}</span></div>
-      <div class="slot-grid"><input type="time" class="input" step="1800" value="${s.start}" aria-label="${k}요일 시작 시간"><span class="tilde">부터</span>
-      <input type="time" class="input" step="1800" value="${s.end}" aria-label="${k}요일 끝 시간"></div>
-      <div class="brk">쉬는 시간<select class="input" aria-label="${k}요일 쉬는 시간">${opts(BREAKS,s.brk)}</select></div>`;
-    const [st,en]=el.querySelectorAll('.slot-grid input'), br=el.querySelector('.brk select');
-    const up=()=>{ el.querySelector('.hrs').textContent=fmtH(slotMinutes(s)); totals(); };
-    // 휴대폰 기본 시간 휠. 지우면 이전 값으로 되돌린다
-    st.onchange=()=>{ if(st.value) s.start=st.value; else st.value=s.start; up(); };
-    en.onchange=()=>{ if(en.value) s.end=en.value; else en.value=s.end; up(); };
-    br.onchange=()=>{s.brk=br.value;up()};
+  keys.forEach(k=>{ const list=draft[k]; const el=document.createElement('div'); el.className='slot';
+    el.innerHTML=`<div class="slot-day">${k}요일 <span class="hrs">${fmtH(dayMinutes(list))}</span></div>`+list.map((s,i)=>`
+      <div class="slot-part" data-i="${i}">${list.length>1?`<div class="part-head"><span>시간대 ${i+1}</span><button type="button" class="link small muted" data-rm="${i}">이 시간대 빼기</button></div>`:''}
+      <div class="slot-grid"><input type="time" class="input" step="1800" value="${s.start}" aria-label="${k}요일 시간대 ${i+1} 시작"><span class="tilde">부터</span>
+      <input type="time" class="input" step="1800" value="${s.end}" aria-label="${k}요일 시간대 ${i+1} 끝"></div>
+      <div class="brk">쉬는 시간<select class="input" aria-label="${k}요일 시간대 ${i+1} 쉬는 시간">${opts(BREAKS,s.brk)}</select></div></div>`).join('')+
+      `<button type="button" class="link small add-part">+ ${k}요일에 시간대 더하기 (쪼개서 일할 때)</button>`;
+    const up=()=>{ el.querySelector('.hrs').textContent=fmtH(dayMinutes(list)); totals(); };
+    el.querySelectorAll('.slot-part').forEach(part=>{ const s=list[Number(part.dataset.i)];
+      const [st,en]=part.querySelectorAll('.slot-grid input'), br=part.querySelector('.brk select');
+      // 휴대폰 기본 시간 휠. 지우면 이전 값으로 되돌린다
+      st.onchange=()=>{ if(st.value) s.start=st.value; else st.value=s.start; up(); };
+      en.onchange=()=>{ if(en.value) s.end=en.value; else en.value=s.end; up(); };
+      br.onchange=()=>{ s.brk=br.value; up(); }; });
+    el.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ list.splice(Number(b.dataset.rm),1); renderSlots(); });
+    el.querySelector('.add-part').onclick=()=>{ list.push(nextSlot(list[list.length-1])); renderSlots(); };
     box.appendChild(el); });
   totals();
 }
 function totals(){ const keys=DAY_KEYS.filter(k=>draft[k]);
-  $('#weekTotal').textContent=fmtH(keys.reduce((a,k)=>a+slotMinutes(draft[k]),0));
-  $('#nightFlag').classList.toggle('hidden',!keys.some(k=>isNight(draft[k]))); }
-function schedSummary(schedule){ const keys=DAY_KEYS.filter(k=>schedule[k]); if(!keys.length) return '근무 요일 미등록';
-  return `${keys.join(', ')}요일, 주 ${fmtH(keys.reduce((a,k)=>a+slotMinutes(schedule[k]),0))}`; }
-$('#copyAll').onclick=()=>{ const keys=DAY_KEYS.filter(k=>draft[k]); const f=draft[keys[0]]; keys.forEach(k=>draft[k]={...f}); renderSlots(); };
+  $('#weekTotal').textContent=fmtH(keys.reduce((a,k)=>a+dayMinutes(draft[k]),0));
+  $('#nightFlag').classList.toggle('hidden',!keys.some(k=>slotsOf(draft[k]).some(isNight))); }
+function schedSummary(schedule){ const keys=DAY_KEYS.filter(k=>slotsOf(schedule[k]).length); if(!keys.length) return '근무 요일 미등록';
+  return `${keys.join(', ')}요일, 주 ${fmtH(keys.reduce((a,k)=>a+dayMinutes(schedule[k]),0))}`; }
+$('#copyAll').onclick=()=>{ const keys=DAY_KEYS.filter(k=>draft[k]); const f=draft[keys[0]]; keys.forEach(k=>draft[k]=JSON.parse(JSON.stringify(f))); renderSlots(); };
 $('#sheetClose').onclick=goBack;
 $('#sheetBg').onclick=e=>{ if(e.target.id==='sheetBg') goBack(); };
 $('#sheetSave').onclick=()=>{
   if(!DAY_KEYS.some(k=>draft[k])){ toast('일하는 요일을 하나 이상 골라 주세요'); return; }
   if(editing!==seek) state.formDirty=true;
-  editing.schedule=draft; editing.node.querySelector('.sched-sum').textContent=schedSummary(draft);
+  const out={}; DAY_KEYS.forEach(k=>{ if(draft[k]) out[k]=draft[k].length===1?draft[k][0]:draft[k]; });  // 하나면 예전 형식
+  editing.schedule=out; editing.node.querySelector('.sched-sum').textContent=schedSummary(out);
   editing.node.querySelector('.sched-go').textContent='수정'; goBack(); toast('근무 시간을 저장했어요');
 };
 
@@ -386,9 +410,10 @@ $('#sheetSave').onclick=()=>{
 const seek={node:$('#seekForm'), schedule:{}};
 bindSeg(seek.node);
 seek.node.querySelector('.schedule-btn').onclick=()=>openSheetFor(seek);
-$('#seekFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
-  const fd=new FormData(); fd.append('file',f); fd.append('kind','notice');
-  try{ await api('POST','/api/evidence',fd,true); toast('공고 사진을 원본으로 보관했어요'); }catch(err){ toast(err.message); } e.target.value=''; };
+$('#seekFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.length) return; let ok=0;
+  for(const f of files){ const fd=new FormData(); fd.append('file',f); fd.append('kind','notice');
+    try{ await api('POST','/api/evidence',fd,true); ok++; }catch(err){ toast(`${f.name}: ${err.message}`); } }
+  if(ok) toast(`공고 사진 ${ok}장을 원본으로 보관했어요`); e.target.value=''; };
 function seekInput(){ const n=seek.node, w=n.querySelector('.f-wage').value;
   return { name:n.querySelector('.f-name').value.trim(), industry:n.querySelector('.f-type').value, work_desc:n.querySelector('.f-work').value.trim(),
     wage:w?Number(w):null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule,
@@ -727,15 +752,28 @@ function payHTML(r){
 async function loadPayTab(){ applyCurrent(); if(!$('#payMonth').value) $('#payMonth').value=thisMonth(); $('#payTrace').innerHTML=''; await loadPay(); await loadPayslips(); }
 async function loadPay(){ const r=await api('GET',`/api/jobs/${state.current}/pay?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r); }
 async function loadPayslips(){
-  const ps=await api('GET',`/api/jobs/${state.current}/payslips`);
-  $('#payslips').innerHTML=ps.length?ps.map(p=>`<li><div class="main"><strong class="num">${esc(p.month)}</strong><div class="sub num">${won(p.amount)}${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">명세서 원본</a>`:''}</div></div>
-    <span class="row-btns"><button class="btn ghost small" data-edit="${esc(p.month)}" data-amt="${p.amount}">고치기</button><button class="btn ghost small danger" data-del="${esc(p.month)}">지우기</button></span></li>`).join('')
+  const ps=await api('GET',`/api/jobs/${state.current}/payslips`); state.payslips=ps;
+  const months=[...new Set(ps.map(p=>p.month))];
+  $('#payslips').innerHTML=months.length?months.map(m=>{ const rows=ps.filter(p=>p.month===m), sum=rows.reduce((a,p)=>a+p.amount,0);
+    return `<li class="pay-month"><div class="main"><strong class="num">${esc(m)}</strong>${rows.length>1?`<span class="sub num"> 합계 ${won(sum)} (${rows.length}건)</span>`:''}
+      ${rows.map(p=>`<div class="pay-item"><span class="num">${won(p.amount)}${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">명세서 원본</a>`:''}</span>
+        <span class="row-btns"><button class="btn ghost small" data-edit="${p.id}" data-amt="${p.amount}">고치기</button><button class="btn ghost small danger" data-del="${p.id}" data-m="${esc(m)}">지우기</button></span></div>`).join('')}</div></li>`; }).join('')
     :'<li><span class="sub">아직 저장한 받은 급여가 없어요</span></li>';
-  $$('#payslips [data-edit]').forEach(b=>b.onclick=()=>{ $('#payMonth').value=b.dataset.edit; $('#payAmount').value=b.dataset.amt; $('#payAmount').focus(); loadPay().catch(e=>toast(e.message)); toast('금액을 고친 뒤 저장하고 비교하기를 눌러 주세요'); });
-  $$('#payslips [data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm(`${b.dataset.del} 받은 금액을 지울까요? 명세서 원본은 증거 자료로 남아요.`)) return;
-    try{ await api('DELETE',`/api/jobs/${state.current}/payslips/${b.dataset.del}`); await loadPay(); await loadPayslips(); toast('지웠어요'); }catch(e){ toast(e.message); } });
+  $$('#payslips [data-edit]').forEach(b=>b.onclick=async()=>{ const v=prompt('고친 금액을 원 단위 숫자로 적어 주세요',b.dataset.amt); if(v===null) return;
+    const n=Number(String(v).replace(/[^0-9]/g,'')); if(!String(v).trim()||Number.isNaN(n)){ toast('숫자로 적어 주세요'); return; }
+    try{ const r=await agent('#payTrace',()=>api('PUT',`/api/payslips/${b.dataset.edit}`,{amount:n})); $('#payMonth').value=r.expected?.month||$('#payMonth').value;
+      $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); await loadPayslips(); toast('고치고 다시 비교했어요'); }catch(e){ toast(e.message); } });
+  $$('#payslips [data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm(`${b.dataset.m} 받은 금액 한 건을 지울까요? 명세서 원본은 증거 자료로 남아요.`)) return;
+    try{ await api('DELETE',`/api/payslips/${b.dataset.del}`); await loadPay(); await loadPayslips(); toast('지웠어요'); }catch(e){ toast(e.message); } });
+  payModeSync();
 }
-$('#payMonth').onchange=()=>{ $('#payTrace').innerHTML=''; loadPay().catch(e=>toast(e.message)); };
+// 이 달에 이미 저장한 금액이 있으면 '따로 더 받았어요 / 금액 고치기'를 고르게 한다
+function payModeSync(){ const m=$('#payMonth').value, rows=(state.payslips||[]).filter(p=>p.month===m);
+  $('#payModeWrap').classList.toggle('hidden',!rows.length);
+  if(rows.length){ $('#payModeLabel').textContent=`${m}에 이미 저장한 금액이 있어요 (합계 ${won(rows.reduce((a,p)=>a+p.amount,0))})`;
+    if(!segVal($('#payModeWrap'),'paymode')) setSeg($('#payModeWrap'),'paymode','add'); } }
+bindSeg($('#payModeWrap'));
+$('#payMonth').onchange=()=>{ $('#payTrace').innerHTML=''; payModeSync(); loadPay().catch(e=>toast(e.message)); };
 $('#payRun').onclick=async()=>{ try{ const r=await agent('#payTrace',()=>api('POST',`/api/jobs/${state.current}/agent/payday?month=${$('#payMonth').value}`)); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace); toast('에이전트가 급여를 점검했어요'); }catch(e){ toast(e.message); } };
 // 명세서 사진: 고르면 바로 원본 저장 후 AI가 읽어 금액과 달을 채운다. 사용자가 확인하고 저장한다.
 let payslipEv=null;
@@ -743,7 +781,7 @@ $('#payFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; cons
   payslipEv=null; $('#payOcr').textContent='명세서를 저장하고 읽는 중이에요…';
   try{ const r=await api('POST',`/api/jobs/${state.current}/payslip/read`,fd,true); payslipEv=r.evidence_id;
     if(r.ai){
-      if(r.month) $('#payMonth').value=r.month; if(r.net_pay!=null) $('#payAmount').value=r.net_pay;
+      if(r.month){ $('#payMonth').value=r.month; payModeSync(); } if(r.net_pay!=null) $('#payAmount').value=r.net_pay;
       const parts=[r.month&&`${r.month}분`, r.net_pay!=null&&`실지급액 ${won(r.net_pay)}`, r.base_pay!=null&&`기본급 ${won(r.base_pay)}`,
         r.weekly_holiday_pay!=null&&`주휴수당 ${won(r.weekly_holiday_pay)}`, r.deduction!=null&&`공제 ${won(r.deduction)}`].filter(Boolean);
       $('#payOcr').textContent=`AI가 읽은 내용: ${parts.join(', ')||'읽은 항목이 없어요'}. 명세서와 같은지 확인하고 저장해 주세요.`;
@@ -752,6 +790,7 @@ $('#payFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; cons
 $('#paySave').onclick=async()=>{
   const amt=$('#payAmount').value; if(!amt){ toast('받은 금액을 입력해 주세요'); return; }
   const fd=new FormData(); fd.append('month',$('#payMonth').value); fd.append('amount',amt); if(payslipEv) fd.append('evidence_id',payslipEv);
+  if(!$('#payModeWrap').classList.contains('hidden')) fd.append('mode',segVal($('#payModeWrap'),'paymode')||'add');
   try{ const r=await agent('#payTrace',()=>api('POST',`/api/jobs/${state.current}/payslip`,fd,true)); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace);
     $('#payAmount').value=''; $('#payFile').value=''; $('#payOcr').textContent=''; payslipEv=null; await loadPayslips(); toast('저장하고 비교했어요'); }catch(e){ toast(e.message); }
 };
@@ -782,16 +821,25 @@ function renderCheck(items){
 async function loadLog(){ const logs=await api('GET',`/api/jobs/${state.current}/agent/log`);
   $('#agentLog').innerHTML=logs.length?logs.map(l=>`<div class="log"><b>${esc(EVENT[l.event]||l.event)} ${esc(l.step)}</b> ${esc(l.detail)}</div>`).join(''):'<p class="sub">기록이 없어요</p>'; }
 // 계약서 사진: 원본 저장 후 AI(비전 모델)가 읽은 값을 칸에 채운다. 저장은 사용자가 확인한 내용으로.
-$('#contractFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f);
-  $('#ocrNote').textContent='계약서를 저장하고 읽는 중이에요…';
-  try{ const r=await api('POST',`/api/jobs/${state.current}/contract`,fd,true);
-    if(r.ai){
-      $$('#fieldsBox input').forEach(i=>{ const v=r.fields[i.dataset.k]; if(v) i.value=v; });
+// 계약서가 여러 장이면 한 번에 골라도 된다. 장마다 원본으로 저장하고 AI가 읽어, 앞 장에서 채운 칸은 뒤 장이 덮어쓰지 않는다
+$('#contractFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.length) return;
+  const filled=new Set(); let found=0, total=0, ai=false, reason='', trace=[];
+  try{
+    for(const [i,f] of files.entries()){
+      $('#ocrNote').textContent=`계약서를 저장하고 읽는 중이에요… (${i+1}/${files.length}장)`;
+      const fd=new FormData(); fd.append('file',f);
+      const r=await api('POST',`/api/jobs/${state.current}/contract`,fd,true); trace=trace.concat(r.trace||[]);
+      if(!r.ai){ reason=r.reason; continue; }
+      ai=true; total=r.total;
+      $$('#fieldsBox input').forEach(inp=>{ const v=r.fields[inp.dataset.k]; if(v && !filled.has(inp.dataset.k)){ inp.value=v; filled.add(inp.dataset.k); } });
+    }
+    found=filled.size;
+    if(ai){
       fieldsCache[state.current]=readFields(); autosave(`fields-${state.current}`,()=>saveFields(state.current),'#fieldsSaved',0);
-      $('#ocrNote').textContent=`AI가 ${r.total}개 항목 중 ${r.found}개를 읽었어요. 사진과 비교해 틀린 곳을 고쳐 주세요. 빈 칸은 계약서에 없거나 읽지 못한 항목이에요.`;
+      $('#ocrNote').textContent=`AI가 계약서 ${files.length}장에서 ${total}개 항목 중 ${found}개를 읽었어요. 사진과 비교해 틀린 곳을 고쳐 주세요. 빈 칸은 계약서에 없거나 읽지 못한 항목이에요.`;
       toast('계약서를 읽어 칸을 채웠어요');
-    } else { $('#ocrNote').textContent=`계약서 원본을 저장했어요. ${r.reason}`; toast('계약서 원본을 저장했어요'); }
-    $('#checkTrace').innerHTML=traceHTML(r.trace);
+    } else { $('#ocrNote').textContent=`계약서 원본 ${files.length}장을 저장했어요. ${reason}`; toast('계약서 원본을 저장했어요'); }
+    $('#checkTrace').innerHTML=traceHTML(trace);
   }catch(err){ $('#ocrNote').textContent=''; toast(err.message); } e.target.value=''; };
 function readFields(){ const fields={}; $$('#fieldsBox input').forEach(i=>fields[i.dataset.k]=i.value.trim()); return fields; }
 // 입력하던 사업장 번호를 고정해 두어, 저장 전에 다른 곳으로 바꿔도 섞이지 않게 한다
@@ -816,8 +864,11 @@ async function loadDocs(){
   const cs=await api('GET','/api/counsel');
   $('#counsel').innerHTML=cs.map(c=>`<div class="panel"><strong>${esc(c.name)}</strong><div class="sub">${esc(c.note)}</div><div class="num" style="margin-top:4px">${esc(c.phone)}</div></div>`).join('');
 }
-$('#evFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f); fd.append('kind',$('#evKind').value);
-  try{ await api('POST',`/api/jobs/${state.current}/evidence`,fd,true); await loadDocs(); toast('자료를 원본으로 저장했어요'); }catch(err){ toast(err.message); } e.target.value=''; };
+// 증거 자료는 여러 개를 한 번에 골라도 하나씩 원본으로 저장한다 (파일마다 올린 시각과 SHA-256이 따로 남음)
+$('#evFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.length) return; let ok=0;
+  for(const f of files){ const fd=new FormData(); fd.append('file',f); fd.append('kind',$('#evKind').value);
+    try{ await api('POST',`/api/jobs/${state.current}/evidence`,fd,true); ok++; }catch(err){ toast(`${f.name}: ${err.message}`); } }
+  await loadDocs(); if(ok) toast(`자료 ${ok}개를 원본으로 저장했어요`); e.target.value=''; };
 $('#reportBtn').onclick=async()=>{
   const w=window.open('','_blank');  // 팝업 차단을 피하려고 누른 순간 창을 먼저 연다
   try{ const r=await agent('#reportTrace',()=>api('POST',`/api/jobs/${state.current}/report`)); if(w) w.location=r.url; else location.href=r.url;
@@ -855,8 +906,11 @@ $('#warnMsg').addEventListener('input',()=>{
 $('#msgReset').onclick=async()=>{ if(!confirm('고친 문구를 지우고 원래 문구로 되돌릴까요?')) return;
   try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/message`,{message:''})); $('#msgSaved').textContent='원래 문구로 되돌렸어요'; }catch(e){ toast(e.message); } };
 $('#copyMsg').onclick=()=>{ const t=$('#warnMsg').value; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('안내 문구를 복사했어요'),()=>toast('직접 선택해 복사해 주세요')); };
-$('#postAdd').onclick=async()=>{ const url=$('#postUrl').value.trim(); if(!url){ toast('게시물 주소를 넣어 주세요'); return; }
-  try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/posts`,{url})); $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast('주소와 확인 시각을 보존했어요'); }catch(e){ toast(e.message); } };
+// 게시물 주소는 여러 개를 띄어 써서 한 번에 넣어도 된다 (하나씩 보존하고 판별)
+$('#postAdd').onclick=async()=>{ const urls=[...new Set($('#postUrl').value.split(/\s+/).filter(Boolean))]; if(!urls.length){ toast('게시물 주소를 넣어 주세요'); return; }
+  let ok=0, last=null;
+  for(const url of urls){ try{ last=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/posts`,{url})); ok++; }catch(e){ toast(`${url.slice(0,40)}: ${e.message}`); } }
+  if(ok){ $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(last.trace); toast(`게시물 ${ok}개의 주소와 확인 시각을 보존했어요`); } };
 $('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/search`)); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
 
 boot();

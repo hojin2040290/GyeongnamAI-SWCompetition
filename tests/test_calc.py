@@ -72,3 +72,37 @@ def test_verify_downgrades_without_basis():
     it = engine.Item("테스트", engine.BAD, "근거 없음")
     out = engine.verify([it], None)
     assert out[0].status == engine.WARN
+
+
+# ---------- 하루 여러 번 근무 (쪼개기 근무) ----------
+def test_split_shift_schedule_minutes():
+    from app.calc import schedule as sch
+    day = [{"start": "10:00", "end": "14:00", "brk": "없음"}, {"start": "18:00", "end": "22:00", "brk": "30분"}]
+    assert sch.slots_of(day) == day and sch.slots_of(day[0]) == [day[0]] and sch.slots_of(None) == []
+    assert sch.day_work_min(day) == 240 + 210
+    assert sch.weekly_min({"월": day, "수": day[0]}) == 450 + 240  # 예전 형식(시간대 하나)과 섞여도 된다
+    assert sch.day_text(day) == "10:00~14:00, 18:00~22:00"
+
+
+def test_split_shift_record_uses_nearest_slot_break():
+    """저녁에 출근한 기록은 저녁 시간대의 쉬는 시간(30분)으로 계산한다."""
+    from datetime import datetime
+    from app.calc import schedule as sch
+    day = [{"start": "10:00", "end": "14:00", "brk": "없음"}, {"start": "18:00", "end": "22:00", "brk": "30분"}]
+    assert sch.slot_for({"월": day}, "월", datetime(2026, 9, 7, 17, 55))["brk"] == "30분"
+    assert sch.slot_for({"월": day}, "월", datetime(2026, 9, 7, 9, 58))["brk"] == "없음"
+    assert sch.slot_for({"월": day}, "화", datetime(2026, 9, 8, 18, 0)) is None
+
+
+def test_split_shift_judged_per_slot():
+    """쉬는 시간은 시간대마다, 청소년 하루 한도는 그날 시간대를 합쳐서 본다."""
+    from datetime import date
+    from app.judge import engine
+    day = [{"start": "09:00", "end": "12:30", "brk": "없음"}, {"start": "13:30", "end": "18:30", "brk": "없음"}]
+    facts = engine.Facts(birth=date(2010, 5, 1), on=date(2026, 9, 7), wage=10030, probation="no",
+                         schedule={"토": day}, size="lt5", contract_written=True, copy_received=True, consent="냈어요")
+    items = engine.judge(facts, "contract")
+    brk = [i for i in items if i.law == "근로기준법 제54조"]
+    assert len(brk) == 1 and "13:30~18:30" in brk[0].basis[0]  # 4시간 이상인 시간대만 쉬는 시간이 필요
+    hours = [i for i in items if i.law == "근로기준법 제69조"]
+    assert hours and hours[0].status == "bad"  # 하루 3시간 30분 + 5시간: 연장해도 하루 8시간 한도를 넘음

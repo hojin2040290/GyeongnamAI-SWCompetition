@@ -70,8 +70,8 @@
       <div class="step">지원 전 확인</div>
       <h1>지원하려는 곳의 조건을 알려 주세요</h1>
       <p class="lead">공고 사진은 원본으로 보관돼요. 공고 내용 자동 읽기는 AI 연결 후 제공되고, 지금은 직접 입력해 주세요.</p>
-      <label class="upload" id="seekUpload"><input type="file" accept="image/*,.pdf" hidden id="seekFile">
-        <strong>채용공고 사진 올리기</strong>캡처나 사진</label>
+      <label class="upload" id="seekUpload"><input type="file" accept="image/*,.pdf" hidden multiple id="seekFile">
+        <strong>채용공고 사진 올리기</strong>캡처나 사진, 여러 장도 돼요</label>
       <div class="panel" style="margin-top:14px" id="seekForm">
         <label class="field"><span>사업장 이름</span><input class="input f-name" placeholder="예: 해맑음 편의점 용호점"></label>
         <label class="field"><span>사업자등록번호 (선택)</span><input class="input f-bizno" inputmode="numeric" maxlength="12" placeholder="000-00-00000" autocomplete="off">
@@ -228,8 +228,10 @@
         <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="number" id="payAmount" inputmode="numeric"><em>원</em></div></label>
         <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf">
           <em class="hint" id="payOcr">사진을 고르면 원본으로 저장하고, AI가 금액을 읽어 채워요.</em></label>
+        <div class="field hidden" id="payModeWrap"><span id="payModeLabel">이 달에 이미 저장한 금액이 있어요</span>
+          <div class="seg" data-name="paymode"><button type="button" data-v="add">따로 더 받았어요</button><button type="button" data-v="replace">금액 고치기</button></div></div>
         <button class="btn block" id="paySave">저장하고 비교하기</button>
-        <p class="hint">같은 달을 다시 저장하면 새 금액으로 바뀌어요.</p>
+        <p class="hint">한 달 급여를 나눠 받았으면 받은 만큼 따로 저장하세요. 합쳐서 비교해요.</p>
       </div>
       <h3>저장한 받은 급여</h3>
       <div class="panel"><ul class="list" id="payslips"></ul></div>
@@ -242,8 +244,8 @@
         <span class="desc"><strong>새 아르바이트에 지원하려고 하나요</strong>지원 전에 공고와 조건을 먼저 확인해요</span>
         <span class="btn small sched-go">확인</span>
       </button>
-      <label class="upload"><input type="file" accept="image/*,.pdf" hidden id="contractFile">
-        <strong>근로계약서 사진 올리기</strong>원본은 그대로 저장돼요</label>
+      <label class="upload"><input type="file" accept="image/*,.pdf" hidden multiple id="contractFile">
+        <strong>근로계약서 사진 올리기</strong>여러 장이면 한 번에 골라도 돼요. 원본은 그대로 저장돼요</label>
       <div class="ai-note" id="ocrNote">사진을 올리면 원본으로 저장하고, AI가 읽어 아래 칸을 채워요. AI가 연결되지 않았으면 직접 입력해 주세요.</div>
       <h3>계약서에 적힌 내용</h3>
       <div class="panel fields-grid" id="fieldsBox"></div>
@@ -268,7 +270,7 @@
             <option value="message">사업주 메시지 캡처</option><option value="schedule">근무표</option>
             <option value="deposit">입금 내역</option><option value="payslip">급여명세서</option><option value="other">기타</option>
           </select></label>
-        <label class="upload"><input type="file" hidden id="evFile"><strong>자료 올리기</strong>파일을 고르면 바로 저장돼요</label>
+        <label class="upload"><input type="file" hidden multiple id="evFile"><strong>자료 올리기</strong>파일을 여러 개 골라도 하나씩 원본으로 저장돼요</label>
       </div>
       <div class="panel"><ul class="list" id="evList"></ul></div>
       <h3>상담 사전 자료</h3>
@@ -307,7 +309,7 @@
         </div>
         <h3>게시물 확인</h3>
         <div class="panel">
-          <label class="field"><span>의심되는 게시물 주소</span><input class="input" id="postUrl" placeholder="https://"></label>
+          <label class="field"><span>의심되는 게시물 주소 (여러 개면 띄어서)</span><input class="input" id="postUrl" placeholder="https://"></label>
           <div class="row-actions">
             <button class="btn" id="postAdd">증거로 보존하기</button>
             <button class="btn ghost" id="postSearch">공개 게시물 검색</button>
@@ -417,7 +419,7 @@
       <div class="seg" data-name="paymethod"><button type="button" data-v="계좌 이체">계좌 이체</button><button type="button" data-v="현금">현금</button></div>
       <p class="hint f-cash hidden">현금은 입금 내역이 남지 않아요. 받을 때마다 금액과 날짜를 기록해 두세요.</p></div>
     <div class="field"><span>급여에서 떼는 돈</span>
-      <div class="seg wrap" data-name="deduct"><button type="button" data-v="없음">없음</button><button type="button" data-v="세금 3.3%">세금 3.3%</button><button type="button" data-v="4대보험">4대보험</button><button type="button" data-v="모름">모름</button></div></div>
+      <div class="seg wrap" data-name="deduct" data-multi="1"><button type="button" data-v="없음">없음</button><button type="button" data-v="세금 3.3%">세금 3.3%</button><button type="button" data-v="4대보험">4대보험</button><button type="button" data-v="모름">모름</button></div></div>
     <details class="more">
       <summary>상담 자료에 들어갈 정보 (선택)</summary>
       <label class="field"><span>사업장 주소</span><input class="input f-addr" placeholder="예: 경남 창원시 ○○구 ○○로"></label>

@@ -132,34 +132,38 @@ def judge(facts: Facts, stage: str) -> list[Item]:
 
     # 쉬는 시간
     br = P()["break"]
-    for day, slot in facts.schedule.items():
-        wm = sch.span_min(slot)
-        b = sch.break_min(slot)
-        need = max([r for t, r in br["rules"] if wm - (b or 0) >= t] or [0])
-        if need == 0:
-            continue
-        if b is None:
-            items.append(Item(br["law"], WARN, f"{day}요일 쉬는 시간을 몰라 확인하지 못했어요.", needed=[f"{day}요일 쉬는 시간"]))
-        elif b < need:
-            items.append(Item(br["law"], BAD, f"{day}요일 근무에 필요한 쉬는 시간({need}분)보다 짧아요.",
-                              basis=[f"{day}요일 {slot['start']}~{slot['end']}, 쉬는 시간 {b}분"]))
+    for day, value in facts.schedule.items():
+        for slot in sch.slots_of(value):  # 하루 여러 번 근무하면 시간대마다 따로 본다
+            wm = sch.span_min(slot)
+            b = sch.break_min(slot)
+            need = max([r for t, r in br["rules"] if wm - (b or 0) >= t] or [0])
+            if need == 0:
+                continue
+            if b is None:
+                items.append(Item(br["law"], WARN, f"{day}요일 {sch.slot_text(slot)} 쉬는 시간을 몰라 확인하지 못했어요.",
+                                  needed=[f"{day}요일 쉬는 시간"]))
+            elif b < need:
+                items.append(Item(br["law"], BAD, f"{day}요일 근무에 필요한 쉬는 시간({need}분)보다 짧아요.",
+                                  basis=[f"{day}요일 {sch.slot_text(slot)}, 쉬는 시간 {b}분"]))
 
     # 만 18세 미만 보호
     if age < minor["age"]:
         wk = sch.weekly_min(facts.schedule)
-        long_days = [d for d, s in facts.schedule.items() if sch.work_min(s) > minor["daily_limit_min"]]
-        over_days = [d for d, s in facts.schedule.items() if sch.work_min(s) > minor["daily_limit_min"] + minor["daily_ext_min"]]
+        long_days = [d for d, v in facts.schedule.items() if sch.day_work_min(v) > minor["daily_limit_min"]]
+        over_days = [d for d, v in facts.schedule.items()
+                     if sch.day_work_min(v) > minor["daily_limit_min"] + minor["daily_ext_min"]]
         if over_days or wk > minor["weekly_limit_min"] + minor["weekly_ext_min"]:
             items.append(Item(minor["law_hours"], BAD, "만 18세 미만의 근로시간 한도를 넘어요.",
                               basis=[f"주 {wk // 60}시간 {wk % 60}분", *[f"{d}요일" for d in over_days]]))
         elif long_days or wk > minor["weekly_limit_min"]:
             items.append(Item(minor["law_hours"], WARN, "하루 7시간, 주 35시간을 넘어요. 당사자 합의가 있으면 하루 1시간, 주 5시간까지 늘릴 수 있어요.",
                               basis=[f"주 {wk // 60}시간 {wk % 60}분"], needed=["연장 합의 여부"]))
-        night_days = [d for d, s in facts.schedule.items() if sch.slot_has_night(s, minor["night_start"], minor["night_end"])]
+        night_days = [d for d, v in facts.schedule.items()
+                      if any(sch.slot_has_night(x, minor["night_start"], minor["night_end"]) for x in sch.slots_of(v))]
         if night_days:
             items.append(Item(minor["law_night"], BAD, "만 18세 미만은 밤 10시부터 오전 6시 사이 근무에 본인 동의와 고용노동부 인가가 필요해요. "
                               "인가를 받았는지 사업장에 확인해 보세요.",
-                              basis=[f"{d}요일 {facts.schedule[d]['start']}~{facts.schedule[d]['end']}" for d in night_days]))
+                              basis=[f"{d}요일 {sch.day_text(facts.schedule[d])}" for d in night_days]))
         if stage == "contract":
             if facts.consent == "안 냈어요":
                 items.append(Item(minor["law_docs"], BAD, "만 18세 미만은 보호자 동의서와 가족관계증명서를 사업장에 갖춰야 해요.",

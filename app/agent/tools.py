@@ -241,9 +241,9 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         return r.as_dict()
 
     def get_payslip(month: str):
-        row = session.exec(select(Payslip).where(Payslip.job_id == job_id, Payslip.month == month)
-                           .order_by(Payslip.id.desc())).first()
-        return row.amount if row else None
+        """그 달 받은 금액. 나눠 받아 여러 건이면 합친다 (없으면 None)."""
+        rows = session.exec(select(Payslip).where(Payslip.job_id == job_id, Payslip.month == month)).all()
+        return sum(r.amount for r in rows) if rows else None
 
     def compare_pay(expected: dict, paid) -> dict:
         """계산한 금액과 받은 금액의 차이 (숫자만). 체불인지 판단은 AI가 한다."""
@@ -397,7 +397,8 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         return t["calc_pay"](month)
 
     def get_payslip(month: str) -> dict:
-        return {"달": month, "받은 금액": t["get_payslip"](month)}
+        n = len(session.exec(select(Payslip).where(Payslip.job_id == job_id, Payslip.month == month)).all())
+        return {"달": month, "받은 금액(합계)": t["get_payslip"](month), "건수": n}
 
     def compare_pay(month: str) -> dict:
         """계산한 금액과 받은 금액 비교 (숫자만). 결과는 이번 실행의 급여 비교로 남는다."""

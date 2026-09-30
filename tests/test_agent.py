@@ -463,3 +463,12 @@ def test_daily_check_counts_advice(env, monkeypatch):
     monkeypatch.setattr(client, "LLM_ENABLED", False)
     monkeypatch.setattr(scheduler, "refresh_law_table", lambda: "건너뜀")
     assert scheduler.daily_check()["advice"] == 0  # AI가 없으면 종합 조언은 대기
+
+
+def test_other_user_cannot_touch_payslip(env):
+    a, ja, b, jb = env
+    a.post(f"/api/jobs/{ja}/payslip", data={"month": "2026-06", "amount": "1000"})
+    pid = [p for p in a.get(f"/api/jobs/{ja}/payslips").json() if p["month"] == "2026-06"][0]["id"]
+    assert b.put(f"/api/payslips/{pid}", json={"amount": 1}).status_code == 404
+    assert b.delete(f"/api/payslips/{pid}").status_code == 404
+    assert a.delete(f"/api/payslips/{pid}").json()["ok"]

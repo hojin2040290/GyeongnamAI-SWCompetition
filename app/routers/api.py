@@ -503,9 +503,12 @@ def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depen
 # ---------- 급여 ----------
 @router.post("/jobs/{job_id}/payslip")
 async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(...), file: Optional[UploadFile] = File(None),
-                      evidence_id: Optional[int] = Form(None),
+                      evidence_id: Optional[int] = Form(None), mode: str = Form("add"),
                       u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """받은 금액 저장. 같은 달에 나눠 받았으면 따로 저장해 합친다 (mode=add). mode=replace면 그 달 금액을 이것으로 바꾼다."""
     own_job(s, u, job_id)
+    if amount < 0:
+        raise HTTPException(400, "받은 금액은 0원 이상이어야 해요")
     ev_id = None
     if file is not None and file.filename:
         ev_id = (await store_upload(s, u, job_id, "payslip", file, f"{month} 급여")).id
@@ -514,6 +517,9 @@ async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(..
         if not ev or ev.user_id != u.id or ev.job_id != job_id:
             raise HTTPException(404, "명세서 자료를 찾을 수 없어요")
         ev_id = ev.id
+    if mode == "replace":  # 그 달 금액을 새 금액 하나로 (함께 올린 명세서 원본은 증거 자료로 남는다)
+        for p in s.exec(select(Payslip).where(Payslip.job_id == job_id, Payslip.month == month)).all():
+            s.delete(p)
     s.add(Payslip(job_id=job_id, month=month, amount=amount, evidence_id=ev_id, created_at=now_kst()))
     s.commit()
     return core.run_payday(s, u.id, job_id, month)
@@ -532,12 +538,41 @@ async def read_payslip(job_id: int, file: UploadFile = File(...), u: User = Depe
 @router.get("/jobs/{job_id}/payslips")
 def list_payslips(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
-    rows = s.exec(select(Payslip).where(Payslip.job_id == job_id).order_by(Payslip.month.desc(), Payslip.id.desc())).all()
-    latest: dict[str, Payslip] = {}
-    for p in rows:
-        latest.setdefault(p.month, p)  # 같은 달을 다시 올리면 마지막 금액을 쓴다
+    rows = s.exec(select(Payslip).where(Payslip.job_id == job_id).order_by(Payslip.month.desc(), Payslip.id)).all()
     return [{"id": p.id, "month": p.month, "amount": p.amount, "evidence_id": p.evidence_id,
-             "created_at": p.created_at.isoformat()} for p in latest.values()]
+             "created_at": p.created_at.isoformat()} for p in rows]  # 같은 달 여러 건은 합쳐서 비교한다
+
+
+def own_payslip(s: Session, u: User, pid: int) -> Payslip:
+    p = s.get(Payslip, pid)
+    if not p:
+        raise HTTPException(404, "받은 금액 기록을 찾을 수 없어요")
+    own_job(s, u, p.job_id)
+    return p
+
+
+class AmountIn(BaseModel):
+    amount: int
+
+
+@router.put("/payslips/{pid}")
+def edit_payslip(pid: int, data: AmountIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """받은 금액 한 건 고치기. 고친 뒤 그 달을 다시 비교한다."""
+    p = own_payslip(s, u, pid)
+    if data.amount < 0:
+        raise HTTPException(400, "받은 금액은 0원 이상이어야 해요")
+    p.amount = data.amount
+    s.add(p)
+    s.commit()
+    return core.run_payday(s, u.id, p.job_id, p.month)
+
+
+@router.delete("/payslips/{pid}")
+def delete_payslip_item(pid: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """받은 금액 한 건 지우기. 함께 올린 명세서 원본은 증거 자료로 남긴다."""
+    s.delete(own_payslip(s, u, pid))
+    s.commit()
+    return {"ok": True}
 
 
 @router.delete("/jobs/{job_id}/payslips/{month}")
