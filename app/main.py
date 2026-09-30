@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import config, scheduler
+from app import config, notices, scheduler
 from app.auth import current_user
 from app.config import BASE_DIR, SECRET_KEY
 from app.db import engine, init_db
@@ -44,6 +44,7 @@ async def lifespan(app: FastAPI):
                     "실제 모델을 쓰려면 .env에 LLM_ENABLED=true와 LLM_MODEL을 넣으세요")
     init_db()
     with Session(engine) as s:
+        notices.tidy(s)  # 예전 알림 정리 (같은 종류는 최근 것만, 오래전에 읽은 알림은 지움)
         load_notices(s)  # 법제처에서 불러온 최저임금 고시 (판단 근거로 붙임)
     scheduler.start()
     yield

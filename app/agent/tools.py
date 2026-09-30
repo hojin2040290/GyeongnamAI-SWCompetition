@@ -21,12 +21,11 @@ from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
 from app.law.lookup import article_info, attach_articles, attach_refs, known_law, refs_for
-from app import ocr, storage
+from app import notices, ocr, storage
 from app.llm import client
-from app.models import (AgentQuestion, AgentTask, CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Notification, Payslip, User,
+from app.models import (AgentQuestion, AgentTask, CaseNote, CheckRun, ContractFields, Evidence, GuardPost, Job, Payslip, User,
                         WorkRecord)
 
-NOTIFY_DEDUP_HOURS = 24  # 같은 알림을 다시 보내지 않는 시간
 POST_STATUS = ("suspect", "ok", "unclear")  # 보복 의심, 문제 없음, 확인 필요
 
 
@@ -82,7 +81,7 @@ def judgment_problems(session: Session, it: dict, j: dict, answered: list | tupl
     return out
 
 
-def make_tools(session: Session, user_id: int, job_id: int | None):
+def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = "", run_id: str = ""):
     def get_user() -> User:
         return session.get(User, user_id)
 
@@ -286,20 +285,9 @@ def make_tools(session: Session, user_id: int, job_id: int | None):
         session.commit()
         return run.id
 
-    def notify(title: str, body: str) -> str:
-        """알림 보내기. 같은 알림이 하루 안에 이미 있으면 다시 보내지 않는다 (점검을 여러 번 눌러도 한 번만)."""
-        title, body = str(title).strip()[:100], str(body).strip()[:500]
-        if not title or not body:
-            raise ValueError("알림 제목과 내용이 필요해요")
-        since = now_kst() - timedelta(hours=NOTIFY_DEDUP_HOURS)
-        dup = session.exec(select(Notification).where(
-            Notification.user_id == user_id, Notification.job_id == job_id, Notification.title == title,
-            Notification.body == body, Notification.created_at >= since)).first()
-        if dup:
-            return "같은 알림이 이미 있어 보내지 않음"
-        session.add(Notification(user_id=user_id, job_id=job_id, title=title, body=body, created_at=now_kst()))
-        session.commit()
-        return "보냄"
+    def notify(title: str, body: str, kind: str = "") -> str:
+        """알림 보내기. 같은 종류의 예전 알림은 지우고 새 알림으로 바꾼다 (app/notices.py)."""
+        return notices.send(session, user_id, job_id, title, body, kind or topic, run_id)
 
     # ----- 상담 -----
     def counsel_for_age() -> list[dict]:
@@ -359,7 +347,7 @@ LAW_LIST = {"type": "array", "items": {"type": "string"}, "description": "근거
 
 def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict) -> dict[str, Tool]:
     """AI에게 보여 주는 도구. state에는 이번 실행에서 코드가 계산한 결과(급여 비교, 저장한 문구 등)를 남긴다."""
-    t = make_tools(session, user_id, job_id)
+    t = make_tools(session, user_id, job_id, state.get("topic", ""), state.get("run_id", ""))
 
     def get_profile() -> dict:
         user = t["get_user"]()
@@ -554,7 +542,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
                           created_at=now_kst())
         session.add(q)
         session.commit()
-        t["notify"]("에이전트가 물어볼 게 있어요", f"{question} 홈에서 답하면 다시 판단해요.")
+        t["notify"]("에이전트가 물어볼 게 있어요", f"{question} 홈에서 답하면 다시 판단해요.", "questions")
         state.setdefault("asked", []).append(q.id)
         return {"question_id": q.id, "안내": "사용자가 답하면 이 점검을 다시 시작해요. 지금은 이 항목을 warn으로 두세요."}
 

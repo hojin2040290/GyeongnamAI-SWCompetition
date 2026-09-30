@@ -13,6 +13,7 @@ from datetime import date
 
 from sqlmodel import Session, select
 
+from app import notices
 from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
 from app.agent.safety import scrub
@@ -40,11 +41,12 @@ DONE = {"note": {"type": "string", "description": "한 일 요약"}}
 
 
 class Run:
-    def __init__(self, session: Session, user_id: int, job_id, event: str, trigger: str = "user"):
+    def __init__(self, session: Session, user_id: int, job_id, event: str, trigger: str = "user", topic: str = ""):
         self.s, self.user_id, self.job_id, self.event = session, user_id, job_id, event
         self.run_id = uuid.uuid4().hex[:8]
-        self.tools = make_tools(session, user_id, job_id)
-        self.state: dict = {"event": event, "run_id": self.run_id}  # AI가 도구로 만든 결과 (검토 항목, 급여 비교 등)
+        self.topic = topic or notices.topic_of(event)  # 이 실행이 보내는 알림의 종류
+        self.tools = make_tools(session, user_id, job_id, self.topic, self.run_id)
+        self.state: dict = {"event": event, "run_id": self.run_id, "topic": self.topic}  # AI가 도구로 만든 결과 (검토 항목, 급여 비교 등)
         self.followup = FOLLOWUP_NOTE.get()
         self.steps = 0
         self.ai_used = False
@@ -212,7 +214,7 @@ def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
 
 # ---------- 급여, 퇴직 ----------
 def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger: str = "user") -> dict:
-    r = Run(session, user_id, job_id, "payday", trigger)
+    r = Run(session, user_id, job_id, "payday", trigger, topic=notices.topic_of("payday", month))
     r.state["resume"] = {"month": month}  # 질문에 답하면 같은 달로 다시 시작
     r.log("입력", f"{month} 급여 점검")
     goal = Goal(f"{month} 급여를 계산한 금액과 받은 금액을 compare_pay로 비교하고, 체불이 의심되는지 판단해 finish에 담아 주세요. "
@@ -472,7 +474,7 @@ DAILY_KINDS = {"payday": "급여(지난달)", "quit": "퇴직 뒤 임금 지급 
 def daily_notice(session: Session, user_id: int, job_id: int, ran: list[str], advised: bool) -> str:
     """매일 자동 점검이 끝나면 사업장마다 알림 하나로 결과를 알린다 (점검할 게 없던 날도).
     알림은 코드가 보내고, 조언 글은 AI가 give_advice로 남긴 것을 그대로 옮긴다."""
-    t = make_tools(session, user_id, job_id)
+    t = make_tools(session, user_id, job_id, "daily")
     today = today_kst()
     done = ", ".join(DAILY_KINDS.get(k, k) for k in ran)
     lines = [f"실행한 점검: {done}." if done else "오늘 필요한 점검은 없었어요 (월급날, 그만둔 뒤 지급 기한, 신고 후 게시물 확인에 해당 없음)."]

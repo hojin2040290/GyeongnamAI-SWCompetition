@@ -66,6 +66,8 @@ def fake_mode(value: str, enabled: bool, model: str) -> bool:
 
 
 LLM_FAKE = fake_mode(os.getenv("LLM_FAKE", "auto"), LLM_ENABLED, LLM_MODEL)
+# 가짜 AI가 요청을 받고 답하기까지 기다리는 시간(초). 실제 모델처럼 기다리는 모습(로딩 표시)을 확인하려고 둔다
+LLM_FAKE_DELAY = max(0.0, float(os.getenv("LLM_FAKE_DELAY", "3")))
 
 # 외부 API 키 (없으면 해당 기능은 건너뜀)
 LAW_OC = os.getenv("LAW_OC", "")
