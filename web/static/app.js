@@ -532,14 +532,29 @@ function itemHTML(it){
 }
 // 에이전트가 거친 단계 (입력, 판단, 도구 실행, 결과)
 // 에이전트가 일하는 동안: 새로 남는 동작 기록을 불러와 단계별로 보여 준다
+// 요소의 윗부분(제목과 첫 단계)이 위 머리줄과 아래 메뉴에 가리지 않게 스크롤한다 (처음 설정 화면은 그 안에서 스크롤)
+function reveal(node){
+  if(!node) return;
+  requestAnimationFrame(()=>{
+    const over=visible('#onboard'), r=node.getBoundingClientRect(), nav=$('#tabs');
+    const bottom=(!over && nav && !nav.classList.contains('hidden'))?nav.getBoundingClientRect().top:innerHeight;
+    const top=over?0:($('header.top')?.getBoundingClientRect().bottom||0);
+    const want=r.top+Math.min(r.height,140);
+    let dy=0;
+    if(want>bottom-12) dy=want-(bottom-12); else if(r.top<top+12) dy=r.top-(top+12);
+    if(dy) (over?$('#onboard'):window).scrollBy(0,dy);
+  });
+}
 async function agent(box, run){
   const el=$(box); let last=0, stop=false;
   try{ last=(await api('GET','/api/agent/last')).id; }catch(e){}
   el.innerHTML='<div class="live"><p class="wait-note live-head">에이전트가 일하는 중이에요</p><div class="live-steps"></div></div>';
+  reveal(el.querySelector('.live'));  // 누른 버튼 아래 진행 칸이 가려져 있으면 보이는 곳까지 옮긴다 (끝날 때까지 이 화면에 머문다)
   (async()=>{ while(!stop){
     try{ const rows=await api('GET',`/api/agent/live?after=${last}`);
       if(rows.length && !stop){ last=rows[rows.length-1].id;
-        el.querySelector('.live-steps')?.insertAdjacentHTML('beforeend',rows.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail.slice(0,120))}</div>`).join('')); } }catch(e){}
+        el.querySelector('.live-steps')?.insertAdjacentHTML('beforeend',rows.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail.slice(0,120))}</div>`).join(''));
+        reveal(el.querySelector('.live')); } }catch(e){}  // 단계가 늘어 칸이 커지면 다시 보이게 (맨 아래에 있던 칸도)
     await new Promise(r=>setTimeout(r,700)); } })();
   try{ return await run(); }catch(e){ el.innerHTML=''; throw e; }finally{ stop=true; }
 }
@@ -549,7 +564,7 @@ function traceHTML(trace){
 }
 $('#seekRun').onclick=async()=>{
   $('#seekErr').textContent='';
-  try{ const r=await agent('#seekTrace',()=>api('POST','/api/seek/check',seekInput()));
+  try{ const r=await agent('#seekLive',()=>api('POST','/api/seek/check',seekInput())); $('#seekLive').innerHTML='';
     $('#seekItems').innerHTML=r.items.map(itemHTML).join('');
     $('#seekQs').innerHTML=r.questions.map(q=>`<li>${esc(q)}</li>`).join('');
     $('#seekTrace').innerHTML=traceHTML(r.trace);
@@ -557,7 +572,7 @@ $('#seekRun').onclick=async()=>{
     $('#seekClose').classList.toggle('hidden',!state.seekFromApp); window.scrollTo(0,0); refreshNav();
   }catch(e){ $('#seekErr').textContent=e.message; }
 };
-function seekReset(){ const n=seek.node; n.querySelectorAll('input').forEach(i=>i.value=''); n.querySelector('.f-type').value='';
+function seekReset(){ $('#seekLive').innerHTML=''; const n=seek.node; n.querySelectorAll('input').forEach(i=>i.value=''); n.querySelector('.f-type').value='';
   const bh=n.querySelector('.bizno-hint'); bh.textContent=BIZ_HINT; bh.classList.remove('bad');
   n.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed','false')); seek.schedule={};
   n.querySelector('.sched-sum').textContent='요일과 시간을 선택해 주세요'; n.querySelector('.sched-go').textContent='선택';
@@ -649,7 +664,7 @@ function setPunchUI(working, text){
   btn.classList.toggle('out',working); $('#clockState').textContent=text;
 }
 async function loadHome(){
-  const j=curJob(); applyCurrent();
+  const j=curJob(); applyCurrent(); $('#punchLive').innerHTML=''; $('#quitLive').innerHTML='';
   await refreshRecords();
   if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
   await renderQuit();
@@ -731,14 +746,17 @@ function getPos(){ return new Promise(res=>{ if(!navigator.geolocation) return r
 $('#punchBtn').onclick=async()=>{
   const btn=$('#punchBtn'); btn.disabled=true;
   try{ let pos=null; if($('#gpsOn').checked){ pos=await getPos(); if(!pos) toast('위치를 가져오지 못해 시각만 기록해요'); }
-    let r;
-    try{ r=await api('POST',`/api/jobs/${state.current}/punch`,pos||{}); }
+    let r; const out=btn.textContent.includes('퇴근');
+    // 퇴근하면 에이전트가 그날 기록을 점검한다: 끝날 때까지 버튼 아래에 진행을 보여 준다
+    const punch=body=>out?agent('#punchLive',()=>api('POST',`/api/jobs/${state.current}/punch`,body)):api('POST',`/api/jobs/${state.current}/punch`,body);
+    try{ r=await punch(pos||{}); }
     catch(e){
       if(e.status!==409) throw e;
       // 방금 출근했거나 퇴근을 오래 안 눌렀을 때는 한 번 더 확인한다
       if(!confirm(e.message)){ toast('기록하지 않았어요'); return; }
-      r=await api('POST',`/api/jobs/${state.current}/punch`,{...(pos||{}), confirm:true});
+      r=await punch({...(pos||{}), confirm:true});
     }
+    $('#punchLive').innerHTML=r.shift?.trace?traceHTML(r.shift.trace):'';
     const t=fmtDT(r.server_time);
     setPunchUI(r.action==='in', r.action==='in'?`${t} 출근 기록됨${pos?', 위치 함께 기록':''}`:`${t} 퇴근 기록됨`);
     if(r.shift) renderShift(r.shift);
@@ -824,8 +842,10 @@ function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen')
 $('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
 $('#quitSave').onclick=async()=>{ const v=$('#quitDateMain').value; if(!v){ toast('그만둔 날을 골라 주세요'); return; }
   const st=curJob().start_date; if(st && v<st){ toast('그만둔 날은 근무 시작일보다 앞일 수 없어요'); return; }
-  try{ await api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v}); await loadJobs(); closeQuitForm(); await loadHome(); toast('그만둔 날을 저장했어요'); }catch(e){ toast(e.message); } };
-async function setPaid(p){ try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p}); await loadJobs(); await renderQuit(); toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); }catch(e){ toast(e.message); } }
+  try{ const r=await agent('#quitLive',()=>api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v})); await loadJobs(); closeQuitForm(); await loadHome();
+    $('#quitLive').innerHTML=traceHTML(r.settlement?.trace); toast('그만둔 날을 저장했어요'); }catch(e){ toast(e.message); } };
+async function setPaid(p){ try{ const r=await agent('#quitLive',()=>api('POST',`/api/jobs/${state.current}/paid`,{paid:p})); await loadJobs(); await renderQuit();
+    $('#quitLive').innerHTML=traceHTML(r.settlement?.trace); toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); }catch(e){ toast(e.message); } }
 $('#paidYes').onclick=()=>setPaid(true); $('#paidNo').onclick=()=>setPaid(false);
 $('#quitReport').onclick=()=>showTab('docs');
 
@@ -844,7 +864,7 @@ function payHTML(r){
     ${e.notes.map(n=>`<p class="hint">${esc(n)}</p>`).join('')}`;
 }
 // 급여 점검 탭
-async function loadPayTab(){ applyCurrent(); if(!$('#payMonth').value) $('#payMonth').value=thisMonth(); $('#payTrace').innerHTML=''; await loadPay(); await loadPayslips(); }
+async function loadPayTab(){ applyCurrent(); if(!$('#payMonth').value) $('#payMonth').value=thisMonth(); $('#payTrace').innerHTML=''; $('#payOcrLive').innerHTML=''; await loadPay(); await loadPayslips(); }
 async function loadPay(){ const r=await api('GET',`/api/jobs/${state.current}/pay?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r); }
 async function loadPayslips(){
   const ps=await api('GET',`/api/jobs/${state.current}/payslips`); state.payslips=ps;
@@ -874,7 +894,7 @@ $('#payRun').onclick=async()=>{ try{ const r=await agent('#payTrace',()=>api('PO
 let payslipEv=null;
 $('#payFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const fd=new FormData(); fd.append('file',f);
   payslipEv=null; $('#payOcr').textContent='명세서를 저장하고 읽는 중이에요…';
-  try{ const r=await api('POST',`/api/jobs/${state.current}/payslip/read`,fd,true); payslipEv=r.evidence_id;
+  try{ const r=await agent('#payOcrLive',()=>api('POST',`/api/jobs/${state.current}/payslip/read`,fd,true)); $('#payOcrLive').innerHTML=''; payslipEv=r.evidence_id;
     if(r.ai){
       if(r.month){ $('#payMonth').value=r.month; payModeSync(); } if(r.net_pay!=null) $('#payAmount').value=r.net_pay;
       const parts=[r.month&&`${r.month}분`, r.net_pay!=null&&`실지급액 ${won(r.net_pay)}`, r.base_pay!=null&&`기본급 ${won(r.base_pay)}`,
@@ -892,6 +912,7 @@ $('#paySave').onclick=async()=>{
 
 // 점검
 async function loadCheck(){
+  $('#ocrLive').innerHTML='';
   const f=await api('GET',`/api/jobs/${state.current}/contract/fields`);
   // 무엇을 적는지는 칸 안의 흐린 안내 글(placeholder)로 보여 주고, 쓸 수 없는 글자는 입력하는 동안 뺀다
   const rules=state.rules?.contract||{};
@@ -931,7 +952,7 @@ $('#contractFile').onchange=async e=>{ const files=[...e.target.files]; if(!file
     for(const [i,f] of files.entries()){
       $('#ocrNote').textContent=`계약서를 저장하고 읽는 중이에요… (${i+1}/${files.length}장)`;
       const fd=new FormData(); fd.append('file',f);
-      const r=await api('POST',`/api/jobs/${state.current}/contract`,fd,true); trace=trace.concat(r.trace||[]);
+      const r=await agent('#ocrLive',()=>api('POST',`/api/jobs/${state.current}/contract`,fd,true)); $('#ocrLive').innerHTML=''; trace=trace.concat(r.trace||[]);
       if(!r.ai){ reason=r.reason; continue; }
       ai=true; total=r.total;
       $$('#fieldsBox [data-k]').forEach(inp=>{ const v=r.fields[inp.dataset.k]; if(v && !filled.has(inp.dataset.k)){ inp.value=v; filled.add(inp.dataset.k); } });
@@ -976,14 +997,18 @@ $('#evFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.leng
   for(const f of files){ const fd=new FormData(); fd.append('file',f); fd.append('kind',$('#evKind').value);
     try{ await api('POST',`/api/jobs/${state.current}/evidence`,fd,true); ok++; }catch(err){ toast(`${f.name}: ${err.message}`); } }
   await loadDocs(); if(ok) toast(`자료 ${ok}개를 원본으로 저장했어요`); e.target.value=''; };
+// 상담 사전 자료: 에이전트가 일하는 동안 이 화면에서 진행을 보여 주고, 다 만든 뒤에 자료 화면으로 넘어간다
+// (새 창을 먼저 열면 진행이 안 보이는 빈 창만 보인다). 자료에서 뒤로 가기를 누르면 이 화면으로 돌아온다
 $('#reportBtn').onclick=async()=>{
-  const w=window.open('','_blank');  // 팝업 차단을 피하려고 누른 순간 창을 먼저 연다
-  try{ const r=await agent('#reportTrace',()=>api('POST',`/api/jobs/${state.current}/report`)); if(w) w.location=r.url; else location.href=r.url;
-    await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace); toast(r.summary_ai?'상담 사전 자료를 만들었어요':'AI 응답 대기 중이라 AI 요약 없이 만들었어요'); }
-  catch(e){ if(w) w.close(); toast(e.message); } };
+  const btn=$('#reportBtn'); btn.disabled=true;
+  try{ const r=await agent('#reportTrace',()=>api('POST',`/api/jobs/${state.current}/report`));
+    await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace);
+    toast(r.summary_ai?'상담 사전 자료를 만들었어요. 자료를 열어요':'AI 응답 대기 중이라 AI 요약 없이 만들었어요. 자료를 열어요');
+    setTimeout(()=>{ location.href=r.url; }, 1200); }
+  catch(e){ toast(e.message); } finally{ btn.disabled=false; } };
 
 // 보호
-async function loadGuard(){ $('#guardTrace').innerHTML=''; renderGuard(await api('GET',`/api/jobs/${state.current}/guard`)); }
+async function loadGuard(){ $('#guardTrace').innerHTML=''; $('#reportedLive').innerHTML=''; renderGuard(await api('GET',`/api/jobs/${state.current}/guard`)); }
 function renderGuard(g){
   $('#reported').checked=g.reported; $('#guardOn').classList.toggle('hidden',!g.reported); if(!pendingSaves.has(`msg-${state.current}`)) $('#warnMsg').value=g.message;
   $('#msgReset').classList.toggle('hidden',!g.custom_message); msgSource(g.message_source);
@@ -1001,7 +1026,7 @@ function renderGuard(g){
 const MSG_SOURCE={ai:'AI가 이번 상황에 맞게 작성한 문구예요. 고쳐 써도 돼요.',
   waiting:'AI 응답 대기 중이라 기본 문구를 보여 드려요. AI가 응답하면 상황에 맞는 문구로 바뀌어요.',custom:'직접 고친 문구예요.'};
 function msgSource(src){ const n=$('#msgSource'); n.textContent=MSG_SOURCE[src]||''; n.classList.toggle('wait',src==='waiting'); }
-$('#reported').onchange=async e=>{ try{ const g=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked})); renderGuard(g); $('#guardTrace').innerHTML=traceHTML(g.trace); }catch(err){ toast(err.message); } };
+$('#reported').onchange=async e=>{ try{ const g=await agent('#reportedLive',()=>api('POST',`/api/jobs/${state.current}/guard`,{reported:e.target.checked})); renderGuard(g); $('#reportedLive').innerHTML=traceHTML(g.trace); }catch(err){ toast(err.message); } };
 async function saveKeywords(list){ try{ renderGuard(await api('PUT',`/api/jobs/${state.current}/guard/keywords`,{keywords:list})); }catch(e){ toast(e.message); } }
 $('#kwAdd').onclick=()=>{ const v=$('#kwInput').value.trim(); if(!v){ toast('검색어를 넣어 주세요'); return; }
   $('#kwInput').value=''; saveKeywords([...(state.keywords||[]), ...v.split(',').map(x=>x.trim()).filter(Boolean)]); };

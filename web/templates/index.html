@@ -93,6 +93,7 @@
           <button type="button" class="schedule-btn"><span class="sched-sum">요일과 시간을 선택해 주세요</span><span class="btn small sched-go">선택</span></button></div>
         <p class="err" id="seekErr"></p>
         <button class="btn block" id="seekRun">지원 전 확인하기</button>
+        <div id="seekLive"></div>
       </div>
       <div id="seekResult" class="hidden">
         <h3>확인 결과</h3>
@@ -162,6 +163,7 @@
         </div>
       </div>
       <div id="openAlert" class="panel open-alert hidden" role="alert"></div>
+      <div id="punchLive"></div>
       <div id="shiftResult" class="hidden"></div>
 
       <div class="job-card">
@@ -187,6 +189,7 @@
           <label class="field"><span>그만둔 날</span><input class="input" type="date" id="quitDateMain"></label>
           <div class="row-actions"><button class="btn ghost" id="quitCancel">취소</button><button class="btn" id="quitSave">저장하기</button></div>
         </div>
+        <div id="quitLive"></div>
         <div class="panel empty-state hidden" id="recordsEmpty">
           <strong>아직 근무 기록이 없어요</strong>
           <p>위의 출근하기를 누르면 이곳에 쌓여요.</p>
@@ -230,6 +233,7 @@
         <label class="field"><span>받은 금액</span><div class="suffix"><input class="input" type="text" id="payAmount" inputmode="numeric" data-num="받은 금액" data-min="0" data-max="100000000" placeholder="예: 557,280원 또는 55만원"><em>원</em></div></label>
         <label class="field"><span>명세서나 입금 내역 (선택)</span><input class="input" type="file" id="payFile" accept="image/*,.pdf">
           <em class="hint" id="payOcr">사진을 고르면 원본으로 저장하고, AI가 금액을 읽어 채워요.</em></label>
+        <div id="payOcrLive"></div>
         <div class="field hidden" id="payModeWrap"><span id="payModeLabel">이 달에 이미 저장한 금액이 있어요</span>
           <div class="seg" data-name="paymode"><button type="button" data-v="add">따로 더 받았어요</button><button type="button" data-v="replace">금액 고치기</button></div></div>
         <button class="btn block" id="paySave">저장하고 비교하기</button>
@@ -249,6 +253,7 @@
       <label class="upload"><input type="file" accept="image/*,.pdf" hidden multiple id="contractFile">
         <strong>근로계약서 사진 올리기</strong>여러 장이면 한 번에 골라도 돼요. 원본은 그대로 저장돼요</label>
       <div class="ai-note" id="ocrNote">사진을 올리면 원본으로 저장하고, AI가 읽어 아래 칸을 채워요. AI가 연결되지 않았으면 직접 입력해 주세요.</div>
+      <div id="ocrLive"></div>
       <h3>계약서에 적힌 내용</h3>
       <div class="panel fields-grid" id="fieldsBox"></div>
       <button class="btn block" id="checkRun">이 내용과 근무 기록으로 점검하기</button>
@@ -293,6 +298,7 @@
         <div><strong>신고했어요</strong><div class="sub">켜면 신고 후 보호가 시작돼요</div></div>
         <label class="switch"><input type="checkbox" id="reported" aria-label="신고 여부"><span></span></label>
       </div>
+      <div id="reportedLive"></div>
       <div id="guardOn" class="hidden">
         <h3>사업주에게 보낼 안내</h3>
         <div class="panel">
