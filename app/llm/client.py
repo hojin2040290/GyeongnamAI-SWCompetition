@@ -10,7 +10,8 @@ import re
 
 import httpx
 
-from app.config import LLM_API_KEY, LLM_BASE_URL, LLM_ENABLED, LLM_MODEL, LLM_TIMEOUT, LLM_VISION_MODEL
+from app.config import LLM_API_KEY, LLM_BASE_URL, LLM_ENABLED, LLM_FAKE, LLM_MODEL, LLM_TIMEOUT, LLM_VISION_MODEL
+from app.llm import fake
 
 
 class LLMError(RuntimeError):
@@ -18,19 +19,24 @@ class LLMError(RuntimeError):
 
 
 def available() -> bool:
-    return LLM_ENABLED and bool(LLM_MODEL)
+    return LLM_FAKE or (LLM_ENABLED and bool(LLM_MODEL))
 
 
 def vision_available() -> bool:
-    return LLM_ENABLED and bool(LLM_VISION_MODEL or LLM_MODEL)
+    return LLM_FAKE or (LLM_ENABLED and bool(LLM_VISION_MODEL or LLM_MODEL))
 
 
 def status() -> dict:
+    if LLM_FAKE:
+        return {"enabled": True, "judge": True, "vision": True, "fake": True,
+                "model": "가짜 AI (시험용)", "vision_model": "가짜 AI (시험용)"}
     return {"enabled": LLM_ENABLED, "judge": available(), "vision": vision_available(),
             "model": LLM_MODEL, "vision_model": LLM_VISION_MODEL or LLM_MODEL}
 
 
 def _post(payload: dict) -> dict:
+    if LLM_FAKE:  # 시험용 가짜 AI: 같은 응답 모양으로 답한다
+        return fake.respond(payload)
     headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
     try:
         r = httpx.post(f"{LLM_BASE_URL.rstrip('/')}/chat/completions", json=payload, headers=headers,

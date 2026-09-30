@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.db import init_db
 from app.llm import client
 from app.main import app
-from tests.fake_agent import FakeAgent, smart_policy
+from tests.fake_agent import FakeAgent, said, smart_policy
 
 SAMPLE = Path(__file__).resolve().parent.parent / "테스트자료"
 
@@ -93,7 +93,7 @@ def test_ai_judgment_is_cross_checked(c, ai):
     items = r["items"]
     night = [i for i in items if i["law"] == "근로기준법 제70조"][0]
     assert night["status"] == "warn" and night["rule_status"] in ("bad", "warn")
-    assert any(i["status"] == "ok" and i.get("ai_reason") == "테스트" for i in items)
+    assert any(i["status"] == "ok" and i.get("ai_reason") == said("판단 이유") for i in items)
     assert "pending" not in {i["status"] for i in items}
 
 
@@ -129,18 +129,18 @@ def test_guard_without_model_waits(c):
 def test_guard_with_model(c, ai):
     jid = job_id(c)
     g = c.post(f"/api/jobs/{jid}/guard", json={"reported": True}).json()
-    assert g["message_source"] == "ai" and g["message"] == "AI가 쓴 안내 문구"
+    assert g["message_source"] == "ai" and g["message"] == said("보복 금지 안내 문구")
     c.put(f"/api/jobs/{jid}/guard/message", json={"message": "직접 고침"})
     assert c.get(f"/api/jobs/{jid}/guard").json()["message_source"] == "custom"
     g = c.put(f"/api/jobs/{jid}/guard/message", json={"message": ""}).json()
-    assert g["message_source"] == "ai" and g["message"] == "AI가 쓴 안내 문구"  # 되돌리면 AI 문구로
+    assert g["message_source"] == "ai" and g["message"] == said("보복 금지 안내 문구")  # 되돌리면 AI 문구로
     p = c.post(f"/api/jobs/{jid}/guard/posts", json={"url": "https://example.com/ok", "title": "맛집 후기"}).json()
     assert p["classify"]["judged"] >= 1  # 전에 대기 중이던 게시물도 함께 판별
     posts = {x["url"]: x for x in c.get(f"/api/jobs/{jid}/guard").json()["posts"]}
     assert posts["https://example.com/wait"]["status"] == "suspect"
-    assert posts["https://example.com/ok"]["status"] == "ok" and posts["https://example.com/ok"]["ai_reason"] == "테스트 판별"
+    assert posts["https://example.com/ok"]["status"] == "ok" and posts["https://example.com/ok"]["ai_reason"] == said("게시물 판별 근거")
     notes = c.get("/api/notifications").json()
-    assert any("보복이 의심되는" in n["title"] for n in notes)
+    assert any(said("보복 의심 게시물 알림 제목") == n["title"] for n in notes)
     c.post(f"/api/jobs/{jid}/guard", json={"reported": False})
 
 
@@ -148,7 +148,7 @@ def test_report_summary_by_model(c, ai):
     r = c.post(f"/api/jobs/{job_id(c)}/report").json()
     assert r["summary_ai"] is True
     html = c.get(r["url"]).text
-    assert "AI가 쓴 사건 요약" in html and "물어볼 점" in html and "근로기준법 제70조" in html
+    assert said("상담 자료 요약") in html and said("물어볼 점") in html and "근로기준법 제70조" in html
 
 
 def test_model_error_falls_back_to_waiting(c, monkeypatch):

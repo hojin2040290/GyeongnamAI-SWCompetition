@@ -226,3 +226,4 @@ data/reports/*
 !data/reports/.keep
 .DS_Store
 law_probe_result.txt
+data/law_probe_result.txt

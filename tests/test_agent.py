@@ -15,7 +15,7 @@ from app.db import engine, init_db
 from app.llm import client
 from app.main import app
 from app.models import AgentQuestion, GuardPost, Job
-from tests.fake_agent import FakeAgent, called, reply, smart_policy
+from tests.fake_agent import FakeAgent, called, reply, said, smart_policy
 
 
 def use(monkeypatch, policy, plan_first: bool = True) -> FakeAgent:
@@ -76,7 +76,7 @@ def test_agent_chooses_tools_and_finishes(env, monkeypatch):
     feedback = results(agent.payloads[4], "finish")[-1]
     assert any("위반이 의심돼요" in f["문제"] for f in feedback["검증 장치"])
     night = [i for i in r["items"] if i["law"] == "근로기준법 제70조"][0]
-    assert night["status"] == "warn" and night["ai_reason"] == "검증 장치 의견 반영"
+    assert night["status"] == "warn" and night["ai_reason"] == said("검증 장치 의견 반영")
     assert any(t["step"] == "검증 장치 1" for t in r["trace"])
 
 
@@ -89,7 +89,7 @@ def test_reflection_is_limited(env, monkeypatch):
         if items is None:
             return reply([("check_rules", {})])
         return reply([("finish", {"judgments": [{"i": it["i"], "status": "ok", "law": it["조항"],
-                                                 "fact": (it["사실"] or ["입력 정보"])[0], "reason": "고집"}
+                                                 "fact": (it["사실"] or ["입력 정보"])[0], "reason": said("고집")}
                                                 for it in items]})])
     agent = use(monkeypatch, stubborn)
     r = a.post(f"/api/jobs/{ja}/check").json()
@@ -130,14 +130,14 @@ def test_plan_is_required_first(env, monkeypatch):
         if not names:
             return reply([("check_rules", {})])
         if "make_plan" not in names:
-            return reply([("make_plan", {"steps": ["검토 항목 받기", "판단하기"]})])
+            return reply([("make_plan", {"steps": [said("검토 항목 받기"), said("판단하기")]})])
         return smart_policy(goal, [d for d in done if d[0] != "make_plan" and "error" not in d[1]], tools)
     agent = use(monkeypatch, policy, plan_first=False)
     r = a.post(f"/api/jobs/{ja}/check").json()
     assert "make_plan" in results(agent.payloads[1], "check_rules")[0]["error"]
     steps = [t["step"] for t in r["trace"]]
     assert steps.index("계획 전 확인") < steps.index("계획") < steps.index("도구 check_rules")
-    assert r["ai_agent"] and r["plan"] == ["검토 항목 받기", "판단하기"]
+    assert r["ai_agent"] and r["plan"] == [said("검토 항목 받기"), said("판단하기")]
 
 
 def test_unknown_law_citation_is_rejected(env, monkeypatch):
@@ -148,7 +148,7 @@ def test_unknown_law_citation_is_rejected(env, monkeypatch):
         if items is None:
             return reply([("check_rules", {})])
         return reply([("finish", {"judgments": [{"i": it["i"], "status": "bad", "law": "가상법 제1조",
-                                                 "fact": "사실", "reason": "기억으로 쓴 조항"} for it in items]})])
+                                                 "fact": "사실", "reason": said("기억으로 쓴 조항")} for it in items]})])
     use(monkeypatch, policy)
     items = a.post(f"/api/jobs/{ja}/check").json()["items"]
     assert "bad" not in {i["status"] for i in items}
@@ -177,7 +177,7 @@ def test_other_users_post_is_blocked(env, monkeypatch):
 
     def policy(goal, done, tools):
         if "set_post_status" not in [n for n, _ in done]:
-            return reply([("set_post_status", {"post_id": other_id, "status": "ok", "reason": "남의 글 바꾸기"})])
+            return reply([("set_post_status", {"post_id": other_id, "status": "ok", "reason": said("남의 글 바꾸기")})])
         return reply([("finish", {})])
     agent = use(monkeypatch, policy)
     a.post(f"/api/jobs/{ja}/guard/posts", json={"url": "https://example.com/mine", "title": "내 글"})
@@ -223,7 +223,7 @@ def test_seek_adds_ai_questions(env, monkeypatch):
     use(monkeypatch, smart_policy)
     r = a.post("/api/seek/check", json={"name": "가상카페", "wage": 12000, "probation": "no",
                                         "schedule": {"금": {"start": "18:00", "end": "22:00", "brk": "없음"}}}).json()
-    assert r["ai_agent"] and "주휴수당을 주나요" in r["questions"]
+    assert r["ai_agent"] and said("주휴수당을 주나요") in r["questions"]
 
 
 def test_daily_agent_picks_checks(env, monkeypatch):
@@ -281,21 +281,21 @@ def test_case_memory_and_advice(env, monkeypatch):
     def policy(goal, done, tools):
         names = [n for n, _ in done]
         if "remember" not in names:
-            return reply([("remember", {"note": "야간근로 인가 여부를 아직 모름"}),
-                          ("give_advice", {"advice": "사업장에 야간근로 인가를 받았는지 물어보세요", "next_tab": "check"})])
+            return reply([("remember", {"note": said("야간근로 인가 여부를 아직 모름")}),
+                          ("give_advice", {"advice": said("사업장에 야간근로 인가를 받았는지 물어보세요"), "next_tab": "check"})])
         return smart_policy(goal, [d for d in done if d[0] not in ("remember", "give_advice")], tools)
     agent = use(monkeypatch, policy)
     a.post(f"/api/jobs/{ja}/check")
     st = a.get(f"/api/jobs/{ja}/case").json()
-    assert st["advice"]["text"].startswith("사업장에 야간근로") and st["advice"]["next_tab"] == "check"
-    assert st["memory"][-1]["기억"] == "야간근로 인가 여부를 아직 모름"
+    assert st["advice"]["text"] == said("사업장에 야간근로 인가를 받았는지 물어보세요") and st["advice"]["next_tab"] == "check"
+    assert st["memory"][-1]["기억"] == said("야간근로 인가 여부를 아직 모름")
     assert [p["name"] for p in st["progress"]] == ["점검", "기록", "급여", "상담 자료", "신고", "보호"]
     assert st["progress"][0]["done"]
     # 다음 실행: 시작 상황에 지난 메모와 진행 상황이 들어 있다
     agent.payloads.clear()
     a.post(f"/api/jobs/{ja}/check")
     first = agent.payloads[0]["messages"][1]["content"]
-    assert "지난 메모" in first and "야간근로 인가 여부를 아직 모름" in first and "진행 상황" in first
+    assert "지난 메모" in first and said("야간근로 인가 여부를 아직 모름") in first and "진행 상황" in first
     tool_names = [t["function"]["name"] for t in agent.payloads[0]["tools"]]
     assert {"remember", "give_advice", "make_plan"} <= set(tool_names)
 
@@ -305,8 +305,8 @@ def test_bad_advice_tab_is_rejected(env, monkeypatch):
 
     def policy(goal, done, tools):
         if "give_advice" not in [n for n, _ in done]:
-            return reply([("give_advice", {"advice": "조언", "next_tab": "admin"})])
-        return reply([("finish", {"note": "끝"})])
+            return reply([("give_advice", {"advice": said("조언"), "next_tab": "admin"})])
+        return reply([("finish", {"note": said("끝")})])
     agent = use(monkeypatch, policy)
     a.post(f"/api/jobs/{ja}/guard/posts", json={"url": "https://example.com/advice", "title": "글"})
     assert "next_tab" in results(agent.payloads[-1], "give_advice")[0]["error"]
@@ -315,7 +315,7 @@ def test_bad_advice_tab_is_rejected(env, monkeypatch):
 def test_ask_user_then_resume_with_answer(env, monkeypatch):
     """정보가 없으면 AI가 사용자에게 묻고, 답하면 같은 점검을 다시 시작해 답을 근거로 판단한다."""
     a, ja, b, jb = env
-    Q = "보호자 동의서와 가족관계증명서를 사업장에 냈나요?"
+    Q = said("보호자 동의서와 가족관계증명서를 사업장에 냈나요?")
 
     def policy(goal, done, tools):
         names = [n for n, _ in done]
@@ -325,16 +325,16 @@ def test_ask_user_then_resume_with_answer(env, monkeypatch):
         answers = (called(done, "get_answers") or {}).get("답변", [])
         docs = [it for it in items if it["조항"] == "근로기준법 제66조"][0]
         if not answers and "ask_user" not in names:
-            return reply([("ask_user", {"question": Q, "options": ["냈어요", "안 냈어요"], "why": "서류 제출 여부가 기록에 없어요",
+            return reply([("ask_user", {"question": Q, "options": ["냈어요", "안 냈어요"], "why": said("서류 제출 여부가 기록에 없어요"),
                                         "law": "근로기준법 제66조"})])
         judgments = [{"i": it["i"], "status": "warn", "law": it["조항"], "fact": (it["사실"] or ["입력 정보"])[0],
-                      "reason": "테스트"} for it in items if it["i"] != docs["i"]]
+                      "reason": said("판단 이유")} for it in items if it["i"] != docs["i"]]
         if answers:
             judgments.append({"i": docs["i"], "status": "ok", "law": "근로기준법 제66조", "fact": "사용자가 서류를 냈다고 답함",
-                              "reason": "답을 근거로 판단", "answer_ids": [answers[0]["answer_id"]]})
+                              "reason": said("답을 근거로 판단"), "answer_ids": [answers[0]["answer_id"]]})
         else:
             judgments.append({"i": docs["i"], "status": "warn", "law": "근로기준법 제66조", "fact": "서류 제출 여부 모름",
-                              "reason": "답을 기다려요"})
+                              "reason": said("답을 기다려요")})
         return reply([("finish", {"judgments": judgments})])
     use(monkeypatch, policy)
     # 다른 사용자 사업장에 서류 제출 여부가 없도록 비워 둔 상태에서 시작
@@ -385,17 +385,17 @@ def test_followup_scheduled_run_and_cancel(env, monkeypatch):
     def policy(goal, done, tools):
         names = [n for n, _ in done]
         if "schedule_followup" not in names:
-            return reply([("schedule_followup", {"check": "contract_check", "day": far, "note": "너무 먼 날"}),
-                          ("schedule_followup", {"check": "payday", "day": tomorrow, "note": "명세서 없음"}),
+            return reply([("schedule_followup", {"check": "contract_check", "day": far, "note": said("너무 먼 날")}),
+                          ("schedule_followup", {"check": "payday", "day": tomorrow, "note": said("명세서 없음")}),
                           ("schedule_followup", {"check": "contract_check", "day": tomorrow,
-                                                 "note": "야간근로 인가 여부를 다시 확인"})])
+                                                 "note": said("야간근로 인가 여부를 다시 확인")})])
         return smart_policy(goal, [d for d in done if d[0] != "schedule_followup"], tools)
     agent = use(monkeypatch, policy)
     a.post(f"/api/jobs/{ja}/check")
     errs = results(agent.payloads[2], "schedule_followup")
     assert "60일" in errs[0]["error"] and "month" in errs[1]["error"] and errs[2]["task_id"]
     fu = a.get(f"/api/jobs/{ja}/case").json()["followups"]
-    assert len(fu) == 1 and fu[0]["이유"] == "야간근로 인가 여부를 다시 확인"
+    assert len(fu) == 1 and fu[0]["이유"] == said("야간근로 인가 여부를 다시 확인")
     # 때가 되면 실행: 시작 상황에 예약한 이유가 들어간다
     with Session(engine) as s:
         task = s.get(AgentTask, fu[0]["task_id"])
@@ -405,7 +405,7 @@ def test_followup_scheduled_run_and_cancel(env, monkeypatch):
     agent2 = use(monkeypatch, smart_policy)
     assert fu[0]["task_id"] in scheduler.run_due_followups()["followups"]
     first = agent2.payloads[0]["messages"][1]["content"]
-    assert "지난번에 예약한 확인이에요: 야간근로 인가 여부를 다시 확인" in first
+    assert "지난번에 예약한 확인이에요: " + said("야간근로 인가 여부를 다시 확인") in first
     assert a.get(f"/api/jobs/{ja}/case").json()["followups"] == []
     assert scheduler.run_due_followups()["followups"] == []  # 같은 확인을 되풀이하지 않음
     # 사용자가 취소 (다른 사용자는 못 함)
@@ -431,10 +431,10 @@ def test_daily_combined_advice(env, monkeypatch):
     def policy(goal, done, tools):
         names = [n for n, _ in done]
         if "finish" not in names:  # 조언 없이 끝내려 하면 돌려보내는지 본다
-            return reply([("finish", {"note": "조언 없이 끝냄"})])
+            return reply([("finish", {"note": said("조언 없이 끝냄")})])
         if "give_advice" not in names:
-            return reply([("give_advice", {"advice": "근무 기록과 받은 급여를 보면 기록을 꾸준히 남기는 게 좋아요"})])
-        return reply([("finish", {"note": "조언 남김"})])
+            return reply([("give_advice", {"advice": said("근무 기록과 받은 급여를 보면 기록을 꾸준히 남기는 게 좋아요")})])
+        return reply([("finish", {"note": said("조언 남김")})])
     agent = use(monkeypatch, policy)
     with Session(engine) as s:
         out = core.run_advice(s, uid, ja)

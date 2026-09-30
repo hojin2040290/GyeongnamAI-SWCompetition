@@ -413,7 +413,9 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         cmp = t["compare_pay"](expected, paid)
         state["pay"] = {"month": month, "expected": expected, "paid": paid, "compare": cmp}
         return {"달": month, "계산한 금액": expected.get("total"), "받은 금액": paid, "차이": cmp.get("diff"),
-                "사실": cmp["text"], "부족한 정보": cmp.get("needed", [])}
+                "사실": cmp["text"], "부족한 정보": cmp.get("needed", []),
+                # 계산에 쓴 기준의 조항 (최저임금, 주휴수당, 가산수당). 판단의 근거는 get_article로 확인해 고른다
+                "관련 조항": [P()[k]["law"] for k in ("min_wage", "weekly_holiday", "premium")]}
 
     def settlement() -> dict:
         st = t["settlement"]()
@@ -421,7 +423,8 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         if not st:
             return {"안내": "그만둔 사업장이 아니에요"}
         return {"그만둔 날": st["quit_date"], "지급 기한": st["due"], "남은 날": st["left"],
-                "받았다고 기록함": st["rule_status"] == engine.OK}
+                "받았다고 기록함": st["rule_status"] == engine.OK,
+                "관련 조항": [P()["settlement"]["law"], P()["wage_claim"]["law"]]}
 
     def get_article(label: str) -> dict:
         return article_info(session, label)

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, func, select
 
-from app import config, guard, input_rules, login_guard
+from app import config, guard, input_rules, login_guard, storage
 from app.agent import core
 from app.agent.tools import keywords_of, make_tools
 from app.auth import check_password, current_user, hash_password
@@ -522,7 +522,11 @@ def evidence_file(ev_id: int, u: User = Depends(current_user), s: Session = Depe
     ev = s.get(Evidence, ev_id)
     if not ev or ev.user_id != u.id:
         raise HTTPException(404, "자료를 찾을 수 없어요")
-    return FileResponse(ev.stored_path, filename=ev.filename)
+    try:
+        path = storage.locate(ev.stored_path)
+    except FileNotFoundError:
+        raise HTTPException(404, "원본 파일을 찾을 수 없어요. 서버에서 python -m app.evidence_check 로 확인해 주세요")
+    return FileResponse(path, filename=ev.filename)
 
 
 # ---------- 계약서 점검 ----------
@@ -745,7 +749,11 @@ def get_report(rep_id: int, u: User = Depends(current_user), s: Session = Depend
     if not rep or rep.user_id != u.id:
         raise HTTPException(404, "자료를 찾을 수 없어요")
     # 자료 문서에서는 스크립트가 실행되지 않게 한다 (혹시 섞여 든 글이 있어도 글자로만 보이도록)
-    return FileResponse(rep.path, media_type="text/html",
+    try:
+        path = storage.locate(rep.path, config.REPORT_DIR)
+    except FileNotFoundError:
+        raise HTTPException(404, "상담 사전 자료 파일을 찾을 수 없어요. 서버에서 python -m app.evidence_check 로 확인해 주세요")
+    return FileResponse(path, media_type="text/html",
                         headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:"})
 
 

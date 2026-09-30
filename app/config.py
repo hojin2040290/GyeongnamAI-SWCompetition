@@ -35,9 +35,19 @@ def _load_env(path: Path) -> None:
 _load_env(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
-DB_PATH = Path(os.getenv("DB_PATH", str(BASE_DIR / "data" / "app.db")))
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "data" / "uploads")))
-REPORT_DIR = Path(os.getenv("REPORT_DIR", str(BASE_DIR / "data" / "reports")))
+DATA_DIR = BASE_DIR / "data"  # 기록(DB), 증거 원본, 상담 사전 자료를 모두 이 폴더 아래에 둔다
+
+
+def _data_path(env: str, default: Path) -> Path:
+    """저장 위치. .env에 상대 경로(예: data/uploads)를 적어도 서버를 어디서 켰는지와 상관없이 프로젝트 폴더 기준으로 본다."""
+    value = os.getenv(env, "").strip()
+    path = Path(value).expanduser() if value else default
+    return (path if path.is_absolute() else BASE_DIR / path).resolve()
+
+
+DB_PATH = _data_path("DB_PATH", DATA_DIR / "app.db")
+UPLOAD_DIR = _data_path("UPLOAD_DIR", DATA_DIR / "uploads")
+REPORT_DIR = _data_path("REPORT_DIR", DATA_DIR / "reports")
 LAW_PARAMS_PATH = BASE_DIR / "data" / "law_params.json"
 TIMEZONE = "Asia/Seoul"
 
@@ -48,6 +58,8 @@ LLM_MODEL = os.getenv("LLM_MODEL", "")
 LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL", "")  # 사진 읽기용 모델 (비우면 LLM_MODEL 사용)
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")            # vLLM에 키를 걸었을 때만
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
+# 가짜 AI (시험용): true면 실제 모델 대신 app/llm/fake.py가 '테스트 답변입니다 (...)'로 답한다. 실제 서비스에서는 false
+LLM_FAKE = os.getenv("LLM_FAKE", "false").lower() == "true"
 
 # 외부 API 키 (없으면 해당 기능은 건너뜀)
 LAW_OC = os.getenv("LAW_OC", "")

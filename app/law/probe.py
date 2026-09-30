@@ -2,7 +2,7 @@
 
 사용법: .env에 LAW_OC를 넣고
     python -m app.law.probe
-화면에 나온 내용은 law_probe_result.txt에도 저장된다 (OC 값은 가림, 이 파일은 GitHub에 올리지 않음).
+화면에 나온 내용은 data/law_probe_result.txt에도 저장된다 (OC 값은 가림, 이 파일은 GitHub에 올리지 않음).
 target 이름 중 일부는 활용가이드로 확인 전이라, 응답이 오류면 가이드의 target 값으로 고친다.
 """
 import sys
@@ -14,7 +14,7 @@ import httpx
 from app.config import BASE_DIR, LAW_OC, _parse_line
 
 BASE = "https://www.law.go.kr/DRF"
-RESULT_FILE = BASE_DIR / "law_probe_result.txt"
+RESULT_FILE = BASE_DIR / "data" / "law_probe_result.txt"
 
 # (이름, target, 검색어). 목록을 부른 뒤 첫 항목의 일련번호로 같은 target의 본문을 부른다.
 CHECKS = [
