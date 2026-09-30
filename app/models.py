@@ -184,6 +184,14 @@ class AgentTask(SQLModel, table=True):
     done_at: Optional[datetime] = None
 
 
+class LoginAttempt(SQLModel, table=True):
+    """로그인 실패 기록 (비밀번호 대입을 막기 위해 이메일, 접속 주소별로 센다). 하루 지난 기록은 지운다."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(index=True)
+    ip: str = Field(index=True)
+    at: datetime = Field(index=True)
+
+
 class AgentLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
