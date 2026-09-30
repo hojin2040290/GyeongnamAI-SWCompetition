@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 
 from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
+from app.agent.safety import scrub
 from app.agent.tools import agent_tools, for_ai, make_tools
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
@@ -126,7 +127,7 @@ def apply_one(s: Session, target: dict, out: dict | None, error: str = "") -> di
     """AI의 판단 하나(급여, 퇴직 정산)를 붙이고 검증 장치로 확인한다. AI가 없으면 대기로 둔다."""
     law, fact = str((out or {}).get("law", "")).strip(), str((out or {}).get("fact", "")).strip()
     if out and out.get("status") in (engine.OK, engine.WARN, engine.BAD) and fact and known_law(s, law):
-        target.update(status=out["status"], ai_reason=str(out.get("reason", ""))[:300], ai_law=law, ai_fact=fact[:300])
+        target.update(status=out["status"], ai_reason=scrub(str(out.get("reason", "")))[:300], ai_law=law, ai_fact=fact[:300])
         target.pop("ai_error", None)
         return engine.cross_check([target])[0]
     if target.get("status") == engine.PENDING:
@@ -194,7 +195,7 @@ def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
     extra_q = {"extra_questions": {"type": "array", "items": S, "description": "더 물어볼 질문 (없으면 빈 배열)"}}
     items, out = _judge_items(r, goal, ["get_profile", "get_age_on", "get_article", "find_refs"],
                               lambda: seek["items"], {"공고": data}, extra_q)
-    questions = seek["questions"] + [str(q)[:200] for q in (out or {}).get("extra_questions") or []
+    questions = seek["questions"] + [scrub(str(q))[:200] for q in (out or {}).get("extra_questions") or []
                                      if str(q).strip() and q not in seek["questions"]][:5]
     res = {"items": r.tools["attach_law"](items), "questions": questions}
     r.tools["save_check"]("seek", {"input": data, **res})

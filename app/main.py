@@ -33,6 +33,16 @@ templates = Jinja2Templates(directory=BASE_DIR / "web" / "templates")
 app.include_router(api_router)
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """파일 종류를 추측해 실행하지 않게(nosniff), 다른 사이트에 몰래 끼워 넣지 못하게(프레임 금지) 한다."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    return response
+
+
 def static_version() -> str:
     """CSS, JS 파일이 바뀌면 달라지는 값. 주소에 붙여 브라우저가 예전 파일을 쓰지 않게 한다."""
     static = BASE_DIR / "web" / "static"
