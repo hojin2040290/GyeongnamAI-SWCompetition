@@ -162,3 +162,19 @@ def test_junk_zero_in_saved_contract_shows_empty(c):
         s.commit()
     f = c.get(f"/api/jobs/{jid}/contract/fields").json()["fields"]
     assert f["임금"] == "" and f["휴일"] == "" and f["근무장소"] == "창원시"
+
+
+def test_register_checks_email():
+    """이메일은 아이디@도메인.끝 모양일 때만 가입된다. 대문자로 적어도 같은 계정으로 본다."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as c:
+        for bad in ("abc", "abc@", "a@b", "a@@b.com", "가나@example.com", "a b@example.com"):
+            r = c.post("/api/auth/register", json={"email": bad, "password": "test1234", "birth_date": "2009-05-01"})
+            assert r.status_code == 400 and "이메일" in r.json()["detail"], bad
+        assert "@가 없어요" in c.post("/api/auth/register", json={"email": "abc", "password": "test1234",
+                                                                   "birth_date": "2009-05-01"}).json()["detail"]
+        ok = c.post("/api/auth/register", json={"email": " Mail.Check@Example.com ", "password": "test1234", "birth_date": "2009-05-01"})
+        assert ok.status_code == 200 and ok.json()["email"] == "mail.check@example.com"
+        c.post("/api/auth/logout")
+        assert c.post("/api/auth/login", json={"email": "MAIL.CHECK@example.com", "password": "test1234"}).status_code == 200

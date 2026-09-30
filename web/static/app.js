@@ -2,7 +2,8 @@
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const DAY_KEYS = ['월','화','수','목','금','토','일'];
-const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
+const BREAKS = ['없음','15분','30분','45분','1시간','1시간 30분','2시간','모름'];  // 빠른 선택지. 그 밖의 값은 '직접 입력'
+const BRK_CUSTOM = '직접 입력';
 const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심', pending:'확인 중'};  // 확인 중: AI 판단 전
 const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
   report:'상담 자료', guard_on:'신고 후 보호 시작', guard_off:'신고 후 보호 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존',
@@ -17,7 +18,12 @@ function pad(n){ return String(n).padStart(2,'0'); }
 function safeUrl(u){ return /^https?:\/\//i.test(String(u||''))?u:'#'; }
 function esc(t){ return String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
-function brkMin(b){ return {'없음':0,'30분':30,'1시간':60,'1시간 30분':90,'2시간':120}[b] ?? 0; }
+// 쉬는 시간 글('19분', '3시간', '1시간 15분')을 분으로 (서버의 schedule.parse_break와 같은 규칙). 모르면 null
+function parseBrk(b){ b=String(b??'').trim(); if(b==='없음') return 0;
+  const m=b.match(/^(?:(\d{1,2})\s*시간)?\s*(?:(\d{1,4})\s*분)?$/); if(!b||!m||!(m[1]||m[2])) return null;
+  return Number(m[1]||0)*60+Number(m[2]||0); }
+function brkText(min){ const h=Math.floor(min/60), m=min%60; return (!h&&!m)?'없음':[h?`${h}시간`:'', m?`${m}분`:''].filter(Boolean).join(' '); }
+function brkMin(b){ return parseBrk(b) ?? 0; }
 function slotMinutes(s){ let a=toMin(s.start), b=toMin(s.end); if(b<=a) b+=1440; return Math.max(0,b-a-brkMin(s.brk)); }
 function slotsOf(v){ return Array.isArray(v)?v:(v?[v]:[]); }  // 한 요일의 시간대 목록 (예전 형식은 하나)
 function dayMinutes(v){ return slotsOf(v).reduce((a,s)=>a+slotMinutes(s),0); }
@@ -55,14 +61,24 @@ window.addEventListener('beforeunload', e=>{
 let tt;
 function toast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2600); }
 
+// 서버가 이유를 적지 않은 오류 (연결 중간의 프록시, 터널이 돌려준 오류 등)
+function failText(status){
+  if([502,503,504,522,523,524].includes(status)) return '서버 응답이 너무 오래 걸려 연결이 끊겼어요. 작업은 계속될 수 있으니 잠시 뒤 새로고침해 보세요';
+  if(status===413) return '파일이 너무 커요';
+  if(status>=500) return '서버에서 오류가 났어요. 잠시 뒤 다시 해 주세요';
+  return `요청을 처리하지 못했어요 (${status})`;
+}
+
 async function api(method, url, body, isForm){
   const opt = { method, headers:{} };
   if (body !== undefined) {
     if (isForm) opt.body = body; else { opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
   }
-  const r = await fetch(url, opt);
+  let r;
+  try { r = await fetch(url, opt); }
+  catch(e){ const err=new Error('서버에 연결하지 못했어요. 인터넷 연결이나 서버가 켜져 있는지 확인해 주세요'); err.status=0; throw err; }
   if (!r.ok) {
-    let msg = '요청을 처리하지 못했어요';
+    let msg = failText(r.status);
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : msg; } catch(e) {}
     const err = new Error(msg); err.status = r.status; throw err;
   }
@@ -207,10 +223,21 @@ $('#obLogout').onclick = async () => { await api('POST','/api/auth/logout'); loc
 $('#toLogin').onclick = () => show('obLogin');
 $('#toStart').onclick = () => show('ob0');
 
+// 이메일 형식 (서버의 input_rules.EMAIL_PATTERN과 같은 규칙)
+const EMAIL_RE=/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$/;
+function emailProblem(v){
+  v=String(v||'').trim(); if(!v) return '이메일을 입력해 주세요';
+  if(!v.includes('@')) return '이메일에 @가 없어요 (예: alba@example.com)';
+  if(v.length>254||!EMAIL_RE.test(v)) return '이메일 형식이 맞지 않아요 (예: alba@example.com)';
+  return '';
+}
+$('#regEmail').addEventListener('blur',()=>{ const v=$('#regEmail').value; $('#regErr').textContent=v.trim()?emailProblem(v):''; });
+$('#regEmail').addEventListener('input',()=>{ if($('#regErr').textContent && !emailProblem($('#regEmail').value)) $('#regErr').textContent=''; });
 $('#regBtn').onclick = async () => {
   $('#regErr').textContent='';
   const email=$('#regEmail').value.trim(), password=$('#regPw').value, birth_date=$('#birth').value;
   if(!email||!password||!birth_date){ $('#regErr').textContent='이메일, 비밀번호, 생년월일을 모두 입력해 주세요'; return; }
+  const bad=emailProblem(email); if(bad){ $('#regErr').textContent=bad; $('#regEmail').focus(); return; }
   try {
     state.me = await api('POST','/api/auth/register',{email,password,birth_date,mode:state.mode||'work'});
     afterMode();
@@ -218,6 +245,7 @@ $('#regBtn').onclick = async () => {
 };
 $('#logBtn').onclick = async () => {
   $('#logErr').textContent='';
+  if(!$('#logEmail').value.trim()||!$('#logPw').value){ $('#logErr').textContent='이메일과 비밀번호를 입력해 주세요'; return; }
   try {
     state.me = await api('POST','/api/auth/login',{email:$('#logEmail').value.trim(),password:$('#logPw').value});
     await loadJobs();
@@ -415,7 +443,9 @@ function renderSlots(){
       <div class="slot-part" data-i="${i}">${list.length>1?`<div class="part-head"><span>시간대 ${i+1}</span><button type="button" class="link small muted" data-rm="${i}">이 시간대 빼기</button></div>`:''}
       <div class="slot-grid"><input type="time" class="input" step="1800" value="${esc(s.start)}" aria-label="${k}요일 시간대 ${i+1} 시작"><span class="tilde">부터</span>
       <input type="time" class="input" step="1800" value="${esc(s.end)}" aria-label="${k}요일 시간대 ${i+1} 끝"></div>
-      <div class="brk">쉬는 시간<select class="input" aria-label="${k}요일 시간대 ${i+1} 쉬는 시간">${opts(BREAKS,s.brk)}</select></div></div>`).join('')+
+      <div class="brk">쉬는 시간<select class="input" aria-label="${k}요일 시간대 ${i+1} 쉬는 시간">${opts([...BREAKS,BRK_CUSTOM],BREAKS.includes(s.brk)?s.brk:BRK_CUSTOM)}</select></div>
+      <div class="brk-custom${BREAKS.includes(s.brk)?' hidden':''}"><input type="number" class="input" inputmode="numeric" min="0" max="23" placeholder="0" value="${BREAKS.includes(s.brk)?'':Math.floor(brkMin(s.brk)/60)||''}" aria-label="${k}요일 시간대 ${i+1} 쉬는 시간 (시간)"><span>시간</span>
+        <input type="number" class="input" inputmode="numeric" min="0" max="59" placeholder="0" value="${BREAKS.includes(s.brk)?'':brkMin(s.brk)%60||''}" aria-label="${k}요일 시간대 ${i+1} 쉬는 시간 (분)"><span>분</span></div></div>`).join('')+
       `<button type="button" class="link small add-part">+ ${k}요일에 시간대 더하기 (쪼개서 일할 때)</button>`;
     const up=()=>{ el.querySelector('.hrs').textContent=fmtH(dayMinutes(list)); totals(); };
     el.querySelectorAll('.slot-part').forEach(part=>{ const s=list[Number(part.dataset.i)];
@@ -423,7 +453,16 @@ function renderSlots(){
       // 휴대폰 기본 시간 휠. 지우면 이전 값으로 되돌린다
       st.onchange=()=>{ if(st.value) s.start=st.value; else st.value=s.start; up(); };
       en.onchange=()=>{ if(en.value) s.end=en.value; else en.value=s.end; up(); };
-      br.onchange=()=>{ s.brk=br.value; up(); }; });
+      const cu=part.querySelector('.brk-custom'), [bh,bm]=cu.querySelectorAll('input');
+      br.onchange=()=>{ const own=br.value===BRK_CUSTOM; cu.classList.toggle('hidden',!own);
+        if(own){ bh.value=''; bm.value=''; bh.focus(); s.brk='없음'; } else s.brk=br.value; up(); };
+      // 직접 입력: 시간과 분을 숫자로 받아 '1시간 15분' 모양으로 저장한다. 일하는 시간보다 길면 알려 준다
+      const custom=()=>{ const h=Math.min(23,Math.max(0,parseInt(bh.value)||0)), m=Math.max(0,parseInt(bm.value)||0), total=h*60+m;
+        const span=((toMin(s.end)-toMin(s.start))+1440)%1440||1440;
+        if(total>=span){ toast(`쉬는 시간이 일하는 시간(${s.start}~${s.end})보다 길어요`); bh.value=''; bm.value=''; s.brk='없음'; }
+        else s.brk=brkText(total);
+        up(); };
+      bh.onchange=custom; bm.onchange=custom; });
     el.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ list.splice(Number(b.dataset.rm),1); renderSlots(); });
     el.querySelector('.add-part').onclick=()=>{ list.push(nextSlot(list[list.length-1])); renderSlots(); };
     box.appendChild(el); });
@@ -550,10 +589,11 @@ const TABS=['home','pay','check','docs','guard'];
 let currentTab='home';
 function showTab(v, push=true){
   if(push && v!==currentTab){ state.tabHist.push(currentTab); if(state.tabHist.length>20) state.tabHist.shift(); }
-  flushAll(); currentTab=v; lsSet('alba.tab', v);
+  const saving=flushAll(); currentTab=v; lsSet('alba.tab', v);
   $$('nav.tabs button').forEach(b=>b.toggleAttribute('aria-current',b.dataset.v===v)); $$('nav.tabs button[aria-current]').forEach(b=>b.setAttribute('aria-current','page'));
   $$('.view').forEach(x=>x.classList.toggle('active',x.id==='v-'+v)); window.scrollTo(0,0);
-  ({home:loadHome, pay:loadPayTab, check:loadCheck, docs:loadDocs, guard:loadGuard})[v]().catch(e=>toast(e.message));
+  // 저장 중인 입력이 끝난 뒤에 화면을 불러온다 (먼저 불러오면 저장 전 값이 다시 보여 덮어쓸 수 있음)
+  saving.then(()=>({home:loadHome, pay:loadPayTab, check:loadCheck, docs:loadDocs, guard:loadGuard})[v]()).catch(e=>toast(e.message));
   refreshNav();
 }
 $$('nav.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.v));
@@ -902,8 +942,12 @@ $('#checkRun').onclick=async()=>{
 // 자료
 async function loadDocs(){
   const evs=await api('GET',`/api/jobs/${state.current}/evidence`);
-  $('#evList').innerHTML=evs.length?evs.map(e=>`<li><div class="main"><strong>${esc(KIND[e.kind]||e.kind)}</strong>
-    <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at)} 올림</div><a class="ev-link" href="/api/evidence/${e.id}/file" target="_blank">원본 보기</a></div><span class="tag ok">원본</span></li>`).join('')
+  // 파일로 올린 자료, 사업장 등록 전에 올린 공고, 주소와 확인 시각만 남긴 게시물을 모두 보여 준다
+  $('#evList').innerHTML=evs.length?evs.map(e=>e.file
+    ?`<li><div class="main"><strong>${esc(KIND[e.kind]||e.kind)}${e.before_job?' (지원 전)':''}</strong>
+      <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at)} 올림</div><a class="ev-link" href="/api/evidence/${e.id}/file" target="_blank">원본 보기</a></div><span class="tag ok">원본</span></li>`
+    :`<li><div class="main"><strong>게시물 주소</strong>
+      <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at)} 확인</div>${safeUrl(e.note)!=='#'?`<a class="ev-link" href="${esc(e.note)}" target="_blank" rel="noopener noreferrer">게시물 열기</a>`:''}</div><span class="tag warn">주소만</span></li>`).join('')
     :'<li><span class="sub">아직 올린 자료가 없어요</span></li>';
   const rs=await api('GET',`/api/jobs/${state.current}/reports`);
   $('#reportList').innerHTML=rs.map(r=>`<li><div class="main"><strong>상담 사전 자료</strong><div class="sub">${fmtDT(r.created_at)} 작성</div></div><a class="ev-link" href="${esc(r.url)}" target="_blank">열기</a></li>`).join('');
@@ -919,7 +963,7 @@ $('#evFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.leng
 $('#reportBtn').onclick=async()=>{
   const w=window.open('','_blank');  // 팝업 차단을 피하려고 누른 순간 창을 먼저 연다
   try{ const r=await agent('#reportTrace',()=>api('POST',`/api/jobs/${state.current}/report`)); if(w) w.location=r.url; else location.href=r.url;
-    await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace); toast(r.summary_ai?'상담 사전 자료를 만들었어요':'AI 응답 대기 중이라 사건 요약 없이 만들었어요'); }
+    await loadDocs(); $('#reportTrace').innerHTML=traceHTML(r.trace); toast(r.summary_ai?'상담 사전 자료를 만들었어요':'AI 응답 대기 중이라 AI 요약 없이 만들었어요'); }
   catch(e){ if(w) w.close(); toast(e.message); } };
 
 // 보호
@@ -956,8 +1000,12 @@ $('#copyMsg').onclick=()=>{ const t=$('#warnMsg').value; (navigator.clipboard?na
 // 게시물 주소는 여러 개를 띄어 써서 한 번에 넣어도 된다 (하나씩 보존하고 판별)
 $('#postAdd').onclick=async()=>{ const urls=[...new Set($('#postUrl').value.split(/\s+/).filter(Boolean))]; if(!urls.length){ toast('게시물 주소를 넣어 주세요'); return; }
   let ok=0, last=null;
-  for(const url of urls){ try{ last=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/posts`,{url})); ok++; }catch(e){ toast(`${url.slice(0,40)}: ${e.message}`); } }
-  if(ok){ $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(last.trace); toast(`게시물 ${ok}개의 주소와 확인 시각을 보존했어요`); } };
+  let caps=0, why='';
+  for(const url of urls){ try{ last=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/posts`,{url})); ok++;
+    if(last.captured) caps++; else why=last.capture_error||why; }catch(e){ toast(`${url.slice(0,40)}: ${e.message}`); } }
+  if(ok){ $('#postUrl').value=''; await loadGuard(); $('#guardTrace').innerHTML=traceHTML(last.trace);
+    toast(caps===ok?`게시물 ${ok}개의 화면과 주소, 확인 시각을 보존했어요 (자료 탭에 있어요)`
+      :`게시물 ${ok}개의 주소와 확인 시각을 보존했어요 (자료 탭에 있어요). ${ok-caps}개는 화면 캡처를 못 했어요${why?`: ${why}`:''}`); } };
 $('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/search`)); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
 
 boot();

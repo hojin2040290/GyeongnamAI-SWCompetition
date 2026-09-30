@@ -5,7 +5,27 @@ from datetime import datetime, timedelta
 
 from app.calc.timeutil import DAY_KEYS, night_minutes, to_min
 
-BREAK_MIN = {"없음": 0, "30분": 30, "1시간": 60, "1시간 30분": 90, "2시간": 120}
+BREAK_MIN = {"없음": 0, "30분": 30, "1시간": 60, "1시간 30분": 90, "2시간": 120}  # 화면의 빠른 선택지
+_BREAK = re.compile(r"^(?:(\d{1,2})\s*시간)?\s*(?:(\d{1,4})\s*분)?$")
+
+
+def parse_break(text) -> int | None:
+    """쉬는 시간 글('없음', '19분', '3시간', '1시간 15분')을 분으로. '모름'이나 읽을 수 없는 값은 None."""
+    text = str(text or "").strip()
+    if text == "없음":
+        return 0
+    m = _BREAK.match(text)
+    if not text or not m or not (m.group(1) or m.group(2)):
+        return None
+    return int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
+
+
+def break_text(minutes: int) -> str:
+    """분을 '없음', '19분', '3시간', '1시간 15분'으로."""
+    h, m = divmod(max(0, minutes), 60)
+    if not h and not m:
+        return "없음"
+    return " ".join(x for x in (f"{h}시간" if h else "", f"{m}분" if m else "") if x)
 
 
 def parse(schedule_json: str) -> dict:
@@ -25,7 +45,7 @@ def span_min(slot: dict) -> int:
 
 def break_min(slot: dict):
     """쉬는 시간(분). 모르면 None."""
-    return BREAK_MIN.get(slot.get("brk", "모름"))
+    return parse_break(slot.get("brk", "모름"))
 
 
 def work_min(slot: dict) -> int:
@@ -99,9 +119,14 @@ def clean(schedule) -> dict:
         for x in raw:
             if not isinstance(x, dict) or not _HHMM.match(str(x.get("start", ""))) or not _HHMM.match(str(x.get("end", ""))):
                 raise ValueError(f"{day}요일 시작, 끝 시각은 00:00 모양이어야 해요")
-            brk = x.get("brk", "모름")
-            if brk not in (*BREAK_MIN, "모름"):
-                raise ValueError(f"{day}요일 쉬는 시간 값이 맞지 않아요")
+            brk = str(x.get("brk", "모름") or "모름").strip()
+            if brk != "모름":  # 몇 분이든 적을 수 있다. 저장은 '1시간 15분' 모양으로 맞춘다
+                mins = parse_break(brk)
+                if mins is None:
+                    raise ValueError(f"{day}요일 쉬는 시간은 '30분', '1시간 15분'처럼 적어 주세요")
+                if mins >= span_min(x):
+                    raise ValueError(f"{day}요일 쉬는 시간이 일하는 시간({x['start']}~{x['end']})보다 길어요")
+                brk = break_text(mins)
             slots.append({"start": x["start"], "end": x["end"], "brk": brk})
         out[day] = slots[0] if len(slots) == 1 else slots
     return out

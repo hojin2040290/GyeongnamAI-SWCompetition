@@ -1,4 +1,6 @@
 """FastAPI 진입점. 화면(HTML, CSS, JS)과 기능(API)을 함께 제공한다."""
+import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -56,6 +58,14 @@ async def korean_validation_error(request: Request, exc: RequestValidationError)
     else:
         msg = f"{name} 형식이 맞지 않아요"
     return JSONResponse(status_code=422, content={"detail": msg})
+
+
+@app.exception_handler(Exception)
+async def server_error(request: Request, exc: Exception):
+    """예상 못 한 오류: 서버 기록에 자세히 남기고, 화면에는 한국어로 알린다."""
+    code = uuid.uuid4().hex[:6]
+    logging.getLogger("uvicorn.error").exception("처리 중 오류 [%s] %s %s", code, request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": f"처리 중 오류가 났어요. 잠시 뒤 다시 해 주세요 (오류 번호 {code})"})
 
 
 @app.middleware("http")

@@ -30,6 +30,22 @@ JOB_ALLOWED = "한글, 영문, 숫자, 띄어쓰기와 .,-()·/&#"
 JOB = {"name": "사업장 이름", "owner": "사업주", "address": "주소", "work_desc": "하는 일"}
 
 
+# 이메일: 아이디@도메인.끝 (예: alba@example.com). 한글, 띄어쓰기, @ 두 개는 받지 않는다
+EMAIL_PATTERN = r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}"
+EMAIL_MAX = 254
+
+
+def email_problem(email: str) -> str | None:
+    email = (email or "").strip()
+    if not email:
+        return "이메일을 입력해 주세요"
+    if "@" not in email:
+        return "이메일에 @가 없어요 (예: alba@example.com)"
+    if len(email) > EMAIL_MAX or not re.fullmatch(EMAIL_PATTERN, email):
+        return "이메일 형식이 맞지 않아요 (예: alba@example.com)"
+    return None
+
+
 def _ok(chars: str, value: str) -> bool:
     return re.fullmatch(f"[{chars}]*", value or "") is not None
 
@@ -57,4 +73,5 @@ def clean_contract(item: str, value: str) -> str:
 
 def for_screen() -> dict:
     """화면이 받아 쓰는 규칙."""
-    return {"contract": CONTRACT, "job": {"chars": JOB_CHARS, "allowed": JOB_ALLOWED, "fields": JOB}}
+    return {"contract": CONTRACT, "job": {"chars": JOB_CHARS, "allowed": JOB_ALLOWED, "fields": JOB},
+            "email": EMAIL_PATTERN}
