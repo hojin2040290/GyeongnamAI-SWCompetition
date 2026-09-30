@@ -9,6 +9,7 @@ vLLM과 같은 모양(OpenAI 호환 응답)으로 답하므로 에이전트 반�
 """
 import json
 import re
+import time
 
 PREFIX = "테스트 답변입니다"
 # 목표에 이름이 나와도 가짜 AI가 부르지 않는 도구 (사용자에게 묻기, 예약, 다른 점검 실행 등은 실제 AI가 판단할 몫)
@@ -197,7 +198,10 @@ def read_image(payload: dict) -> dict:
 
 
 def respond(payload: dict) -> dict:
-    """vLLM /v1/chat/completions와 같은 모양의 응답."""
+    """vLLM /v1/chat/completions와 같은 모양의 응답. 요청을 받고 LLM_FAKE_DELAY초(기본 3초) 뒤에 답한다."""
+    from app.config import LLM_FAKE_DELAY
+    if LLM_FAKE_DELAY:
+        time.sleep(LLM_FAKE_DELAY)
     msgs = payload.get("messages", [])
     if msgs and isinstance(msgs[0].get("content"), list):
         message = read_image(payload)

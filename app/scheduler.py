@@ -5,6 +5,7 @@ from datetime import timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlmodel import Session, select
 
+from app import notices
 from app.agent import core
 from app.calc.timeutil import now_kst
 from app.config import AI_RETRY_MIN, AI_RETRY_PER_DAY, LAW_OC, OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
@@ -33,6 +34,8 @@ def daily_check(user_id: int | None = None) -> dict:
             done["notified"] = done.get("notified", 0) + 1
     if user_id is None:
         done["law_changed"] = refresh_law_table()
+        with Session(engine) as s:
+            done["notices_removed"] = notices.tidy(s)["removed"]
     return done
 
 

@@ -80,3 +80,13 @@ def test_daily_check_notice_has_fake_advice(c):
     scheduler.daily_check(uid)
     notes = [n for n in c.get(f"/api/notifications?job_id={j}").json() if n["title"].startswith("오늘 자동 점검")]
     assert notes and "에이전트 조언: " + fake.PREFIX in notes[0]["body"]
+
+
+def test_fake_ai_waits_before_answer(monkeypatch):
+    """가짜 AI는 요청을 받고 LLM_FAKE_DELAY초 뒤에 답한다 (기본 3초, 테스트에서는 짧게)."""
+    import time
+    from app import config
+    monkeypatch.setattr(config, "LLM_FAKE_DELAY", 0.3)
+    start = time.monotonic()
+    fake.respond({"messages": [{"role": "user", "content": "목표: 시험"}]})
+    assert time.monotonic() - start >= 0.3

@@ -112,6 +112,8 @@ class Notification(SQLModel, table=True):
     body: str
     read: bool = False
     created_at: datetime
+    topic: str = ""  # 알림 종류 (같은 종류의 새 알림이 오면 예전 알림을 지운다, app/notices.py)
+    run_id: str = ""  # 보낸 에이전트 실행 (한 실행에서 보낸 알림끼리는 지우지 않는다)
 
 
 class Report(SQLModel, table=True):

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, func, select
 
-from app import config, guard, input_rules, login_guard, storage
+from app import config, guard, input_rules, login_guard, notices, storage
 from app.agent import core
 from app.agent.tools import keywords_of, make_tools
 from app.auth import check_password, current_user, hash_password
@@ -316,6 +316,8 @@ def update_job(job_id: int, data: JobIn, u: User = Depends(current_user), s: Ses
 @router.delete("/jobs/{job_id}")
 def delete_job(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     job = own_job(s, u, job_id)
+    for n in s.exec(select(Notification).where(Notification.user_id == u.id, Notification.job_id == job_id)).all():
+        s.delete(n)  # 지운 사업장의 알림이 남아 헷갈리지 않게
     s.delete(job)
     s.commit()
     return {"ok": True}
@@ -895,6 +897,7 @@ def answer_question(qid: int, data: AnswerIn, u: User = Depends(current_user), s
     q.status, q.answer, q.answered_at = "answered", answer, now_kst()
     s.add(q)
     s.commit()
+    _clear_question_notice(s, u.id, q.job_id)
     run = core.run_answer(s, u.id, q.job_id, q.event, json.loads(q.context_json or "{}"))
     return {"question": question_out(q), "event": core.RESUME.get(q.event, "contract_check"), **run}
 
@@ -906,7 +909,14 @@ def close_question(qid: int, u: User = Depends(current_user), s: Session = Depen
         q.status = "closed"
         s.add(q)
         s.commit()
+    _clear_question_notice(s, u.id, q.job_id)
     return {"ok": True}
+
+
+def _clear_question_notice(s: Session, user_id: int, job_id) -> None:
+    """답을 기다리는 질문이 더 없으면 '물어볼 게 있어요' 알림을 지운다."""
+    if not s.exec(select(AgentQuestion).where(AgentQuestion.job_id == job_id, AgentQuestion.status == "open")).first():
+        notices.clear(s, user_id, job_id, "questions")
 
 
 # ---------- 에이전트 진행 상황 (화면에 단계별로 보여 주기) ----------
