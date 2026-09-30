@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app import config, guard, login_guard
+from app import config, guard, input_rules, login_guard
 from app.agent import core
 from app.agent.tools import keywords_of, make_tools
 from app.auth import check_password, current_user, hash_password
@@ -207,9 +207,6 @@ CHOICES = {
 DEDUCTIONS = {"없음", "세금 3.3%", "4대보험", "모름"}  # 여러 개를 ', '로 이어 받는다
 # 숫자 칸의 범위 (최솟값, 최댓값)
 NUMBER_RANGES = {"wage": (1, 1_000_000), "payday": (1, 31), "probation_months": (1, 12), "amount": (0, 100_000_000)}
-# 이름, 사업주, 주소, 하는 일 칸에 쓸 수 있는 문자: 한글, 영문, 숫자, 띄어쓰기와 .,-()·/&#
-PLAIN_TEXT = re.compile(r"^[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9 .,\-()·/&#]*$")
-PLAIN_FIELDS = {"name": "사업장 이름", "owner": "사업주", "address": "주소", "work_desc": "하는 일"}
 LABELS = {"wage": "시급", "payday": "월급날", "probation_months": "수습 개월", "amount": "받은 금액",
           "status": "일하는 상태", "probation": "수습", "size": "사업장 인원", "pay_cycle": "급여 주기",
           "pay_method": "지급 방법", "consent": "보호자 서류", "industry": "업종", "deduction": "공제"}
@@ -219,8 +216,8 @@ def check_text(**fields) -> None:
     for k, v in fields.items():
         if isinstance(v, str) and len(v) > TEXT_LIMITS.get(k, 200):
             raise HTTPException(400, f"입력한 글이 너무 길어요 ({TEXT_LIMITS.get(k, 200)}자까지)")
-        if k in PLAIN_FIELDS and isinstance(v, str) and not PLAIN_TEXT.match(v):
-            raise HTTPException(400, f"{PLAIN_FIELDS[k]}에는 한글, 영문, 숫자, 띄어쓰기와 .,-()·/&# 만 쓸 수 있어요")
+        if isinstance(v, str) and (msg := input_rules.job_problem(k, v)):  # 이름, 사업주, 주소, 하는 일
+            raise HTTPException(400, msg)
 
 
 def check_choices(**fields) -> None:
@@ -537,6 +534,9 @@ def put_fields(job_id: int, data: FieldsIn, u: User = Depends(current_user), s: 
     own_job(s, u, job_id)
     items = P()["written_terms"]["items"]  # 계약서 항목 이름만 받고, 값은 글자로 300자까지
     fields = {k: str(v)[:300] for k, v in data.fields.items() if k in items}
+    for k, v in fields.items():  # 칸마다 쓸 수 있는 글자 (예: 근무장소는 한글, 숫자, 주소 기호)
+        if msg := input_rules.contract_problem(k, v):
+            raise HTTPException(400, msg)
     s.add(ContractFields(job_id=job_id, fields_json=json.dumps(fields, ensure_ascii=False), confirmed_at=now_kst()))
     s.commit()
     return {"ok": True}
@@ -896,6 +896,12 @@ def agent_live(after: int = 0, u: User = Depends(current_user), s: Session = Dep
     rows = s.exec(select(AgentLog).where(AgentLog.user_id == u.id, AgentLog.id > after)
                   .order_by(AgentLog.id).limit(50)).all()
     return [{"id": r.id, "event": r.event, "step": r.step, "detail": r.detail[:300]} for r in rows]
+
+
+# ---------- 입력 칸 규칙 (화면이 입력하는 동안 거르고 안내하는 데 쓴다) ----------
+@router.get("/input-rules")
+def get_input_rules():
+    return input_rules.for_screen()
 
 
 # ---------- AI 연결 상태 ----------

@@ -148,7 +148,25 @@ function setSeg(root, name, v){ const seg=root.querySelector(`.seg[data-name="${
   seg.querySelector(`[data-v="${cssq(v)}"]`)?.click(); }
 
 // ---------- 시작 ----------
+// ---------- 입력 칸 규칙: 칸마다 쓸 수 있는 글자만 남긴다 (서버와 같은 규칙) ----------
+async function loadRules(){ try{ state.rules=await api('GET','/api/input-rules'); }catch(e){ state.rules={contract:{},job:null}; } }
+// 한글을 조합하는 동안에는 거르지 않고, 조합이 끝나면 거른다 (입력 중인 자모가 사라지지 않게)
+function bindChars(input, chars, onBad){
+  if(!input||!chars) return ()=>{};
+  const re=new RegExp(`[^${chars}]`,'g');
+  const run=()=>{ const v=input.value, nv=v.replace(re,''); if(nv===v) return;
+    const pos=Math.max(0,(input.selectionStart??nv.length)-(v.length-nv.length)); input.value=nv;
+    try{ input.setSelectionRange(pos,pos); }catch(e){} onBad&&onBad(); };
+  input.addEventListener('input',e=>{ if(!e.isComposing) run(); });
+  input.addEventListener('compositionend',run);
+  return run;
+}
+// 사업장 이름, 사업주, 주소, 하는 일 칸
+function bindJobChars(root){ const j=state.rules?.job; if(!j) return;
+  [['.f-name','name'],['.f-owner','owner'],['.f-addr','address'],['.f-work','work_desc']].forEach(([sel,f])=>{
+    const el=root.querySelector(sel); bindChars(el, j.chars, ()=>toast(`${j.fields[f]}에는 ${j.allowed}만 쓸 수 있어요`)); }); }
 async function boot(){
+  await loadRules(); bindJobChars(seek.node);
   try {
     state.me = await api('GET','/api/me');
     await loadJobs();
@@ -196,7 +214,7 @@ $('#logBtn').onclick = async () => {
 // ---------- 사업장 입력 카드 ----------
 function addCard(){
   const node=$('#jobTpl').content.firstElementChild.cloneNode(true);
-  const card={node, schedule:{}}; state.cards.push(card);
+  const card={node, schedule:{}}; state.cards.push(card); bindJobChars(node);
   const name=node.querySelector('.f-name');
   name.addEventListener('input',()=>{ node.querySelector('.job-title').textContent=name.value.trim()||'새 일하는 곳'; });
   node.querySelector('.remove').onclick=async()=>{
@@ -802,10 +820,20 @@ $('#paySave').onclick=async()=>{
 // 점검
 async function loadCheck(){
   const f=await api('GET',`/api/jobs/${state.current}/contract/fields`);
-  $('#fieldsBox').innerHTML=f.items.map(k=>`<label class="field"><span>${esc(k)}</span><input class="input" data-k="${esc(k)}" value="${esc(f.fields[k]||'')}" placeholder="계약서에 없으면 비워 두세요"></label>`).join('')
+  // 칸마다 무엇을 적는지 안내하고, 쓸 수 없는 글자는 입력하는 동안 뺀다 (예: 근무장소는 한글, 숫자, 주소 기호)
+  const rules=state.rules?.contract||{};
+  const hintText=r=>r.hint?`${r.hint}. 쓸 수 있는 글자: ${r.allowed}`:'';
+  $('#fieldsBox').innerHTML='<p class="hint" style="margin:0 0 10px">계약서에 적힌 대로 옮겨 적고, 계약서에 없는 칸은 비워 두세요.</p>'
+    +f.items.map(k=>{ const r=rules[k]||{};
+    return `<label class="field"><span>${esc(k)}</span><input class="input" data-k="${esc(k)}" value="${esc(f.fields[k]||'')}" placeholder="${esc(r.example||'계약서에 없으면 비워 두세요')}">
+      <em class="hint field-hint" data-hint="${esc(k)}">${esc(hintText(r))}</em></label>`; }).join('')
     +'<p class="hint save-state" id="fieldsSaved">입력하면 바로 저장돼요</p>';
   const jobId=state.current;
-  $$('#fieldsBox input').forEach(i=>i.addEventListener('input',()=>autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved')));
+  $$('#fieldsBox input').forEach(i=>{ const k=i.dataset.k, r=rules[k], h=$(`#fieldsBox [data-hint="${cssq(k)}"]`);
+    const run=bindChars(i, r?.chars, ()=>{ h.classList.add('bad'); h.textContent=`쓸 수 없는 글자는 뺐어요. 쓸 수 있는 글자: ${r.allowed}`;
+      clearTimeout(h._t); h._t=setTimeout(()=>{ h.classList.remove('bad'); h.textContent=hintText(r); },2500); });
+    run();  // 예전에 저장된 값에 쓸 수 없는 글자가 있으면 화면에서 빼 둔다 (점검하기를 누르면 이 값으로 저장)
+    i.addEventListener('input',()=>autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved')); });
   const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items); $('#checkTrace').innerHTML='';
   const ls=await api('GET','/api/law/status');
   const mw=(ls.min_wage?` 최저임금 ${ls.min_wage.year}년 시간급 ${won(ls.min_wage.value)}, 근거 고시: ${ls.min_wage.source}.`:'')

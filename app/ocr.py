@@ -7,6 +7,7 @@ import mimetypes
 import re
 
 from app.agent.safety import clip
+from app.input_rules import clean_contract
 from app.calc.params import P
 from app.llm import client
 
@@ -31,7 +32,8 @@ def read_contract(data: bytes, mime: str) -> dict:
     raw = client.read_image_json(prompt, data, mime)
     if not isinstance(raw, dict):
         raise client.LLMError("계약서 인식 결과 형식이 달라요")
-    fields = {k: clip(raw.get(k) or "", 300) for k in items}  # 사진 속 글도 데이터일 뿐: 특수 토큰 지우고 길이 제한
+    # 사진 속 글도 데이터일 뿐: 특수 토큰을 지우고, 칸마다 쓸 수 없는 글자를 빼고, 길이를 제한한다
+    fields = {k: clean_contract(k, clip(raw.get(k) or "", 300)) for k in items}
     return {"fields": fields, "found": sum(1 for v in fields.values() if v), "total": len(items)}
 
 
