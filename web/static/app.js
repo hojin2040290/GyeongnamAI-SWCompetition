@@ -2,7 +2,6 @@
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const DAY_KEYS = ['월','화','수','목','금','토','일'];
-const TIMES = []; for (let h=0; h<24; h++) { TIMES.push(pad(h)+':00'); TIMES.push(pad(h)+':30'); }
 const BREAKS = ['없음','30분','1시간','1시간 30분','2시간','모름'];
 const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심', pending:'확인 중'};  // 확인 중: AI 판단 전
 const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
@@ -340,9 +339,15 @@ function renderDays(){
   const box=$('#dayPicker'); box.innerHTML='';
   DAY_KEYS.forEach(k=>{ const b=document.createElement('button'); b.type='button'; b.className='day'; b.textContent=k;
     b.setAttribute('aria-pressed',draft[k]?'true':'false'); b.setAttribute('aria-label',`${k}요일`);
-    b.onclick=()=>{ if(draft[k]) delete draft[k]; else draft[k]={start:'18:00',end:'22:00',brk:'없음'}; renderDays(); renderSlots(); };
+    b.onclick=()=>{ if(draft[k]) delete draft[k]; else draft[k]=newSlot(); renderDays(); renderSlots(); };
     box.appendChild(b); });
 }
+// 새로 고른 요일은 이미 고른 요일의 시간을 그대로 가져온다 (처음이면 18:00~22:00)
+function newSlot(){ const k=DAY_KEYS.find(k=>draft[k]); return k?{...draft[k]}:{start:'18:00',end:'22:00',brk:'없음'}; }
+// 평일, 주말, 매일, 모두 해제: 그 요일들만 고른 상태로 만든다
+$$('#dayQuick [data-days]').forEach(b=>b.onclick=()=>{ const want=[...b.dataset.days];
+  const tpl=newSlot(); DAY_KEYS.forEach(k=>{ if(!want.includes(k)) delete draft[k]; else if(!draft[k]) draft[k]={...tpl}; });
+  renderDays(); renderSlots(); });
 function opts(list,sel){ return list.map(v=>`<option${v===sel?' selected':''}>${v}</option>`).join(''); }
 function renderSlots(){
   const box=$('#slotList'); box.innerHTML='';
@@ -350,12 +355,15 @@ function renderSlots(){
   $('#slotEmpty').classList.toggle('hidden',keys.length>0); $('#copyAll').classList.toggle('hidden',keys.length<2);
   keys.forEach(k=>{ const s=draft[k]; const el=document.createElement('div'); el.className='slot';
     el.innerHTML=`<div class="slot-day">${k}요일 <span class="hrs">${fmtH(slotMinutes(s))}</span></div>
-      <div class="slot-grid"><select class="input" aria-label="${k}요일 시작 시간">${opts(TIMES,s.start)}</select><span class="tilde">부터</span>
-      <select class="input" aria-label="${k}요일 끝 시간">${opts(TIMES,s.end)}</select></div>
+      <div class="slot-grid"><input type="time" class="input" step="1800" value="${s.start}" aria-label="${k}요일 시작 시간"><span class="tilde">부터</span>
+      <input type="time" class="input" step="1800" value="${s.end}" aria-label="${k}요일 끝 시간"></div>
       <div class="brk">쉬는 시간<select class="input" aria-label="${k}요일 쉬는 시간">${opts(BREAKS,s.brk)}</select></div>`;
-    const [st,en]=el.querySelectorAll('.slot-grid select'), br=el.querySelector('.brk select');
+    const [st,en]=el.querySelectorAll('.slot-grid input'), br=el.querySelector('.brk select');
     const up=()=>{ el.querySelector('.hrs').textContent=fmtH(slotMinutes(s)); totals(); };
-    st.onchange=()=>{s.start=st.value;up()}; en.onchange=()=>{s.end=en.value;up()}; br.onchange=()=>{s.brk=br.value;up()};
+    // 휴대폰 기본 시간 휠. 지우면 이전 값으로 되돌린다
+    st.onchange=()=>{ if(st.value) s.start=st.value; else st.value=s.start; up(); };
+    en.onchange=()=>{ if(en.value) s.end=en.value; else en.value=s.end; up(); };
+    br.onchange=()=>{s.brk=br.value;up()};
     box.appendChild(el); });
   totals();
 }

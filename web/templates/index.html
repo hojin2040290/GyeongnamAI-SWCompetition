@@ -338,6 +338,12 @@
     <div class="sheet-head"><h2 id="sheetTitle">근무 요일과 시간</h2><button class="btn ghost small" id="sheetClose">닫기</button></div>
     <p class="lead" id="sheetJobName"></p>
     <div class="sheet-label">1. 일하는 요일을 모두 눌러 주세요</div>
+    <div class="day-quick" id="dayQuick">
+      <button type="button" class="btn ghost small" data-days="월화수목금">평일</button>
+      <button type="button" class="btn ghost small" data-days="토일">주말</button>
+      <button type="button" class="btn ghost small" data-days="월화수목금토일">매일</button>
+      <button type="button" class="btn ghost small" data-days="">모두 해제</button>
+    </div>
     <div class="days" id="dayPicker"></div>
     <div class="sheet-label">2. 요일마다 시작, 끝, 쉬는 시간을 골라 주세요</div>
     <div id="slotList"></div>
