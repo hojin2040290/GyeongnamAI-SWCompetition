@@ -1,5 +1,6 @@
 """웹 화면이 부르는 API."""
 import json
+import re
 from datetime import date
 from typing import Optional
 
@@ -13,6 +14,7 @@ from app.agent import core
 from app.agent.tools import keywords_of, make_tools
 from app.auth import check_password, current_user, hash_password
 from app.calc import bizno
+from app.calc import schedule as sch
 from app.calc.age import age_on
 from app.calc.params import P
 from app.calc.timeutil import now_kst, today_kst
@@ -175,13 +177,39 @@ def job_out(j: Job) -> dict:
     return d
 
 
+# 글 칸의 최대 길이 (너무 긴 글이 AI와 저장소로 들어가지 않게)
+TEXT_LIMITS = {"name": 60, "industry": 40, "work_desc": 200, "pay_cycle": 20, "pay_method": 20, "deduction": 60,
+               "consent": 20, "address": 200, "owner": 40, "biz_no": 20, "status": 10, "probation": 10, "size": 10}
+MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def check_text(**fields) -> None:
+    for k, v in fields.items():
+        if isinstance(v, str) and len(v) > TEXT_LIMITS.get(k, 200):
+            raise HTTPException(400, f"입력한 글이 너무 길어요 ({TEXT_LIMITS.get(k, 200)}자까지)")
+
+
+def check_month(month: str) -> str:
+    if not MONTH.match(month or ""):
+        raise HTTPException(400, "달은 2026-09 같은 모양이어야 해요")
+    return month
+
+
+def clean_schedule(schedule) -> dict:
+    try:
+        return sch.clean(schedule)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
 def apply_job(job: Job, data: JobIn) -> None:
     name = data.name.strip()
     if not name:
         raise HTTPException(400, "사업장 이름을 입력해 주세요")
+    check_text(**{k: v for k, v in data.model_dump().items() if isinstance(v, str)})
     for k, v in data.model_dump().items():
         if k == "schedule":
-            job.schedule_json = json.dumps(v, ensure_ascii=False)
+            job.schedule_json = json.dumps(clean_schedule(v), ensure_ascii=False)
         else:
             setattr(job, k, v)
     job.name = name
@@ -455,7 +483,9 @@ def get_fields(job_id: int, u: User = Depends(current_user), s: Session = Depend
 @router.put("/jobs/{job_id}/contract/fields")
 def put_fields(job_id: int, data: FieldsIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
-    s.add(ContractFields(job_id=job_id, fields_json=json.dumps(data.fields, ensure_ascii=False), confirmed_at=now_kst()))
+    items = P()["written_terms"]["items"]  # 계약서 항목 이름만 받고, 값은 글자로 300자까지
+    fields = {k: str(v)[:300] for k, v in data.fields.items() if k in items}
+    s.add(ContractFields(job_id=job_id, fields_json=json.dumps(fields, ensure_ascii=False), confirmed_at=now_kst()))
     s.commit()
     return {"ok": True}
 
@@ -493,6 +523,8 @@ class SeekIn(BaseModel):
 
 @router.post("/seek/check")
 def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    check_text(name=data.name, industry=data.industry, work_desc=data.work_desc, probation=data.probation)
+    data.schedule = clean_schedule(data.schedule)
     try:
         data.biz_no = bizno.normalize(data.biz_no)
     except ValueError as exc:
@@ -507,6 +539,7 @@ async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(..
                       u: User = Depends(current_user), s: Session = Depends(get_session)):
     """받은 금액 저장. 같은 달에 나눠 받았으면 따로 저장해 합친다 (mode=add). mode=replace면 그 달 금액을 이것으로 바꾼다."""
     own_job(s, u, job_id)
+    check_month(month)
     if amount < 0:
         raise HTTPException(400, "받은 금액은 0원 이상이어야 해요")
     ev_id = None
@@ -588,6 +621,7 @@ def delete_payslip(job_id: int, month: str, u: User = Depends(current_user), s: 
 @router.get("/jobs/{job_id}/pay")
 def pay(job_id: int, month: str, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
+    check_month(month)
     t = make_tools(s, u.id, job_id)
     exp = t["calc_pay"](month)
     paid = t["get_payslip"](month)
@@ -600,6 +634,7 @@ def pay(job_id: int, month: str, u: User = Depends(current_user), s: Session = D
 def agent_payday(job_id: int, month: str, u: User = Depends(current_user), s: Session = Depends(get_session)):
     """시연용: 월급날이 된 것처럼 에이전트를 지금 시작한다."""
     own_job(s, u, job_id)
+    check_month(month)
     return core.run_payday(s, u.id, job_id, month)
 
 
@@ -638,7 +673,9 @@ def get_report(rep_id: int, u: User = Depends(current_user), s: Session = Depend
     rep = s.get(Report, rep_id)
     if not rep or rep.user_id != u.id:
         raise HTTPException(404, "자료를 찾을 수 없어요")
-    return FileResponse(rep.path, media_type="text/html")
+    # 자료 문서에서는 스크립트가 실행되지 않게 한다 (혹시 섞여 든 글이 있어도 글자로만 보이도록)
+    return FileResponse(rep.path, media_type="text/html",
+                        headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:"})
 
 
 # ---------- 신고 후 보호 ----------
@@ -690,7 +727,7 @@ class KeywordsIn(BaseModel):
 def set_keywords(job_id: int, data: KeywordsIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     """게시물 검색어 (본인 이름, 별명 등). 사업장 이름과 함께 검색한다."""
     job = own_job(s, u, job_id)
-    kws = [k.strip().replace(",", " ") for k in data.keywords if k.strip()][:10]
+    kws = [k.strip().replace(",", " ")[:30] for k in data.keywords if k.strip()][:10]
     job.guard_keywords = ",".join(dict.fromkeys(kws))
     s.add(job)
     s.commit()
@@ -705,8 +742,9 @@ class PostIn(BaseModel):
 @router.post("/jobs/{job_id}/guard/posts")
 def add_post(job_id: int, data: PostIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
-    if not data.url.startswith(("http://", "https://")):
-        raise HTTPException(400, "게시물 주소는 http 또는 https로 시작해야 해요")
+    if not data.url.startswith(("http://", "https://")) or len(data.url) > 1000 or any(c.isspace() for c in data.url):
+        raise HTTPException(400, "게시물 주소는 http 또는 https로 시작하는 한 줄 주소여야 해요")
+    data.title = data.title.strip()[:200]
     return core.run_guard_preserve(s, u.id, job_id, data.url, data.title)
 
 

@@ -1,5 +1,6 @@
 """근무 요일과 시간(계약상 소정근로시간) 계산."""
 import json
+import re
 from datetime import datetime, timedelta
 
 from app.calc.timeutil import DAY_KEYS, night_minutes, to_min
@@ -76,3 +77,31 @@ def slot_has_night(slot: dict, night_start: str, night_end: str) -> bool:
     s = base + timedelta(minutes=to_min(slot["start"]))
     e = s + timedelta(minutes=span_min(slot))
     return night_minutes(s, e, night_start, night_end) > 0
+
+
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+SLOTS_PER_DAY = 4  # 한 요일에 넣을 수 있는 시간대 수
+
+
+def clean(schedule) -> dict:
+    """화면에서 받은 근무 요일과 시간 검사. 요일, 시각(HH:MM), 쉬는 시간이 정해진 모양이 아니면 ValueError.
+    시간대가 하나면 예전 형식(dict)으로, 여러 개면 목록으로 돌려준다."""
+    if not isinstance(schedule, dict):
+        raise ValueError("근무 요일과 시간 형식이 맞지 않아요")
+    out = {}
+    for day, value in schedule.items():
+        if day not in DAY_KEYS:
+            raise ValueError(f"알 수 없는 요일이에요: {str(day)[:10]}")
+        raw = value if isinstance(value, list) else [value]
+        if not raw or len(raw) > SLOTS_PER_DAY:
+            raise ValueError(f"{day}요일 시간대는 1개부터 {SLOTS_PER_DAY}개까지 넣을 수 있어요")
+        slots = []
+        for x in raw:
+            if not isinstance(x, dict) or not _HHMM.match(str(x.get("start", ""))) or not _HHMM.match(str(x.get("end", ""))):
+                raise ValueError(f"{day}요일 시작, 끝 시각은 00:00 모양이어야 해요")
+            brk = x.get("brk", "모름")
+            if brk not in (*BREAK_MIN, "모름"):
+                raise ValueError(f"{day}요일 쉬는 시간 값이 맞지 않아요")
+            slots.append({"start": x["start"], "end": x["end"], "brk": brk})
+        out[day] = slots[0] if len(slots) == 1 else slots
+    return out

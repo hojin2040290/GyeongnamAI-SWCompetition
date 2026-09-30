@@ -92,12 +92,13 @@ def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
         if "search_posts" in tools and "search_posts" not in names:
             return reply([("search_posts", {})])
         posts = called(done, "list_posts")
+        posts = posts["게시물"] if isinstance(posts, dict) else posts
         if posts is None:
             return reply([("list_posts", {"pending_only": True})])
         if "set_post_status" not in names and posts:
             return reply([("set_post_status", {"post_id": p["post_id"], "reason": "테스트 판별",
-                                               "status": "suspect" if "신고" in p["제목"] else "ok"}) for p in posts])
-        if any(p["제목"] and "신고" in p["제목"] for p in posts) and "notify" not in names:
+                                               "status": "suspect" if "신고" in p["제목(외부 글)"] else "ok"}) for p in posts])
+        if any(p["제목(외부 글)"] and "신고" in p["제목(외부 글)"] for p in posts) and "notify" not in names:
             return reply([("notify", {"title": "보복이 의심되는 게시물이 있어요", "body": "보호 탭에서 확인해 보세요"})])
         return reply([("finish", {"note": "판별 끝"})])
     if "settlement" in tools:

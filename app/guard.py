@@ -62,10 +62,11 @@ def search_public_posts(session: Session, job: Job, keywords: list[str]) -> dict
                     continue
                 for it in r.json().get("items", []):
                     url = it.get("link", "")
-                    if not url or session.exec(select(GuardPost).where(GuardPost.job_id == job.id,
-                                                                       GuardPost.url == url)).first():
+                    if not url.startswith(("http://", "https://")) or len(url) > 1000:
+                        continue  # 인터넷 주소가 아닌 링크는 보존하지 않는다 (화면에서 스크립트로 실행되지 않게)
+                    if session.exec(select(GuardPost).where(GuardPost.job_id == job.id, GuardPost.url == url)).first():
                         continue
-                    session.add(GuardPost(job_id=job.id, url=url, title=_plain(it.get("title", "")), source="search",
+                    session.add(GuardPost(job_id=job.id, url=url, title=_plain(it.get("title", ""))[:200], source="search",
                                           snippet=_plain(it.get("description", ""))[:SNIPPET_MAX], found_at=now_kst()))
                     session.flush()
                     added += 1

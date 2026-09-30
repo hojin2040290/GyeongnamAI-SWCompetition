@@ -13,6 +13,8 @@ const state = { me:null, jobs:[], current:null, mode:null, cards:[], adding:fals
   inApp:false, editingJob:null, curOb:null, tabHist:[] };
 
 function pad(n){ return String(n).padStart(2,'0'); }
+// 링크는 http, https 주소만 연다 (javascript: 같은 주소가 스크립트로 실행되지 않게)
+function safeUrl(u){ return /^https?:\/\//i.test(String(u||''))?u:'#'; }
 function esc(t){ return String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
 function brkMin(b){ return {'없음':0,'30분':30,'1시간':60,'1시간 30분':90,'2시간':120}[b] ?? 0; }
@@ -135,13 +137,15 @@ function bindSeg(root, onChange){
     });
   });
 }
+// 저장된 값에 따옴표 등이 섞여 있어도 선택자가 깨지지 않게 CSS.escape로 감싼다
+const cssq=v=>(window.CSS&&CSS.escape)?CSS.escape(String(v)):String(v).replace(/["\\]/g,'\\$&');
 function segVal(root, name){ const seg=root.querySelector(`.seg[data-name="${name}"]`); if(!seg) return null;
   const on=[...seg.querySelectorAll('[aria-pressed="true"]')].map(b=>b.dataset.v);
   return on.length?(seg.dataset.multi?on.join(', '):on[0]):null; }
 function setSeg(root, name, v){ const seg=root.querySelector(`.seg[data-name="${name}"]`); if(!seg||v==null) return;
   if(seg.dataset.multi){ seg.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));
-    String(v).split(',').map(x=>x.trim()).forEach(x=>seg.querySelector(`[data-v="${x}"]`)?.click()); return; }
-  seg.querySelector(`[data-v="${v}"]`)?.click(); }
+    String(v).split(',').map(x=>x.trim()).forEach(x=>seg.querySelector(`[data-v="${cssq(x)}"]`)?.click()); return; }
+  seg.querySelector(`[data-v="${cssq(v)}"]`)?.click(); }
 
 // ---------- 시작 ----------
 async function boot(){
@@ -374,8 +378,8 @@ function renderSlots(){
   keys.forEach(k=>{ const list=draft[k]; const el=document.createElement('div'); el.className='slot';
     el.innerHTML=`<div class="slot-day">${k}요일 <span class="hrs">${fmtH(dayMinutes(list))}</span></div>`+list.map((s,i)=>`
       <div class="slot-part" data-i="${i}">${list.length>1?`<div class="part-head"><span>시간대 ${i+1}</span><button type="button" class="link small muted" data-rm="${i}">이 시간대 빼기</button></div>`:''}
-      <div class="slot-grid"><input type="time" class="input" step="1800" value="${s.start}" aria-label="${k}요일 시간대 ${i+1} 시작"><span class="tilde">부터</span>
-      <input type="time" class="input" step="1800" value="${s.end}" aria-label="${k}요일 시간대 ${i+1} 끝"></div>
+      <div class="slot-grid"><input type="time" class="input" step="1800" value="${esc(s.start)}" aria-label="${k}요일 시간대 ${i+1} 시작"><span class="tilde">부터</span>
+      <input type="time" class="input" step="1800" value="${esc(s.end)}" aria-label="${k}요일 시간대 ${i+1} 끝"></div>
       <div class="brk">쉬는 시간<select class="input" aria-label="${k}요일 시간대 ${i+1} 쉬는 시간">${opts(BREAKS,s.brk)}</select></div></div>`).join('')+
       `<button type="button" class="link small add-part">+ ${k}요일에 시간대 더하기 (쪼개서 일할 때)</button>`;
     const up=()=>{ el.querySelector('.hrs').textContent=fmtH(dayMinutes(list)); totals(); };
@@ -886,7 +890,7 @@ function renderGuard(g){
   $('#kwQueries').textContent=`검색할 말: ${g.queries.join(' / ')}`;
   const st={pending:['pending','AI 응답 대기 중'],suspect:['bad','보복 의심'],ok:['ok','문제 없음'],unclear:['warn','확인 필요']};
   $('#postList').innerHTML=g.posts.length?g.posts.map(p=>`<li class="post"><div class="main"><strong>${esc(p.title||'제목 없음')}</strong>
-    <div class="sub"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></div>
+    <div class="sub"><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener noreferrer">${esc(p.url)}</a></div>
     ${p.ai_reason?`<div class="sub">AI 판별 근거: ${esc(p.ai_reason)}</div>`:''}
     <div class="sub">${fmtDT(p.found_at)} 확인${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">보존한 화면</a>`:', 화면 캡처 없음'}</div></div>
     <span class="tag ${st[p.status][0]}">${st[p.status][1]}</span></li>`).join(''):'<li><span class="sub">아직 확인한 게시물이 없어요</span></li>';

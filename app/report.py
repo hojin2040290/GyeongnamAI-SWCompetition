@@ -71,7 +71,7 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
             art = article_info(session, it["law"])  # 저장 뒤 법 기준표가 새로 구축됐을 수 있어 다시 찾는다
             articles.setdefault(it["law"], art)
             src = "근무 기록" if it.get("source") == "records" else "입력 정보"
-            rows.append(f"<tr><td class='n'>{e(it['law'])}</td><td class='n'>{LABEL.get(it['status'], it['status'])}</td><td>{e(it['text'])}</td>"
+            rows.append(f"<tr><td class='n'>{e(it['law'])}</td><td class='n'>{e(LABEL.get(it['status'], str(it['status'])))}</td><td>{e(it['text'])}</td>"
                         f"<td>{e(', '.join(it['basis']))}<br><span class='s'>{src} 기준</span></td>"
                         f"<td class='n'>{'조문 원문 첨부' if art['built'] else ('-' if art.get('na') else '법 기준표 미구축')}</td></tr>")
         rows.append(f"</table><p class='s'>점검 시각 {check.created_at}</p>")
@@ -86,12 +86,12 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
             exp = d["expected"].get("total")
             exp_txt = f"{exp:,}원" if exp else "-"
             paid_txt = f"{d['paid']:,}원" if d["paid"] is not None else "미입력"
-            rows.append(f"<tr><td>{d['month']}</td><td>{exp_txt}</td><td>{paid_txt}</td><td>{e(d['compare']['text'])}</td></tr>")
+            rows.append(f"<tr><td>{e(str(d['month']))}</td><td>{exp_txt}</td><td>{paid_txt}</td><td>{e(d['compare']['text'])}</td></tr>")
         rows.append("</table>")
     else:
         rows.append("<p>급여 점검 기록이 없어요.</p>")
     if settle:
-        rows.append(f"<p>퇴직일 {settle['quit_date']}, 임금 지급 기한 {settle['due']} ({LABEL.get(settle['status'], '')})</p>")
+        rows.append(f"<p>퇴직일 {e(str(settle['quit_date']))}, 임금 지급 기한 {e(str(settle['due']))} ({e(LABEL.get(settle['status'], ''))})</p>")
 
     rows.append("<h2>4. 근무 기록</h2><table><tr><th>출근</th><th>퇴근</th><th>출근 위치</th><th>비고</th></tr>")
     for r in recs:

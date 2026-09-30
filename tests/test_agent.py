@@ -322,7 +322,7 @@ def test_ask_user_then_resume_with_answer(env, monkeypatch):
         items = called(done, "check_rules")
         if items is None:
             return reply([("check_rules", {}), ("get_answers", {})])
-        answers = called(done, "get_answers") or []
+        answers = (called(done, "get_answers") or {}).get("답변", [])
         docs = [it for it in items if it["조항"] == "근로기준법 제66조"][0]
         if not answers and "ask_user" not in names:
             return reply([("ask_user", {"question": Q, "options": ["냈어요", "안 냈어요"], "why": "서류 제출 여부가 기록에 없어요",
