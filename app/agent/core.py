@@ -303,14 +303,14 @@ def run_guard_toggle(session: Session, user_id: int, job_id: int, on: bool) -> d
     r.log("입력", "신고했어요 켬" if on else "신고했어요 끔")
     r.call("set_reported", on)
     if not on:
-        return r.done({"message": ""}, "보복 대응을 멈췄어요")
+        return r.done({"message": ""}, "신고 후 보호를 멈췄어요")
     goal = Goal("사용자가 사업장을 노동관계법 위반으로 신고했어요. 보복을 막기 위해 사업주에게 보낼 안내 문구를 법 기준표의 조문을 "
-                "근거로 정중하게 써서 save_warning_message로 저장하고, 사용자에게 보복 대응을 시작했다고 알린 뒤 finish로 끝내 주세요.",
+                "근거로 정중하게 써서 save_warning_message로 저장하고, 사용자에게 신고 후 보호를 시작했다고 알린 뒤 finish로 끝내 주세요.",
                 ["get_profile", "get_article", "save_warning_message", "notify"], DONE,
                 check=r.need("message", "먼저 save_warning_message로 안내 문구를 저장해 주세요"))
     r.agent(goal, {"보복 금지 관련 조항": _retaliation_laws()})
     if not r.ai_used:
-        r.call("notify", "보복 대응을 시작했어요", "사업주에게 보낼 기본 안내 문구를 준비했고, 매일 공개 게시물을 확인해요. "
+        r.call("notify", "신고 후 보호를 시작했어요", "사업주에게 보낼 기본 안내 문구를 준비했고, 매일 공개 게시물을 확인해요. "
                "AI가 응답하면 상황에 맞는 문구로 바꿔요.")
     return r.done({"message": r.call("warning_message")},
                   "AI가 쓴 안내 문구 저장, 매일 게시물 확인 예약" if r.ai_used

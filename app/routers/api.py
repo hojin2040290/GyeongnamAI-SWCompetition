@@ -586,7 +586,7 @@ def get_report(rep_id: int, u: User = Depends(current_user), s: Session = Depend
     return FileResponse(rep.path, media_type="text/html")
 
 
-# ---------- 보복 대응 ----------
+# ---------- 신고 후 보호 ----------
 class ReportedIn(BaseModel):
     reported: bool
 

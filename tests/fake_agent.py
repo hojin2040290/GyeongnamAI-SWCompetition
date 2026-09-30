@@ -86,7 +86,7 @@ def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
             return reply([("get_article", {"label": "근로기준법 제104조 제2항"}),
                           ("save_warning_message", {"message": "AI가 쓴 안내 문구", "laws": ["근로기준법 제104조 제2항"]})])
         if "notify" not in names:
-            return reply([("notify", {"title": "보복 대응을 시작했어요", "body": "AI가 안내 문구를 준비했어요"})])
+            return reply([("notify", {"title": "신고 후 보호를 시작했어요", "body": "AI가 안내 문구를 준비했어요"})])
         return reply([("finish", {"note": "문구 저장"})])
     if "list_posts" in tools:  # 게시물 검색, 판별
         if "search_posts" in tools and "search_posts" not in names:
