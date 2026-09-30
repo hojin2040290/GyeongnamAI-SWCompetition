@@ -1,16 +1,15 @@
 """상담 사전 자료 만들기. 모인 기록을 정리하고, 맨 앞에 AI가 쓴 사건 요약을 붙인다 (AI 응답이 없으면 대기 중으로 표시)."""
 import html
 import json
-from pathlib import Path
 
 from sqlmodel import Session, select
 
+from app import storage
 from app.agent.tools import make_tools
 from app.calc import pay as paycalc
 from app.calc import schedule as sch
 from app.calc.age import age_on
 from app.calc.timeutil import now_kst, today_kst
-from app.config import REPORT_DIR
 from app.law.lookup import article_info, refs_for
 from app.models import CheckRun, Evidence, Report, WorkRecord
 
@@ -145,9 +144,8 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
 table{{border-collapse:collapse;width:100%;margin:8px 0}}th,td{{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;font-size:14px}}
 th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}.w{{color:#3355cc;background:#eef2ff;padding:8px 10px;border-radius:8px}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
 <body><h1>상담 사전 자료</h1><p class="s">작성 시각 {now_kst()}</p>{''.join(rows)}</body></html>"""
-    path = Path(REPORT_DIR) / f"report_{user_id}_{job_id}_{now_kst().strftime('%Y%m%d%H%M%S')}.html"
-    path.write_text(doc, encoding="utf-8")
-    rep = Report(user_id=user_id, job_id=job_id, path=str(path), ai_summary=bool(summary and summary.get("ai")),
+    path = storage.save_report(user_id, job_id, now_kst().strftime('%Y%m%d%H%M%S'), doc)
+    rep = Report(user_id=user_id, job_id=job_id, path=path, ai_summary=bool(summary and summary.get("ai")),
                  created_at=now_kst())
     session.add(rep)
     session.commit()

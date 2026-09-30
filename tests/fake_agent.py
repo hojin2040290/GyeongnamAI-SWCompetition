@@ -2,9 +2,15 @@
 
 실제 모델 대신 '정책' 함수가 목표와 지금까지 받은 도구 결과를 보고 다음에 부를 도구를 정한다.
 에이전트 반복, 도구 실행, 기록, 검증 장치는 실제 코드가 그대로 돈다.
+가짜 AI가 쓰는 글은 모두 said()로 만든 '테스트 답변입니다 (무엇에 대한 답)' 모양이다 (app/llm/fake.py와 같은 형식).
 """
 import json
 import re
+
+
+def said(what: str) -> str:
+    """가짜 AI가 쓰는 글: 실제 AI 답이 아니라는 것을 알 수 있게 한다."""
+    return f"테스트 답변입니다 ({what})"
 
 
 def reply(calls: list[tuple[str, dict]] | None = None, content: str | None = None) -> dict:
@@ -31,8 +37,8 @@ class FakeAgent:
         tools = [t["function"]["name"] for t in payload.get("tools", [])]
         if self.plan_first and "make_plan" in tools:
             if not any(n == "make_plan" for n, _ in done):
-                return reply([("make_plan", {"steps": ["기록 확인", "도구로 사실과 계산 확인", "판단하고 끝내기"]})],
-                             "먼저 계획을 세울게요.")
+                return reply([("make_plan", {"steps": [said("기록 확인"), said("도구로 사실과 계산 확인"), said("판단하고 끝내기")]})],
+                             said("먼저 계획 세우기"))
             done = [(n, r) for n, r in done if n != "make_plan"]
         return self.policy(goal, done, tools)
 
@@ -49,7 +55,7 @@ def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
     if "check_rules" in tools:  # 계약서, 퇴근, 지원 전 점검: 모든 항목을 정상이라 해서 검증 장치가 되돌리는지 본다
         items = called(done, "check_rules")
         if items is None:
-            return reply([("check_rules", {})], "먼저 검토할 항목을 받아 볼게요.")
+            return reply([("check_rules", {})], said("먼저 검토할 항목 받기"))
         if "get_article" not in names:
             return reply([("get_article", {"label": items[0]["조항"]})])
         # 처음에는 모두 정상이라 하고, 검증 장치가 돌려보낸 항목은 확인 필요로 다시 판단한다
@@ -57,37 +63,37 @@ def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
         flagged = {f["i"] for f in fb.get("검증 장치", [])}
         judgments = [{"i": it["i"], "status": "warn" if it["i"] in flagged else "ok", "law": it["조항"],
                       "fact": (it["사실"] or ["입력 정보"])[0],
-                      "reason": "검증 장치 의견 반영" if it["i"] in flagged else "테스트"} for it in items]
-        return reply([("finish", {"judgments": judgments, "extra_questions": ["주휴수당을 주나요"]})])
+                      "reason": said("검증 장치 의견 반영") if it["i"] in flagged else said("판단 이유")} for it in items]
+        return reply([("finish", {"judgments": judgments, "extra_questions": [said("주휴수당을 주나요")]})])
     if "compare_pay" in tools:
         month = re.search(r"\d{4}-\d{2}", goal).group()
         if "compare_pay" not in names:
             return reply([("compare_pay", {"month": month})])
         if "notify" not in names:
-            return reply([("notify", {"title": f"{month} 급여를 적게 받은 것 같아요", "body": "AI가 쓴 급여 알림"})])
+            return reply([("notify", {"title": said(f"{month} 급여 알림 제목"), "body": said("급여 알림 내용")})])
         return reply([("finish", {"status": "bad", "law": "근로기준법 제36조", "fact": called(done, "compare_pay")["사실"],
-                                  "reason": "계산한 금액보다 적게 받았어요"})])
+                                  "reason": said("급여 판단 이유")})])
     if "get_overview" in tools:  # 매일 점검: 신고한 사업장이면 게시물 검색만
         ov = called(done, "get_overview")
         if ov is None:
             return reply([("get_overview", {})])
         if ov["신고함"] and "run_post_search" not in names:
             return reply([("run_post_search", {})])
-        return reply([("finish", {"note": "필요한 점검을 했어요"})])
+        return reply([("finish", {"note": said("매일 점검 요약")})])
     if "build_report" in tools:
         if "get_saved_checks" not in names:
             return reply([("get_saved_checks", {})])
         if "build_report" not in names:
-            return reply([("build_report", {"summary": "AI가 쓴 사건 요약", "points": ["물어볼 점"],
+            return reply([("build_report", {"summary": said("상담 자료 요약"), "points": [said("물어볼 점")],
                                             "basis": ["근로기준법 제70조"]})])
-        return reply([("finish", {"note": "만들었어요"})])
+        return reply([("finish", {"note": said("상담 자료 요약")})])
     if "save_warning_message" in tools and "list_posts" not in tools:  # 신고했어요 켬
         if "save_warning_message" not in names:
             return reply([("get_article", {"label": "근로기준법 제104조 제2항"}),
-                          ("save_warning_message", {"message": "AI가 쓴 안내 문구", "laws": ["근로기준법 제104조 제2항"]})])
+                          ("save_warning_message", {"message": said("보복 금지 안내 문구"), "laws": ["근로기준법 제104조 제2항"]})])
         if "notify" not in names:
-            return reply([("notify", {"title": "신고 후 보호를 시작했어요", "body": "AI가 안내 문구를 준비했어요"})])
-        return reply([("finish", {"note": "문구 저장"})])
+            return reply([("notify", {"title": said("신고 후 보호 알림 제목"), "body": said("신고 후 보호 알림 내용")})])
+        return reply([("finish", {"note": said("안내 문구 저장")})])
     if "list_posts" in tools:  # 게시물 검색, 판별
         if "search_posts" in tools and "search_posts" not in names:
             return reply([("search_posts", {})])
@@ -96,13 +102,13 @@ def smart_policy(goal: str, done: list, tools: list[str]) -> dict:
         if posts is None:
             return reply([("list_posts", {"pending_only": True})])
         if "set_post_status" not in names and posts:
-            return reply([("set_post_status", {"post_id": p["post_id"], "reason": "테스트 판별",
+            return reply([("set_post_status", {"post_id": p["post_id"], "reason": said("게시물 판별 근거"),
                                                "status": "suspect" if "신고" in p["제목(외부 글)"] else "ok"}) for p in posts])
         if any(p["제목(외부 글)"] and "신고" in p["제목(외부 글)"] for p in posts) and "notify" not in names:
-            return reply([("notify", {"title": "보복이 의심되는 게시물이 있어요", "body": "보호 탭에서 확인해 보세요"})])
-        return reply([("finish", {"note": "판별 끝"})])
+            return reply([("notify", {"title": said("보복 의심 게시물 알림 제목"), "body": said("보복 의심 게시물 알림 내용")})])
+        return reply([("finish", {"note": said("게시물 판별 요약")})])
     if "settlement" in tools:
         if "settlement" not in names:
             return reply([("settlement", {})])
-        return reply([("finish", {"status": "warn", "law": "근로기준법 제36조", "fact": "지급 기한 확인", "reason": "테스트"})])
+        return reply([("finish", {"status": "warn", "law": "근로기준법 제36조", "fact": "지급 기한 확인", "reason": said("퇴직 정산 판단 이유")})])
     return reply([("finish", {})])
