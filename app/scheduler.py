@@ -130,11 +130,15 @@ def run_due_followups() -> dict:
 
 def start() -> None:
     if not scheduler.running:
-        scheduler.add_job(daily_check, "cron", hour=SCHEDULE_HOUR, minute=0, id="daily_check", replace_existing=True)
-        scheduler.add_job(open_record_check, "interval", minutes=30, id="open_record_check", replace_existing=True)
-        scheduler.add_job(retry_waiting, "interval", minutes=AI_RETRY_MIN, id="retry_waiting", replace_existing=True)
+        # misfire_grace_time: 컴퓨터가 잠자기 등으로 늦게 깨어나도 이 시간(초) 안이면 건너뛰지 않고 실행한다
+        scheduler.add_job(daily_check, "cron", hour=SCHEDULE_HOUR, minute=0, id="daily_check", replace_existing=True,
+                          misfire_grace_time=12 * 3600)
+        scheduler.add_job(open_record_check, "interval", minutes=30, id="open_record_check", replace_existing=True,
+                          misfire_grace_time=30 * 60)
+        scheduler.add_job(retry_waiting, "interval", minutes=AI_RETRY_MIN, id="retry_waiting", replace_existing=True,
+                          misfire_grace_time=AI_RETRY_MIN * 60)
         scheduler.add_job(run_due_followups, "interval", minutes=AI_RETRY_MIN, id="run_due_followups",
-                          replace_existing=True)
+                          replace_existing=True, misfire_grace_time=AI_RETRY_MIN * 60)
         scheduler.start()
 
 
