@@ -98,6 +98,19 @@ def test_daily_check_searches_reported_jobs(c):
     assert c.post("/api/dev/daily-check").json()["guard"] == 1
 
 
+def test_dev_daily_check_is_locked(c, monkeypatch):
+    """시연용 매일 점검: DEV_TOOLS를 끄면 없는 주소이고, 켜도 로그인한 사용자의 사업장만 점검한다."""
+    from fastapi.testclient import TestClient
+    from app import config
+    from app.main import app
+    with TestClient(app) as other:  # 로그인하지 않은 사람
+        assert other.post("/api/dev/daily-check").status_code == 401
+    monkeypatch.setattr(config, "DEV_TOOLS", False)
+    assert c.post("/api/dev/daily-check").status_code == 404
+    monkeypatch.setattr(config, "DEV_TOOLS", True)
+    assert "law_changed" not in c.post("/api/dev/daily-check").json()  # 법 기준표 갱신은 하지 않음
+
+
 def test_payslip_edit(c):
     job_id = c.get("/api/jobs").json()[0]["id"]
     c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "10000"})

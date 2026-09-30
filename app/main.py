@@ -1,16 +1,18 @@
 """FastAPI 진입점. 화면(HTML, CSS, JS)과 기능(API)을 함께 제공한다."""
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import scheduler
+from app import config, scheduler
+from app.auth import current_user
 from app.config import BASE_DIR, SECRET_KEY
 from app.db import engine, init_db
 from app.law.fetch import load_notices
 from sqlmodel import Session
+from app.models import User
 from app.routers.api import router as api_router
 
 
@@ -43,6 +45,9 @@ def index(request: Request):
 
 
 @app.post("/api/dev/daily-check")
-def dev_daily_check():
-    """시연용: 매일 정해진 시각에 도는 점검을 지금 실행."""
-    return scheduler.daily_check()
+def dev_daily_check(u: User = Depends(current_user)):
+    """시연용: 매일 정해진 시각에 도는 점검을 지금 실행한다.
+    .env의 DEV_TOOLS=true일 때만 열리고, 로그인한 사용자 자신의 사업장만 점검한다."""
+    if not config.DEV_TOOLS:
+        raise HTTPException(404, "Not Found")
+    return scheduler.daily_check(u.id)
