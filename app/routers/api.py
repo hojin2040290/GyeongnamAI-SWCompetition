@@ -99,13 +99,21 @@ def me(u: User = Depends(current_user)):
 class MeIn(BaseModel):
     birth_date: date
     mode: Optional[str] = None
+    email: Optional[str] = None
 
 
 @router.put("/me")
 def update_me(data: MeIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
-    """생년월일(나이 기준)과 처음 고른 상황은 나중에도 고칠 수 있다."""
+    """생년월일(나이 기준), 처음 고른 상황, 이메일은 나중에도 고칠 수 있다."""
     if data.birth_date > today_kst():
         raise HTTPException(400, "생년월일이 오늘보다 늦어요")
+    if data.email is not None:
+        email = data.email.strip().lower()
+        if problem := input_rules.email_problem(email):
+            raise HTTPException(400, problem)
+        if email != u.email.lower() and s.exec(select(User).where(func.lower(User.email) == email)).first():
+            raise HTTPException(400, "다른 계정이 쓰고 있는 이메일이에요")
+        u.email = email
     u.birth_date = data.birth_date
     if data.mode in ("seek", "work", "quit"):
         u.mode = data.mode
