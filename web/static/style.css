@@ -179,6 +179,9 @@ div.field{margin-bottom:12px}
 .slot-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}
 .slot-grid input[type=time]{padding:10px 8px;font-size:16px;font-variant-numeric:tabular-nums;min-width:0;width:100%;text-align:center}
 .day-quick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.slot-part+.slot-part{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.part-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ink-soft);margin-bottom:6px}
+.slot .add-part{margin-top:8px}
 .slot-grid .tilde{color:var(--ink-soft)}
 .slot .brk{margin-top:8px;display:flex;align-items:center;gap:8px;font-size:14px}
 .slot .brk select{flex:1;padding:8px}
@@ -362,3 +365,7 @@ em.hint.bad{color:var(--bad)}
 .ask .sub{margin:2px 0 8px}
 .ask-opts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .ask .kw-row{margin-bottom:4px}
+
+/* 같은 달 받은 급여 여러 건 */
+.pay-month .main{width:100%}
+.pay-item{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:14px}

@@ -111,12 +111,20 @@ def test_dev_daily_check_is_locked(c, monkeypatch):
     assert "law_changed" not in c.post("/api/dev/daily-check").json()  # 법 기준표 갱신은 하지 않음
 
 
-def test_payslip_edit(c):
+def test_payslip_multiple_in_month(c):
+    """같은 달에 나눠 받은 금액은 여러 건으로 저장해 합쳐 비교하고, 한 건씩 고치거나 지울 수 있다."""
     job_id = c.get("/api/jobs").json()[0]["id"]
     c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "10000"})
-    c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "20000"})
+    r = c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "20000"}).json()
+    assert r["paid"] == 30000  # 따로 더 받은 금액은 합친다
     ps = c.get(f"/api/jobs/{job_id}/payslips").json()
-    assert [(p["month"], p["amount"]) for p in ps] == [("2026-09", 20000)]
+    assert [(p["month"], p["amount"]) for p in ps] == [("2026-09", 10000), ("2026-09", 20000)]
+    assert c.put(f"/api/payslips/{ps[0]['id']}", json={"amount": 15000}).json()["paid"] == 35000
+    c.delete(f"/api/payslips/{ps[1]['id']}")
+    assert [p["amount"] for p in c.get(f"/api/jobs/{job_id}/payslips").json()] == [15000]
+    r = c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "50000", "mode": "replace"}).json()
+    assert r["paid"] == 50000 and len(c.get(f"/api/jobs/{job_id}/payslips").json()) == 1  # 금액 고치기
+    assert c.post(f"/api/jobs/{job_id}/payslip", data={"month": "2026-09", "amount": "-1"}).status_code == 400
     c.delete(f"/api/jobs/{job_id}/payslips/2026-09")
     assert c.get(f"/api/jobs/{job_id}/payslips").json() == []
 

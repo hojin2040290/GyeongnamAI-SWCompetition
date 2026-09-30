@@ -31,7 +31,7 @@ def day_facts(records: list, schedule: dict, birth: date, night_start: str, nigh
         if not r.clock_out or r.clock_out <= r.clock_in:
             continue
         d = r.clock_in.date()
-        slot = schedule.get(weekday_key(d))
+        slot = sch.slot_for(schedule, weekday_key(d), r.clock_in)  # 하루 여러 번 근무하면 가까운 시간대
         brk = sch.break_min(slot) if slot else None
         span = int((r.clock_out - r.clock_in).total_seconds() // 60)
         out.append(DayFact(day=d, clock_in=r.clock_in, clock_out=r.clock_out, age=age_on(birth, d), span_min=span,

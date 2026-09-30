@@ -50,7 +50,7 @@ def calc_month(records: list, schedule: dict, wage: int, size: str, birth: date,
         if not rec.clock_out or rec.clock_in.year != y or rec.clock_in.month != m:
             continue
         d = rec.clock_in.date()
-        slot = schedule.get(weekday_key(d))
+        slot = sch.slot_for(schedule, weekday_key(d), rec.clock_in)  # 하루 여러 번 근무하면 가까운 시간대
         mins, brk_known = record_work_min(rec.clock_in, rec.clock_out, slot)
         unknown_break |= not brk_known
         r.work_min += mins
