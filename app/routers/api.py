@@ -412,7 +412,8 @@ def settlement(job_id: int, u: User = Depends(current_user), s: Session = Depend
     st = make_tools(s, u.id, job_id)["settlement"]()
     if not st:
         return {"settlement": None}
-    return {"settlement": saved_settlement(s, job_id, st)}
+    # ai: AI가 있으면 판단 대기인 결과를 화면이 바로 다시 점검한다
+    return {"settlement": saved_settlement(s, job_id, st), "ai": llm_client.available()}
 
 
 # ---------- 출퇴근 ----------
@@ -756,8 +757,9 @@ def pay(job_id: int, month: str, u: User = Depends(current_user), s: Session = D
     exp = t["calc_pay"](month)
     paid = t["get_payslip"](month)
     now = {"month": month, "expected": exp, "paid": paid, "compare": t["compare_pay"](exp, paid)}
-    return _saved_judgment(s, job_id, "payday", now, lambda x: x.get("month") == month and x.get("paid") == paid
-                           and x.get("expected") == json.loads(json.dumps(exp, default=str)))
+    out = _saved_judgment(s, job_id, "payday", now, lambda x: x.get("month") == month and x.get("paid") == paid
+                          and x.get("expected") == json.loads(json.dumps(exp, default=str)))
+    return {**out, "ai": llm_client.available()}
 
 
 @router.post("/jobs/{job_id}/agent/payday")
