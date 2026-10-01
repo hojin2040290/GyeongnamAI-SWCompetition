@@ -26,6 +26,7 @@ PLAN=(
   "part10 true  3 -            -"
   "part11 true  1 -            -"
   "part12 true  3 -            -"
+  "part13 true  3 -            -"
 )
 
 run() {

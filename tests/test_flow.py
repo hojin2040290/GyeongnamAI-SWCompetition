@@ -344,3 +344,23 @@ def test_progress_tone_matches_situation():
     assert tone_of(["ok", "pending"]) == "warn"
     assert tone_of(["warn", "bad"]) == "bad"
     assert tone_of([]) == "none"
+
+
+def test_saved_settlement_survives_next_day(c):
+    """퇴직 정산 판단은 다음 날에도 쓴다 (남은 날 수가 바뀌어도 '판단 대기'로 돌아가지 않게)."""
+    import json as _json
+    from app.agent.tools import saved_settlement
+    from app.models import CheckRun
+    jid = c.post("/api/jobs", json={**JOB, "name": "가상다음날점", "start_date": "2026-08-01"}).json()["id"]
+    judged = {"quit_date": "2026-08-30", "due": "2026-09-13", "left": -17, "status": "bad", "rule_status": "bad",
+              "ai_reason": "테스트 답변입니다 (가상 판단)", "ai_law": "근로기준법 제36조", "ai_fact": "지급 기한 2026-09-13"}
+    with Session(engine) as s:
+        s.add(CheckRun(user_id=1, job_id=jid, kind="quit", results_json=_json.dumps(judged, ensure_ascii=False),
+                       created_at=datetime(2026, 9, 30)))
+        s.commit()
+        today = {"quit_date": "2026-08-30", "due": "2026-09-13", "left": -18, "status": "pending", "rule_status": "bad"}
+        got = saved_settlement(s, jid, today)
+    assert got["status"] == "bad" and got["ai_reason"] and got["left"] == -18
+    # 받았다고 바꾸면(규칙 결과가 달라지면) 예전 판단을 쓰지 않는다
+    with Session(engine) as s:
+        assert saved_settlement(s, jid, {**today, "rule_status": "ok"})["status"] == "pending"

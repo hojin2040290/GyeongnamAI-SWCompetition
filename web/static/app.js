@@ -878,16 +878,20 @@ async function renderQuit(){
   const j=curJob(); const quit=j.status==='quit';
   $('#quitOpen').classList.toggle('hidden',quit); $('#quitForm').classList.add('hidden'); $('#quitPanel').classList.toggle('hidden',!quit); refreshNav();
   if(!quit) return;
-  const {settlement:st}=await api('GET',`/api/jobs/${j.id}/settlement`);
+  const {settlement:st, ai}=await api('GET',`/api/jobs/${j.id}/settlement`);
   if(!st){ $('#quitTag').className='tag warn'; $('#quitTag').textContent='확인 필요'; $('#quitText').textContent='그만둔 날을 입력하면 정산 기한을 계산해 드려요.'; return; }
   const f=s=>{const d=new Date(s+'T00:00:00'); return `${d.getMonth()+1}월 ${d.getDate()}일`;};
   $('#quitTag').className='tag '+st.status; $('#quitTag').textContent=LABEL[st.status]; $('#quitAi').innerHTML=aiJudgeHTML(st);
   if(!$('#quitLive').innerHTML) lastTrace('#quitLive','quit_check');
+  if(st.status==='pending' && ai && !$('#quitLive .live')) rejudgeOnce(`quit-${j.id}-${st.due}-${j.paid_after_quit}`, quitCheck);
   $('#quitText').textContent = j.paid_after_quit===true ? `${f(st.quit_date)}에 그만뒀고, 남은 임금을 받았다고 기록했어요.`
     : st.left>=0 ? `${f(st.quit_date)}에 그만뒀어요. 남은 임금 지급 기한은 ${f(st.due)}로, ${st.left}일 남았어요.`
     : `${f(st.quit_date)}에 그만뒀고 지급 기한 ${f(st.due)}이 지났어요. 아직 못 받았다면 상담을 준비하세요.`;
   $('#quitReport').classList.toggle('hidden',!(j.paid_after_quit===false||(st.status==='bad'&&j.paid_after_quit!==true)));
 }
+// 판단 대기인 결과가 보이면 (기록이 바뀌었거나 AI가 없던 때 저장됨) AI가 있을 때 한 번 다시 점검한다 (기다려도 바뀌지 않으므로)
+const rejudged=new Set();
+function rejudgeOnce(key, run){ if(rejudged.has(key)) return; rejudged.add(key); run(); }
 function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitDateMain').min=j.start_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
 function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen').classList.toggle('hidden',curJob().status==='quit'); refreshNav(); }
 $('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
@@ -921,8 +925,12 @@ function payHTML(r){
 }
 // 급여 점검 탭
 async function loadPayTab(){ applyCurrent(); if(!$('#payMonth').value) $('#payMonth').value=thisMonth(); $('#payTrace').innerHTML=''; $('#payOcrLive').innerHTML=''; await loadPay(); await loadPayslips(); }
-async function loadPay(){ const r=await api('GET',`/api/jobs/${state.current}/pay?month=${$('#payMonth').value}`); $('#payBody').innerHTML=payHTML(r);
-  lastTrace('#payTrace','payday',$('#payMonth').value); }
+async function loadPay(){ const month=$('#payMonth').value, r=await api('GET',`/api/jobs/${state.current}/pay?month=${month}`);
+  if($('#payTrace .live')) return;  // 점검이 도는 중이면 '판단 중' 화면을 예전 결과로 덮지 않는다
+  $('#payBody').innerHTML=payHTML(r);
+  lastTrace('#payTrace','payday',month);
+  if(r.compare?.status==='pending' && r.ai && !$('#payTrace .live'))
+    rejudgeOnce(`pay-${state.current}-${month}-${r.paid}-${r.expected?.total}`, ()=>payCheck(month,'AI 판단을 기다리던 급여 비교를 다시 점검했어요')); }
 async function loadPayslips(){
   const ps=await api('GET',`/api/jobs/${state.current}/payslips`); state.payslips=ps;
   const months=[...new Set(ps.map(p=>p.month))];
@@ -945,7 +953,8 @@ function payModeSync(){ const m=$('#payMonth').value, rows=(state.payslips||[]).
   if(rows.length){ $('#payModeLabel').textContent=`${m}에 이미 저장한 금액이 있어요 (합계 ${won(rows.reduce((a,p)=>a+p.amount,0))})`;
     if(!segVal($('#payModeWrap'),'paymode')) setSeg($('#payModeWrap'),'paymode','add'); } }
 bindSeg($('#payModeWrap'));
-$('#payMonth').onchange=()=>{ $('#payTrace').innerHTML=''; payModeSync(); loadPay().catch(e=>toast(e.message)); };
+// 점검이 도는 중이면 진행 칸은 지우지 않는다 (끝나면 결과로 바뀐다)
+$('#payMonth').onchange=()=>{ if(!$('#payTrace .live')) $('#payTrace').innerHTML=''; payModeSync(); loadPay().catch(e=>toast(e.message)); };
 $('#payRun').onclick=async()=>{ try{ judging('#payBody'); const r=await agent('#payTrace',()=>api('POST',`/api/jobs/${state.current}/agent/payday?month=${$('#payMonth').value}`)); $('#payBody').innerHTML=payHTML(r); $('#payTrace').innerHTML=traceHTML(r.trace, r.trace_at); toast('에이전트가 급여를 점검했어요'); }catch(e){ toast(e.message); loadPay().catch(()=>{}); } };
 // 명세서 사진: 고르면 바로 원본 저장 후 AI가 읽어 금액과 달을 채운다. 사용자가 확인하고 저장한다.
 let payslipEv=null;

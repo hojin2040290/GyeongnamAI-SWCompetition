@@ -82,13 +82,14 @@ def judgment_problems(session: Session, it: dict, j: dict, answered: list | tupl
 
 
 def saved_settlement(session: Session, job_id: int, st: dict) -> dict:
-    """코드가 다시 계산한 퇴직 정산에, 같은 사실(기한, 남은 날, 규칙 결과)로 저장된 AI 판단이 있으면 그것을 쓴다."""
+    """코드가 다시 계산한 퇴직 정산에, 같은 사실(기한, 규칙 결과)로 저장된 AI 판단이 있으면 그것을 쓴다.
+    남은 날 수는 날마다 바뀌므로 비교하지 않고 오늘 값으로 바꿔 넣는다 (기한이 지났는지는 규칙 결과에 들어 있다)."""
     rows = session.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "quit")
                         .order_by(CheckRun.id.desc())).all()
     for row in rows:
         saved = json.loads(row.results_json)
-        if saved.get("due") == st["due"] and saved.get("rule_status") == st["rule_status"] and saved.get("left") == st["left"]:
-            return saved
+        if saved.get("due") == st["due"] and saved.get("rule_status") == st["rule_status"]:
+            return {**saved, "left": st["left"]}
     return st
 
 
