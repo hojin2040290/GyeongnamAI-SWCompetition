@@ -699,3 +699,8 @@ def test_copy_law_table_to_test_data(tmp_path):
         c.execute(f"insert into lawarticle ({','.join(row)}) values ({','.join('?' * len(row))})", list(row.values()))
     assert demo_db.copy_law_table(dst, src) == 1
     assert sqlite3.connect(dst).execute("select count(*) from lawarticle").fetchone()[0] == 1
+
+
+def test_prompt_says_not_to_ask_law_text():
+    """실제 모델이 법 기준표에 없는 조문 내용을 사용자에게 물은 일이 있었다: 묻지 말라는 규칙이 프롬프트에 있어야 한다."""
+    assert "법 조문 내용은 사용자에게 묻지 마세요. 기준표에 없으면 조항 이름만 근거로 쓰고 이어 하세요." in loop.AGENT_SYSTEM
