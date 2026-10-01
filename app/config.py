@@ -62,6 +62,8 @@ LLM_MODEL = os.getenv("LLM_MODEL", "")
 LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL", "")  # 사진 읽기용 모델 (비우면 LLM_MODEL 사용)
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")            # vLLM에 키를 걸었을 때만
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
+# 모델마다 필요한 요청 옵션 (JSON). 예: 생각 모드 끄기 {"chat_template_kwargs": {"enable_thinking": false}}
+LLM_EXTRA_BODY = os.getenv("LLM_EXTRA_BODY", "").strip()
 # 가짜 AI (시험용): 실제 모델 대신 app/llm/fake.py가 '테스트 답변입니다 (...)'로 답한다.
 # auto(기본): 실제 모델 설정(LLM_ENABLED=true와 LLM_MODEL)이 없으면 가짜 AI를 쓴다. true: 늘 가짜 AI. false: 가짜 AI를 쓰지 않음
 def fake_mode(value: str, enabled: bool, model: str) -> bool:
