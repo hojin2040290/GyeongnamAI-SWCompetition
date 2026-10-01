@@ -570,7 +570,10 @@ def put_fields(job_id: int, data: FieldsIn, u: User = Depends(current_user), s: 
 @router.post("/jobs/{job_id}/check")
 def run_check(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
-    return core.run_contract_check(s, u.id, job_id)
+    out = core.run_contract_check(s, u.id, job_id)
+    row = s.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "contract")
+                 .order_by(CheckRun.id.desc())).first()
+    return {**out, "created_at": row.created_at.isoformat() if row else None}  # 점검 시각 (화면에 표시)
 
 
 @router.get("/jobs/{job_id}/check")

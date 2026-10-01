@@ -139,3 +139,13 @@ def test_break_any_minutes():
     for bad in ("4시간", "5시간 1분", "잠깐"):
         with pytest.raises(ValueError):
             sch.clean({"월": {"start": "17:00", "end": "21:00", "brk": bad}})
+
+
+def test_time_display():
+    """상담 자료와 증거에 쓰는 날짜·시각 표시: 연월일, 요일, 초까지 (한국 시간)."""
+    from app.calc.timeutil import fmt_date, fmt_dt, fmt_month
+    assert fmt_dt(datetime(2026, 10, 1, 2, 48, 5)) == "2026년 10월 1일 (목) 02:48:05"
+    assert fmt_dt(datetime(2026, 10, 1, 2, 48, 5), sec=False) == "2026년 10월 1일 (목) 02:48"
+    assert fmt_date(date(2026, 9, 30)) == "2026년 9월 30일 (수)"
+    assert fmt_month("2026-09") == "2026년 9월" and fmt_month("이상한값") == "이상한값"
+    assert fmt_dt(None) == "" and fmt_date(None) == ""

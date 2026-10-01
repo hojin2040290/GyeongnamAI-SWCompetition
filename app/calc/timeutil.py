@@ -44,3 +44,29 @@ def night_minutes(start: datetime, end: datetime, night_start: str, night_end: s
 
 def weekday_key(d: date) -> str:
     return DAY_KEYS[d.weekday()]
+
+
+WEEKDAYS = "월화수목금토일"
+
+
+def fmt_date(d) -> str:
+    """'2026년 10월 1일 (목)'. 없으면 빈 글."""
+    if not d:
+        return ""
+    return f"{d.year}년 {d.month}월 {d.day}일 ({WEEKDAYS[d.weekday()]})"
+
+
+def fmt_dt(dt, sec: bool = True) -> str:
+    """'2026년 10월 1일 (목) 02:48:05' (한국 시간). 증거와 상담 자료에 쓰므로 초까지 적는다."""
+    if not dt:
+        return ""
+    return f"{fmt_date(dt)} {dt:%H:%M:%S}" if sec else f"{fmt_date(dt)} {dt:%H:%M}"
+
+
+def fmt_month(month: str) -> str:
+    """'2026-09' → '2026년 9월'. 모양이 다르면 그대로."""
+    try:
+        y, m = str(month).split("-")
+        return f"{int(y)}년 {int(m)}월"
+    except ValueError:
+        return str(month)
