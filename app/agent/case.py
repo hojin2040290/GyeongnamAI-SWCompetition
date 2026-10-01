@@ -19,6 +19,15 @@ def _count(rows: list[dict], status: str) -> int:
     return sum(r.get("status") == status for r in rows)
 
 
+def tone_of(statuses: list) -> str:
+    """판단 결과들로 칸 색을 정한다: 위반 의심이 하나라도 있으면 bad, 확인 필요나 AI 판단 대기가 있으면 warn, 모두 정상이면 ok."""
+    if "bad" in statuses:
+        return "bad"
+    if "warn" in statuses or "pending" in statuses:
+        return "warn"
+    return "ok" if statuses else "none"
+
+
 def check_detail(items: list[dict]) -> str:
     """점검 칸 요약. AI 판단을 기다리는 항목은 있을 때만 적는다 (0건이면 대기 중인 것처럼 보이지 않게)."""
     text = f"위반 의심 {_count(items, 'bad')}, 확인 필요 {_count(items, 'warn')}"
@@ -37,18 +46,27 @@ def progress(s: Session, job: Job) -> list[dict]:
     pays = [json.loads(p.results_json) for p in s.exec(select(CheckRun).where(CheckRun.job_id == job.id,
                                                                            CheckRun.kind == "payday")).all()]
     short = len({p["month"] for p in pays if p["compare"].get("short")})
+    latest_pay: dict[str, dict] = {}
+    for p in pays:  # 달마다 가장 최근 비교 (뒤에 저장된 것이 최근)
+        latest_pay[p["month"]] = p["compare"]
     reports = s.exec(select(Report).where(Report.job_id == job.id)).all()
     posts = s.exec(select(GuardPost).where(GuardPost.job_id == job.id)).all()
+    pay_status = [c.get("status") for c in latest_pay.values()]
+    suspect = sum(p.status == "suspect" for p in posts)
+    waiting_posts = sum(p.status == "pending" for p in posts)
+    # tone: 칸 색 (ok 문제 없음, warn 확인 필요, bad 문제 의심, info 상태만 알림, none 아직 안 함)
     return [
-        {"key": "check", "name": "점검", "done": bool(check),
+        {"key": "check", "name": "점검", "done": bool(check), "tone": tone_of([i["status"] for i in items]) if check else "none",
          "detail": check_detail(items) if check else "아직 안 함"},
-        {"key": "record", "name": "기록", "done": bool(days or evs), "detail": f"근무 {days}일, 증거 자료 {evs}개"},
+        {"key": "record", "name": "기록", "done": bool(days or evs), "tone": "info" if days or evs else "none", "detail": f"근무 {days}일, 증거 자료 {evs}개"},
         {"key": "pay", "name": "급여", "done": bool(pays),
+         "tone": ("bad" if short else tone_of(pay_status)) if pays else "none",
          "detail": f"점검한 달 {len({p['month'] for p in pays})}, 적게 받은 달 {short}" if pays else "아직 안 함"},
-        {"key": "report", "name": "상담 자료", "done": bool(reports), "detail": f"{len(reports)}개" if reports else "아직 안 만듦"},
-        {"key": "reported", "name": "신고", "done": job.reported, "detail": "신고했어요" if job.reported else "아직 안 함"},
+        {"key": "report", "name": "상담 자료", "done": bool(reports), "tone": "info" if reports else "none", "detail": f"{len(reports)}개" if reports else "아직 안 만듦"},
+        {"key": "reported", "name": "신고", "done": job.reported, "tone": "info" if job.reported else "none", "detail": "신고했어요" if job.reported else "아직 안 함"},
         {"key": "guard", "name": "보호", "done": job.reported and bool(posts),
-         "detail": f"확인한 게시물 {len(posts)}, 보복 의심 {sum(p.status == 'suspect' for p in posts)}"
+         "tone": ("bad" if suspect else "warn" if waiting_posts else "ok" if posts else "info") if job.reported else "none",
+         "detail": f"확인한 게시물 {len(posts)}, 보복 의심 {suspect}"
          if job.reported else "신고 뒤 시작"},
     ]
 
