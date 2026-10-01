@@ -19,8 +19,8 @@ from app.auth import current_user
 from app.config import BASE_DIR, SECRET_KEY
 from app.db import engine, init_db
 from app.law.fetch import load_notices
-from sqlmodel import Session
-from app.models import User
+from sqlmodel import Session, select
+from app.models import LawArticle, User
 from app.routers.api import router as api_router
 
 
@@ -59,6 +59,25 @@ def prepare_test_data(log: logging.Logger) -> None:
         log.error("시험 데이터를 만들지 못했어요: %s", (out.stderr or out.stdout)[-500:])
 
 
+def refresh_laws_on_start(log: logging.Logger) -> None:
+    """켤 때 법제처 API로 법령 현행 판을 확인해, 바뀐 법령(또는 아직 없는 법령)을 받아 법 기준표에 저장한다.
+    법이 바뀌어도 예전 조문으로 판단하지 않게 하려는 것이다. 실패해도 서버는 켠다 (로그에 남김)."""
+    if not config.LAW_REFRESH_ON_START:
+        return
+    if not config.LAW_OC:
+        log.warning("법제처 키(LAW_OC)가 없어 법령 변경을 확인하지 못했어요. .env에 LAW_OC를 넣어 주세요")
+    else:
+        log.info("법제처에서 법령이 바뀌었는지 확인하는 중이에요")
+        result = scheduler.refresh_law_table()
+        if isinstance(result, str):
+            log.warning("법령 변경 확인: %s", result)
+        else:
+            log.info("법령 변경 확인: %s", "바뀐 법령을 받아 저장했어요 (" + ", ".join(result) + ")" if result else "바뀐 법령 없음")
+    with Session(engine) as s:
+        n = len(s.exec(select(LawArticle.id)).all())
+    log.info("법 기준표: 조문 %d개", n) if n else log.warning("법 기준표가 비어 있어요 (조문 0개)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log = logging.getLogger("uvicorn.error")
@@ -71,6 +90,7 @@ async def lifespan(app: FastAPI):
         log.warning("가짜 AI(시험용)가 답해요. AI가 쓰는 글은 모두 '테스트 답변입니다 (...)'예요. "
                     "실제 모델을 쓰려면 .env에 LLM_ENABLED=true와 LLM_MODEL을 넣으세요")
     init_db()
+    refresh_laws_on_start(log)
     with Session(engine) as s:
         notices.tidy(s)  # 예전 알림 정리 (같은 종류는 최근 것만, 오래전에 읽은 알림은 지움)
         load_notices(s)  # 법제처에서 불러온 최저임금 고시 (판단 근거로 붙임)

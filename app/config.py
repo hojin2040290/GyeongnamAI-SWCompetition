@@ -95,6 +95,9 @@ LOGIN_MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", "5"))
 LOGIN_IP_MAX_FAILS = int(os.getenv("LOGIN_IP_MAX_FAILS", "20"))
 LOGIN_LOCK_MIN = int(os.getenv("LOGIN_LOCK_MIN", "15"))
 
+# 서버를 켤 때 법제처 API로 법령이 바뀌었는지 확인하고 바뀐 법령을 받아 법 기준표에 저장한 뒤 시작한다 (LAW_OC 필요)
+LAW_REFRESH_ON_START = os.getenv("LAW_REFRESH_ON_START", "true").strip().lower() != "false"
+
 # 정기 점검 시각 (매일 이 시각에 에이전트가 스스로 시작)
 SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "9"))
 

@@ -364,3 +364,20 @@ def test_saved_settlement_survives_next_day(c):
     # 받았다고 바꾸면(규칙 결과가 달라지면) 예전 판단을 쓰지 않는다
     with Session(engine) as s:
         assert saved_settlement(s, jid, {**today, "rule_status": "ok"})["status"] == "pending"
+
+
+def test_laws_refreshed_on_start(monkeypatch, caplog):
+    """서버를 켤 때 법제처에서 바뀐 법령을 받아 저장한 뒤 시작한다 (법이 바뀌어도 예전 조문으로 판단하지 않게)."""
+    import logging
+
+    from app import config, main, scheduler
+    called = []
+    monkeypatch.setattr(config, "LAW_REFRESH_ON_START", True)
+    monkeypatch.setattr(config, "LAW_OC", "가상키")
+    monkeypatch.setattr(scheduler, "refresh_law_table", lambda: called.append(1) or ["근로기준법"])
+    caplog.set_level(logging.INFO)
+    main.refresh_laws_on_start(logging.getLogger("test"))
+    assert called and "바뀐 법령을 받아 저장했어요 (근로기준법)" in caplog.text
+    monkeypatch.setattr(config, "LAW_OC", "")  # 키가 없으면 확인하지 못했다고 알린다
+    main.refresh_laws_on_start(logging.getLogger("test"))
+    assert len(called) == 1 and "LAW_OC" in caplog.text
