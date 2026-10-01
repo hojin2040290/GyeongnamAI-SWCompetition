@@ -28,6 +28,13 @@ cd ~/Documents/GyeongnamAI-SWCompetition && .venv/bin/python -m app.demo_db --fo
 
 `data/test`만 지우고 다시 만들며, 알바마다 만든 내용, 코드가 계산한 금액, 기대 결과를 터미널에 출력합니다.
 
+### 법 기준표
+시험 데이터를 만들 때 평소 DB(`data/app.db`)의 법 기준표를 읽기만 해서 복사합니다. 출력 첫 줄의 `법 기준표: 평소 DB에서 N건 복사`를 확인합니다.
+- 법 기준표가 없으면 에이전트가 조문을 확인하지 못합니다 (`get_article`이 '법 기준표 미구축').
+- 법 기준표 복사 기능 전에 만든 시험 데이터에는 법 기준표가 없으니 `--force`로 다시 만듭니다.
+- '복사하지 못했어요'가 나오면 평소 DB에도 없는 것이니, 시험 DB에 직접 만듭니다 (`.env`에 `LAW_OC` 필요):
+  `cd ~/Documents/GyeongnamAI-SWCompetition && TEST_DATA=true .venv/bin/python -m app.law.fetch`
+
 ### 시험 데이터에 들어 있는 것
 | 알바 | 시험할 경우 | 넣어 둔 기록과 사진 |
 |---|---|---|
