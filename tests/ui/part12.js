@@ -73,6 +73,12 @@ const finish = async (p, box) => { await until(p, b=>!!document.querySelector(b+
   await p.evaluate(()=>document.querySelector('#quitPanel').scrollIntoView()); await p.screenshot({path:'p12_quit.png'});
   await p.reload(); await p.waitForSelector('#app:not(.hidden)'); await p.waitForTimeout(1000);
   ck('[퇴직 정산] 다시 열어도 에이전트 동작 보기', (await p.textContent('#quitLive')).includes('에이전트 동작 보기'));
+  // 남은 임금 받았어요: 다시 판단하고, 받았다는 기록이 위반 의심으로 바뀌지 않음
+  await p.click('#paidYes'); await finish(p,'#quitLive');
+  ck('[퇴직 정산] 받았어요 뒤 위반 의심이 아님', !(await p.textContent('#quitTag')).includes('위반') && (await p.textContent('#quitText')).includes('받았다고'),
+     await p.textContent('#quitTag'));
+  ck('[퇴직 정산] 받았어요 뒤 AI가 받은 기록을 봄', ((await p.textContent('#quitAi'))||'').includes('받았다고 기록했어요'));
+  await p.evaluate(()=>document.querySelector('#quitPanel').scrollIntoView()); await p.screenshot({path:'p12_paid.png'});
 
   // 상담 사전 자료에도 항목별 AI 에이전트 판단
   await tab(p,'docs'); await p.click('#reportBtn');

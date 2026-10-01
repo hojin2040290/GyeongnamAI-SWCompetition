@@ -136,6 +136,11 @@ def _summary(items: list[dict]) -> str:
 def apply_one(s: Session, target: dict, out: dict | None, error: str = "") -> dict:
     """AI의 판단 하나(급여, 퇴직 정산)를 붙이고 검증 장치로 확인한다. AI가 없으면 대기로 둔다."""
     law, fact = str((out or {}).get("law", "")).strip(), str((out or {}).get("fact", "")).strip()
+    if out and out.get("status") == engine.BAD and target.get("rule_status") == engine.OK:
+        # 검증 장치가 돌려보냈는데도(또는 마지막 반복이라) 코드 계산·기록과 맞지 않는 위반 의심이면 받지 않는다
+        target.update(status=engine.OK, ai_error="AI 판단이 코드 계산과 기록에 맞지 않아 받지 않았어요")
+        target.pop("ai_reason", None)
+        return engine.cross_check([target])[0]
     if out and out.get("status") in (engine.OK, engine.WARN, engine.BAD) and fact and known_law(s, law):
         target.update(status=out["status"], ai_reason=scrub(str(out.get("reason", "")))[:300], ai_law=law, ai_fact=fact[:300])
         target.pop("ai_error", None)
@@ -277,8 +282,12 @@ def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "
     if not r.tools["settlement"]():
         r.done({}, "그만둔 사업장이 아니에요")
         return None
-    goal = Goal("사용자가 일을 그만뒀어요. settlement로 임금 지급 기한을 확인하고, 기한 안에 받지 못한 것이 의심되는지 판단해 "
-                "finish에 담아 주세요. 기한이 지났거나 3일 안으로 다가왔는데 받았다는 기록이 없으면 사용자에게 알려 주세요.",
+    goal = Goal("사용자가 일을 그만뒀어요. settlement로 임금 지급 기한과 받음 여부를 확인하고, 남은 임금을 기한 안에 받지 못한 것이 "
+                "의심되는지 판단해 finish에 담아 주세요. 판단 기준: 사용자가 받았다고 기록했으면 기한이 지났어도 ok "
+                "(받은 것을 체불로 보지 않아요). 기한이 남았고 못 받았으면 warn. 기한이 지났고 못 받았다고 기록했으면 bad. "
+                "기한이 지났는데 받았는지 기록하지 않았으면 추측하지 말고 warn으로 두고, 받았는지 기록해 달라고 알려 주세요. "
+                "근거 조항은 settlement의 '관련 조항'에서, 사실은 settlement의 '사실'에서 가져오세요. "
+                "받았다는 기록이 없는데 기한이 지났거나 3일 안으로 다가왔으면 사용자에게 알려 주세요.",
                 ["get_profile", "settlement", "get_article", "notify"], JUDGE_ONE, list(JUDGE_ONE),
                 check=r.need("settlement", "먼저 settlement로 지급 기한을 확인해 주세요"),
                 review=lambda a: r.tools["review_one"](r.state["settlement"], a))
