@@ -376,3 +376,5 @@ em.hint.bad{color:var(--bad)}
 /* 계약서에 적힌 내용: 무엇을 적는지 칸 안에 흐린 글씨로 (두 줄까지 보이게) */
 textarea.input.field-area{min-height:0;resize:none;line-height:1.45;overflow:hidden}
 #fieldsBox .input::placeholder{color:var(--ink-soft);opacity:.55}
+.pay-item .pay-at{display:block;font-size:12px;margin-top:2px}
+.log .log-at{font-size:12px;margin-right:2px}

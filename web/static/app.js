@@ -29,7 +29,17 @@ function slotsOf(v){ return Array.isArray(v)?v:(v?[v]:[]); }  // 한 요일의 �
 function dayMinutes(v){ return slotsOf(v).reduce((a,s)=>a+slotMinutes(s),0); }
 function isNight(s){ let a=toMin(s.start), b=toMin(s.end); if(b<=a) b+=1440; for(let t=a;t<b;t+=30){ const x=t%1440; if(x>=1320||x<360) return true; } return false; }
 function fmtH(min){ const h=Math.floor(min/60), m=min%60; return m?`${h}시간 ${m}분`:`${h}시간`; }
-function fmtDT(iso){ const d=new Date(iso); return `${d.getMonth()+1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+// 날짜와 시각 표시. 서버가 준 한국 시각 글자를 그대로 읽는다 (브라우저 시간대로 바꾸지 않음).
+// 올해가 아니면 연도를 붙이고, 증거(출퇴근, 올린 자료, 보존한 게시물)는 초까지 적는다
+const WD='일월화수목금토';
+function parseDT(s){ const m=String(s||'').match(/(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/); if(!m) return null;
+  return {y:+m[1], mo:+m[2], d:+m[3], h:m[4]??'00', mi:m[5]??'00', s:m[6]??'00'}; }
+function fmtDay(s,{wd=true}={}){ const t=parseDT(s); if(!t) return '';
+  const yr=t.y!==new Date().getFullYear()?`${t.y}년 `:''; const w=WD[new Date(Date.UTC(t.y,t.mo-1,t.d)).getUTCDay()];
+  return `${yr}${t.mo}월 ${t.d}일${wd?` (${w})`:''}`; }
+function fmtTime(s,{sec=false}={}){ const t=parseDT(s); return t?`${t.h}:${t.mi}${sec?':'+t.s:''}`:''; }
+function fmtDT(s,{sec=false,wd=false}={}){ return parseDT(s)?`${fmtDay(s,{wd})} ${fmtTime(s,{sec})}`:''; }
+function fmtMonth(m){ const x=String(m||'').match(/^(\d{4})-(\d{2})$/); return x?`${x[1]}년 ${+x[2]}월`:String(m||''); }
 function won(n){ return (n ?? 0).toLocaleString()+'원'; }
 function ageOn(dateStr){
   if(!state.me) return null;
@@ -757,7 +767,7 @@ $('#punchBtn').onclick=async()=>{
       r=await punch({...(pos||{}), confirm:true});
     }
     $('#punchLive').innerHTML=r.shift?.trace?traceHTML(r.shift.trace):'';
-    const t=fmtDT(r.server_time);
+    const t=fmtDT(r.server_time,{sec:true});
     setPunchUI(r.action==='in', r.action==='in'?`${t} 출근 기록됨${pos?', 위치 함께 기록':''}`:`${t} 퇴근 기록됨`);
     if(r.shift) renderShift(r.shift);
     await refreshRecords(false);
@@ -779,7 +789,7 @@ function thisMonth(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.get
 async function refreshRecords(updateState=true){
   const r=await api('GET',`/api/jobs/${state.current}/records`);
   const live=r.records.filter(x=>!x.void), open=live.find(x=>!x.clock_out), last=live.find(x=>x.clock_out);
-  if(updateState) setPunchUI(r.working, open?`${fmtDT(open.clock_in)} 출근 기록됨`:(last?`마지막 퇴근 ${fmtDT(last.clock_out)}`:'아직 출근 기록이 없어요'));
+  if(updateState) setPunchUI(r.working, open?`${fmtDT(open.clock_in,{sec:true})} 출근 기록됨`:(last?`마지막 퇴근 ${fmtDT(last.clock_out,{sec:true})}`:'아직 출근 기록이 없어요'));
   else setPunchUI(r.working, $('#clockState').textContent);
   const box=$('#openAlert');
   if(open && open.hours>=r.open_alert_hours){
@@ -793,12 +803,14 @@ async function refreshRecords(updateState=true){
 function renderRecords(recs){
   $('#recordsEmpty').classList.toggle('hidden',recs.length>0); $('#recordsPanel').classList.toggle('hidden',!recs.length);
   $('#records').innerHTML=recs.map(x=>{
-    const when=`${fmtDT(x.clock_in).split(' ')[2]} 출근, ${x.clock_out?fmtDT(x.clock_out).split(' ')[2]+' 퇴근':(x.void?'퇴근 없음':'근무 중')}`;
+    // 출퇴근은 증거라 초까지. 밤을 넘겨 퇴근하면 퇴근 날짜도 적는다
+    const outDay=x.clock_out&&x.clock_out.slice(0,10)!==x.clock_in.slice(0,10)?fmtDay(x.clock_out,{wd:false})+' ':'';
+    const when=`${fmtTime(x.clock_in,{sec:true})} 출근, ${x.clock_out?outDay+fmtTime(x.clock_out,{sec:true})+' 퇴근':(x.void?'퇴근 없음':'근무 중')}`;
     const side=x.void
       ? `<button class="btn ghost small rec-act" data-unvoid="${x.id}">표시 취소</button>`
       : `<span class="tag rec-gps ${x.gps?'ok':'warn'}">${x.gps?'위치 기록':'위치 미기록'}</span><button class="link muted small rec-act" data-void="${x.id}">실수로 누름</button>`;
-    const note=x.void?`<div class="sub void-note">실수로 표시함 (${fmtDT(x.void_at)}), ${esc(x.void_reason)}. 급여 계산과 점검에서 빠져요</div>`:'';
-    return `<li class="${x.void?'void':''}"><div class="main"><strong class="num">${fmtDT(x.clock_in).split(' ').slice(0,2).join(' ')}</strong>
+    const note=x.void?`<div class="sub void-note">실수로 표시함 (${fmtDT(x.void_at,{sec:true})}), ${esc(x.void_reason)}. 급여 계산과 점검에서 빠져요</div>`:'';
+    return `<li class="${x.void?'void':''}"><div class="main"><strong class="num">${fmtDay(x.clock_in)}</strong>
       <div class="sub num rec-time">${when}</div>${note}</div>${side}</li>`;
   }).join('');
 }
@@ -870,8 +882,8 @@ async function loadPayslips(){
   const ps=await api('GET',`/api/jobs/${state.current}/payslips`); state.payslips=ps;
   const months=[...new Set(ps.map(p=>p.month))];
   $('#payslips').innerHTML=months.length?months.map(m=>{ const rows=ps.filter(p=>p.month===m), sum=rows.reduce((a,p)=>a+p.amount,0);
-    return `<li class="pay-month"><div class="main"><strong class="num">${esc(m)}</strong>${rows.length>1?`<span class="sub num"> 합계 ${won(sum)} (${rows.length}건)</span>`:''}
-      ${rows.map(p=>`<div class="pay-item"><span class="num">${won(p.amount)}${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">명세서 원본</a>`:''}</span>
+    return `<li class="pay-month"><div class="main"><strong class="num">${esc(fmtMonth(m))}분</strong>${rows.length>1?`<span class="sub num"> 합계 ${won(sum)} (${rows.length}건)</span>`:''}
+      ${rows.map(p=>`<div class="pay-item"><span class="num">${won(p.amount)}${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">명세서 원본</a>`:''}<span class="sub pay-at">${fmtDT(p.created_at,{sec:true})} 저장</span></span>
         <span class="row-btns"><button class="btn ghost small" data-edit="${p.id}" data-amt="${p.amount}">고치기</button><button class="btn ghost small danger" data-del="${p.id}" data-m="${esc(m)}">지우기</button></span></div>`).join('')}</div></li>`; }).join('')
     :'<li><span class="sub">아직 저장한 받은 급여가 없어요</span></li>';
   $$('#payslips [data-edit]').forEach(b=>b.onclick=async()=>{ const v=prompt('고친 금액을 원 단위 숫자로 적어 주세요',b.dataset.amt); if(v===null) return;
@@ -926,7 +938,7 @@ async function loadCheck(){
     const run=bindChars(i, r?.chars, ()=>toast(`${k}에는 ${r.allowed}만 쓸 수 있어요`));
     run(); grow();  // 예전에 저장된 값에 쓸 수 없는 글자가 있으면 화면에서 빼 둔다 (점검하기를 누르면 이 값으로 저장)
     i.addEventListener('input',()=>{ grow(); autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved'); }); });
-  const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items); $('#checkTrace').innerHTML='';
+  const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items, r.created_at); $('#checkTrace').innerHTML='';
   const ls=await api('GET','/api/law/status');
   const mw=(ls.min_wage?` 최저임금 ${ls.min_wage.year}년 시간급 ${won(ls.min_wage.value)}, 근거 고시: ${ls.min_wage.source}.`:'')
     +(ls.min_wage_missing_years?.length?` ${ls.min_wage_missing_years.join(', ')}년 최저임금 값은 아직 등록 전이에요.`:'');
@@ -934,7 +946,8 @@ async function loadCheck(){
     :'법 기준표 미구축: 법제처 API 키를 등록하고 조문을 불러오면 결과마다 조문 원문이 붙어요.';
   await loadLog();
 }
-function renderCheck(items){
+function renderCheck(items, at){
+  $('#checkAt').textContent=items&&at?`마지막 점검 ${fmtDT(at,{sec:true,wd:true})}`:'';
   if(!items){ $('#checkSummary').innerHTML=''; $('#checkItems').innerHTML='<p class="sub">아직 점검하지 않았어요. 계약서 내용을 확인하고 점검해 보세요.</p>'; return; }
   const c=s=>items.filter(i=>i.status===s).length;
   // AI 판단 전에는 확인 중과 확인 필요만, AI가 판단하면 정상과 위반 의심도 보여 준다
@@ -943,7 +956,7 @@ function renderCheck(items){
   const order={bad:0,warn:1,pending:2,ok:3}; $('#checkItems').innerHTML=[...items].sort((a,b)=>order[a.status]-order[b.status]).map(itemHTML).join('');
 }
 async function loadLog(){ const logs=await api('GET',`/api/jobs/${state.current}/agent/log`);
-  $('#agentLog').innerHTML=logs.length?logs.map(l=>`<div class="log"><b>${esc(EVENT[l.event]||l.event)} ${esc(l.step)}</b> ${esc(l.detail)}</div>`).join(''):'<p class="sub">기록이 없어요</p>'; }
+  $('#agentLog').innerHTML=logs.length?logs.map(l=>`<div class="log"><span class="sub log-at">${fmtDT(l.at,{sec:true})}</span> <b>${esc(EVENT[l.event]||l.event)} ${esc(l.step)}</b> ${esc(l.detail)}</div>`).join(''):'<p class="sub">기록이 없어요</p>'; }
 // 계약서 사진: 원본 저장 후 AI(비전 모델)가 읽은 값을 칸에 채운다. 저장은 사용자가 확인한 내용으로.
 // 계약서가 여러 장이면 한 번에 골라도 된다. 장마다 원본으로 저장하고 AI가 읽어, 앞 장에서 채운 칸은 뒤 장이 덮어쓰지 않는다
 $('#contractFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.length) return;
@@ -973,7 +986,7 @@ $('#fieldsBox').addEventListener('input',()=>{ fieldsCache[state.current]=readFi
 $('#checkRun').onclick=async()=>{
   fieldsCache[state.current]=readFields(); pendingSaves.delete(`fields-${state.current}`); clearTimeout(saveTimers[`fields-${state.current}`]);
   try{ await saveFields(state.current); $('#fieldsSaved').textContent='자동 저장됨'; const r=await agent('#checkTrace',()=>api('POST',`/api/jobs/${state.current}/check`));
-    renderCheck(r.items); $('#checkTrace').innerHTML=traceHTML(r.trace); await loadLog(); toast('점검을 마쳤어요'); }catch(e){ toast(e.message); }
+    renderCheck(r.items, r.created_at); $('#checkTrace').innerHTML=traceHTML(r.trace); await loadLog(); toast('점검을 마쳤어요'); }catch(e){ toast(e.message); }
 };
 
 // 자료
@@ -982,12 +995,12 @@ async function loadDocs(){
   // 파일로 올린 자료, 사업장 등록 전에 올린 공고, 주소와 확인 시각만 남긴 게시물을 모두 보여 준다
   $('#evList').innerHTML=evs.length?evs.map(e=>e.file
     ?`<li><div class="main"><strong>${esc(KIND[e.kind]||e.kind)}${e.before_job?' (지원 전)':''}</strong>
-      <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at)} 올림</div><a class="ev-link" href="/api/evidence/${e.id}/file" target="_blank">원본 보기</a></div><span class="tag ok">원본</span></li>`
+      <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at,{sec:true})} 올림</div><a class="ev-link" href="/api/evidence/${e.id}/file" target="_blank">원본 보기</a></div><span class="tag ok">원본</span></li>`
     :`<li><div class="main"><strong>게시물 주소</strong>
-      <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at)} 확인</div>${safeUrl(e.note)!=='#'?`<a class="ev-link" href="${esc(e.note)}" target="_blank" rel="noopener noreferrer">게시물 열기</a>`:''}</div><span class="tag warn">주소만</span></li>`).join('')
+      <div class="sub">${esc(e.filename)}, ${fmtDT(e.uploaded_at,{sec:true})} 확인</div>${safeUrl(e.note)!=='#'?`<a class="ev-link" href="${esc(e.note)}" target="_blank" rel="noopener noreferrer">게시물 열기</a>`:''}</div><span class="tag warn">주소만</span></li>`).join('')
     :'<li><span class="sub">아직 올린 자료가 없어요</span></li>';
   const rs=await api('GET',`/api/jobs/${state.current}/reports`);
-  $('#reportList').innerHTML=rs.map(r=>`<li><div class="main"><strong>상담 사전 자료</strong><div class="sub">${fmtDT(r.created_at)} 작성</div></div><a class="ev-link" href="${esc(r.url)}" target="_blank">열기</a></li>`).join('');
+  $('#reportList').innerHTML=rs.map(r=>`<li><div class="main"><strong>상담 사전 자료</strong><div class="sub">${fmtDT(r.created_at,{sec:true})} 작성</div></div><a class="ev-link" href="${esc(r.url)}" target="_blank">열기</a></li>`).join('');
   $('#reportTrace').innerHTML='';
   const cs=await api('GET','/api/counsel');
   $('#counsel').innerHTML=cs.map(c=>`<div class="panel"><strong>${esc(c.name)}</strong><div class="sub">${esc(c.note)}</div><div class="num" style="margin-top:4px">${esc(c.phone)}</div></div>`).join('');
@@ -1020,7 +1033,7 @@ function renderGuard(g){
   $('#postList').innerHTML=g.posts.length?g.posts.map(p=>`<li class="post"><div class="main"><strong>${esc(p.title||'제목 없음')}</strong>
     <div class="sub"><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener noreferrer">${esc(p.url)}</a></div>
     ${p.ai_reason?`<div class="sub">AI 판별 근거: ${esc(p.ai_reason)}</div>`:''}
-    <div class="sub">${fmtDT(p.found_at)} 확인${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">보존한 화면</a>`:', 화면 캡처 없음'}</div></div>
+    <div class="sub">${fmtDT(p.found_at,{sec:true})} 확인${p.evidence_id?`, <a class="ev-link" href="/api/evidence/${p.evidence_id}/file" target="_blank">보존한 화면</a>`:', 화면 캡처 없음'}</div></div>
     <span class="tag ${st[p.status][0]}">${st[p.status][1]}</span></li>`).join(''):'<li><span class="sub">아직 확인한 게시물이 없어요</span></li>';
 }
 const MSG_SOURCE={ai:'AI가 이번 상황에 맞게 작성한 문구예요. 고쳐 써도 돼요.',
