@@ -68,7 +68,9 @@ def test_contract_check_uses_records_and_law_table(c):
         s.add(LawArticle(law_name="근로기준법", article_no="70", title="테스트 조문", text="테스트용 가상 조문 원문",
                          fetched_at=datetime(2026, 9, 29)))
         s.commit()
-    items = c.get(f"/api/jobs/{job_id}/check").json()["items"]
+    got = c.get(f"/api/jobs/{job_id}/check").json()
+    assert "ai" in got  # AI가 있으면 화면이 예전 대기 결과를 다시 점검한다
+    items = got["items"]
     night = [i for i in items if i["law"] == "근로기준법 제70조"][0]
     assert night["article"]["built"] and night["article"]["text"] == "테스트용 가상 조문 원문"
 
