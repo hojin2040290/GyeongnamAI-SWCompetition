@@ -1,5 +1,6 @@
 """정해진 시점에 에이전트를 스스로 시작시키는 예약 작업."""
 import json
+import logging
 from datetime import timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -13,6 +14,7 @@ from app.db import engine
 from app.llm import client as llm_client
 from app.models import AgentLog, AgentTask, CheckRun, GuardPost, Job, Report, WorkRecord
 
+log = logging.getLogger("uvicorn.error")  # 서버 로그에 보이게
 scheduler = BackgroundScheduler(timezone=TIMEZONE)
 
 
@@ -119,8 +121,12 @@ def retry_waiting() -> dict:
         for job in s.exec(select(Job)).all():
             for event, month in waiting_work(s, job):
                 if _retries_today(s, job.id, event) < AI_RETRY_PER_DAY:
-                    runs[event](s, job, month)
-                    done.append(f"{job.id}:{event}{':' + month if month else ''}")
+                    try:  # 한 사업장의 오류가 다른 사업장의 다시 맡기기를 막지 않게
+                        runs[event](s, job, month)
+                        done.append(f"{job.id}:{event}{':' + month if month else ''}")
+                    except Exception:
+                        s.rollback()
+                        log.exception("다시 맡기기 실패: 사업장 %s, %s", job.id, event)
     return {"retried": done}
 
 

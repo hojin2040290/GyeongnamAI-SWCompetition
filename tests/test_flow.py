@@ -313,3 +313,18 @@ def test_punch_out_then_shift_check(c):
     assert out["action"] == "out" and "shift" not in out and out["shift_record"]
     assert c.post(f"/api/jobs/{jid}/agent/shift?record_id={out['shift_record']}").json()["trace"]
     assert c.post(f"/api/jobs/{jid}/agent/shift?record_id=999999").status_code == 404
+
+
+def test_report_for_quit_job(c):
+    """그만둔 사업장의 상담 사전 자료 (퇴직일과 지급 기한이 들어간다)."""
+    jid = c.post("/api/jobs", json={**JOB, "name": "가상퇴직점", "start_date": "2026-08-01"}).json()["id"]
+    assert c.post(f"/api/jobs/{jid}/quit", json={"quit_date": "2026-09-20", "check": False}).status_code == 200
+    st = c.post(f"/api/jobs/{jid}/agent/quit").json()["settlement"]
+    rep = c.post(f"/api/jobs/{jid}/report")
+    assert rep.status_code == 200
+    html = c.get(f"/api/reports/{rep.json()['id']}").text
+    assert "퇴직일 2026년 9월 20일 (일)" in html
+    # 자료의 판단은 화면(/settlement)과 같다: AI가 판단했으면 그 결과, 아니면 확인 중
+    assert c.get(f"/api/jobs/{jid}/settlement").json()["settlement"]["status"] == st["status"]
+    assert ("확인 중" in html.split("퇴직일")[1].split("</p>")[0]) == (st["status"] == "pending")
+

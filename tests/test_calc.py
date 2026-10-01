@@ -149,3 +149,5 @@ def test_time_display():
     assert fmt_date(date(2026, 9, 30)) == "2026년 9월 30일 (수)"
     assert fmt_month("2026-09") == "2026년 9월" and fmt_month("이상한값") == "이상한값"
     assert fmt_dt(None) == "" and fmt_date(None) == ""
+    assert fmt_date("2026-09-30") == "2026년 9월 30일 (수)"  # JSON에 저장된 날짜 글
+    assert fmt_dt("2026-10-01T02:48:05") == "2026년 10월 1일 (목) 02:48:05"

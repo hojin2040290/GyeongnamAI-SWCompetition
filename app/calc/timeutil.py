@@ -49,10 +49,16 @@ def weekday_key(d: date) -> str:
 WEEKDAYS = "월화수목금토일"
 
 
+def _as_dt(v):
+    """날짜, 시각, ISO 글('2026-10-01', '2026-10-01T02:48:05')을 모두 받는다 (JSON에 저장된 값은 글이다)."""
+    return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+
 def fmt_date(d) -> str:
     """'2026년 10월 1일 (목)'. 없으면 빈 글."""
     if not d:
         return ""
+    d = _as_dt(d)
     return f"{d.year}년 {d.month}월 {d.day}일 ({WEEKDAYS[d.weekday()]})"
 
 
@@ -60,6 +66,7 @@ def fmt_dt(dt, sec: bool = True) -> str:
     """'2026년 10월 1일 (목) 02:48:05' (한국 시간). 증거와 상담 자료에 쓰므로 초까지 적는다."""
     if not dt:
         return ""
+    dt = _as_dt(dt)
     return f"{fmt_date(dt)} {dt:%H:%M:%S}" if sec else f"{fmt_date(dt)} {dt:%H:%M}"
 
 

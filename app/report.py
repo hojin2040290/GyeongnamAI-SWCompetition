@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlmodel import Session, select
 
 from app import storage
-from app.agent.tools import make_tools
+from app.agent.tools import make_tools, saved_settlement
 from app.calc import pay as paycalc
 from app.calc import schedule as sch
 from app.calc.age import age_on
@@ -52,6 +52,7 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
     evs = session.exec(select(Evidence).where(Evidence.job_id == job_id).order_by(Evidence.uploaded_at)).all()
     sched = sch.parse(job.schedule_json)
     settle = t["settlement"]()
+    settle = settle and saved_settlement(session, job_id, settle)  # AI가 판단했으면 그 결과
     counsel = t["counsel_for_age"]()
 
     rows = [summary_html(summary)]
