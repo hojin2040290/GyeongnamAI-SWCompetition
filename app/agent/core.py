@@ -79,8 +79,8 @@ class Run:
                        "예약한 확인": case.followups(self.s, self.job_id) or "없음"}
             if self.followup:
                 context["이번에 할 일"] = f"지난번에 예약한 확인이에요: {self.followup}"
-            goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice", "ask_user", "get_answers",
-                                                    "schedule_followup"])
+            goal = dataclasses.replace(goal, tools=[*goal.tools, "remember", "give_advice", *(["ask_user"] if goal.ask else []),
+                                                    "get_answers", "schedule_followup"])
         try:
             out = run_agent(self, goal, tools, context)
         except Exception as exc:  # 예상 못 한 오류는 요청을 멈추지 않고 AI 없이 하는 방식으로 넘긴다
@@ -285,12 +285,13 @@ def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "
     goal = Goal("사용자가 일을 그만뒀어요. settlement로 임금 지급 기한과 받음 여부를 확인하고, 남은 임금을 기한 안에 받지 못한 것이 "
                 "의심되는지 판단해 finish에 담아 주세요. 판단 기준: 사용자가 받았다고 기록했으면 기한이 지났어도 ok "
                 "(받은 것을 체불로 보지 않아요). 기한이 남았고 못 받았으면 warn. 기한이 지났고 못 받았다고 기록했으면 bad. "
-                "기한이 지났는데 받았는지 기록하지 않았으면 추측하지 말고 warn으로 두고, 받았는지 기록해 달라고 알려 주세요. "
+                "기한이 지났는데 받았는지 기록하지 않았으면 추측하지 말고 warn으로 두고, 홈의 퇴직 정산에서 '남은 임금 받았어요' 또는 "
+                "'아직 못 받았어요'를 눌러 기록해 달라고 notify로 알려 주세요 (받았는지는 질문으로 묻지 않아요). "
                 "근거 조항은 settlement의 '관련 조항'에서, 사실은 settlement의 '사실'에서 가져오세요. "
                 "받았다는 기록이 없는데 기한이 지났거나 3일 안으로 다가왔으면 사용자에게 알려 주세요.",
                 ["get_profile", "settlement", "get_article", "notify"], JUDGE_ONE, list(JUDGE_ONE),
                 check=r.need("settlement", "먼저 settlement로 지급 기한을 확인해 주세요"),
-                review=lambda a: r.tools["review_one"](r.state["settlement"], a))
+                review=lambda a: r.tools["review_one"](r.state["settlement"], a), ask=False)
     out = r.agent(goal, {})
     st = r.state.get("settlement") or r.call("settlement")
     st = apply_one(session, st, out, r.ai_error)

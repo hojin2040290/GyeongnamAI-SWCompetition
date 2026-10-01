@@ -89,6 +89,22 @@ PAID_TEXT = {True: "사용자가 남은 임금을 받았다고 기록했어요",
              None: "사용자가 남은 임금을 받았는지 아직 기록하지 않았어요"}
 
 
+AI_FIELDS = ("ai_reason", "ai_law", "ai_fact")
+
+
+def usable_pay(saved: dict) -> dict:
+    """저장된 급여 비교에서 지금 규칙에 맞지 않는 예전 AI 판단을 뺀다.
+    비교에 필요한 정보(근무 기록, 받은 금액, 시급)가 없으면 AI에게 체불 판단을 받지 않는데,
+    그 규칙 전에 저장된 판단이 화면에 다시 쓰이지 않게 한다 (결과는 코드가 정리한 '확인 필요' 그대로)."""
+    cmp = saved.get("compare") or {}
+    missing = [n for n in cmp.get("needed", []) if "AI" not in n]
+    if not (cmp.get("ai_reason") and missing):
+        return saved
+    clean = {k: v for k, v in cmp.items() if k not in AI_FIELDS}
+    clean["status"] = engine.WARN
+    return {**saved, "compare": clean}
+
+
 def saved_settlement(session: Session, job_id: int, st: dict) -> dict:
     """코드가 다시 계산한 퇴직 정산에, 같은 사실(기한, 규칙 결과)로 저장된 AI 판단이 있으면 그것을 쓴다.
     남은 날 수는 날마다 바뀌므로 비교하지 않고 오늘 값으로 바꿔 넣는다 (기한이 지났는지는 규칙 결과에 들어 있다)."""

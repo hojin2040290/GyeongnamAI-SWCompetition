@@ -11,7 +11,7 @@ from sqlmodel import Session, func, select
 
 from app import config, guard, input_rules, login_guard, notices, storage
 from app.agent import core
-from app.agent.tools import keywords_of, make_tools, saved_settlement
+from app.agent.tools import keywords_of, make_tools, saved_settlement, usable_pay
 from app.auth import check_password, current_user, hash_password
 from app.calc import bizno
 from app.calc import schedule as sch
@@ -349,7 +349,13 @@ def set_paid(job_id: int, data: PaidIn, u: User = Depends(current_user), s: Sess
     job = own_job(s, u, job_id)
     job.paid_after_quit = data.paid
     s.add(job)
+    # 받았는지 묻던 퇴직 정산 질문은 이 버튼으로 답한 것이므로 닫는다 (남겨 두면 답해도 질문이 그대로인 것처럼 보인다)
+    for q in s.exec(select(AgentQuestion).where(AgentQuestion.job_id == job_id, AgentQuestion.event == "quit_check",
+                                                AgentQuestion.status == "open")).all():
+        q.status, q.answer, q.answered_at = "answered", "받았어요 (버튼으로 기록)" if data.paid else "못 받았어요 (버튼으로 기록)", now_kst()
+        s.add(q)
     s.commit()
+    _clear_question_notice(s, u.id, job_id)
     return {"settlement": core.run_quit_check(s, u.id, job_id) if data.check else None, "saved": True}
 
 
@@ -759,7 +765,7 @@ def pay(job_id: int, month: str, u: User = Depends(current_user), s: Session = D
     now = {"month": month, "expected": exp, "paid": paid, "compare": t["compare_pay"](exp, paid)}
     out = _saved_judgment(s, job_id, "payday", now, lambda x: x.get("month") == month and x.get("paid") == paid
                           and x.get("expected") == json.loads(json.dumps(exp, default=str)))
-    return {**out, "ai": llm_client.available()}
+    return {**usable_pay(out), "ai": llm_client.available()}
 
 
 @router.post("/jobs/{job_id}/agent/payday")

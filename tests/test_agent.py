@@ -579,3 +579,52 @@ def test_paid_after_quit_is_not_violation(env, monkeypatch):
                        results_json=json.dumps({**st, "status": "bad", "ai_reason": said("예전 판단")}, ensure_ascii=False)))
         s.commit()
         assert saved_settlement(s, j, {**st, "status": "pending"})["status"] != "bad"
+
+
+def test_old_pay_judgment_without_records_is_not_shown(env):
+    """근무 기록이 없는 달에 예전 코드가 저장한 체불 판단은 급여 화면에 다시 쓰지 않는다 (지금 규칙: 정보가 없으면 AI 판단 안 받음)."""
+    from app.models import CheckRun
+    a, *_ = env
+    j = a.post("/api/jobs", json={**JOB, "name": "가상분식 예전판단점"}).json()["id"]
+    a.post(f"/api/jobs/{j}/payslip", data={"month": "2026-10", "amount": "557280", "check": "false"})
+    now = a.get(f"/api/jobs/{j}/pay?month=2026-10").json()
+    old = {k: v for k, v in now.items() if k != "ai"}
+    old["compare"] = {**now["compare"], "ai_reason": said("체불이 의심됩니다"), "ai_law": "근로기준법 제55조", "ai_fact": said("계산 0원")}
+    with Session(engine) as s:
+        s.add(CheckRun(user_id=s.get(Job, j).user_id, job_id=j, kind="payday", created_at=now_kst(),
+                       results_json=json.dumps(old, ensure_ascii=False, default=str)))
+        s.commit()
+    shown = a.get(f"/api/jobs/{j}/pay?month=2026-10").json()["compare"]
+    assert shown["status"] == "warn" and not shown.get("ai_reason") and not shown.get("ai_law")
+    assert "근무 기록" in shown["needed"]
+
+
+def test_quit_paid_question_does_not_loop(env, monkeypatch):
+    """퇴직 정산은 받았는지를 질문으로 묻지 않고(받음 여부는 전용 버튼으로 기록), 버튼을 누르면 열린 정산 질문이 닫힌다.
+    예전에는 질문에 '받았어요'로 답해도 받음 여부가 기록되지 않아 다시 점검할 때 같은 질문이 또 생겼다."""
+    from app.models import AgentQuestion
+    a, *_ = env
+    j = a.post("/api/jobs", json={**JOB, "name": "가상분식 질문점"}).json()["id"]
+    a.post(f"/api/jobs/{j}/quit", json={"quit_date": "2026-08-01", "check": False})
+
+    def asks(goal, done, tools):  # 받았는지 기록이 없으면 묻는 모델
+        st = called(done, "settlement")
+        if st is None:
+            return reply([("settlement", {})])
+        if "ask_user" in tools and "기록하지 않았어요" in st["받음 여부"] and not called(done, "ask_user"):
+            return reply([("ask_user", {"question": said("임금을 받았나요"), "options": ["받았어요", "받지 못했어요"],
+                                        "why": said("기한이 지남")})])
+        return reply([("finish", {"status": "warn", "law": st["관련 조항"][0], "fact": said("받았는지 기록 없음"),
+                                  "reason": said("확인 필요")})])
+    use(monkeypatch, asks)
+    open_qs = lambda: [q for q in a.get(f"/api/jobs/{j}/questions").json() if q["status"] == "open"]  # noqa: E731
+    a.post(f"/api/jobs/{j}/agent/quit")
+    assert not open_qs()  # 받음 여부는 질문으로 묻지 않는다
+    # 예전 코드가 만든 정산 질문이 남아 있어도, 버튼으로 받았다고 기록하면 닫힌다
+    with Session(engine) as s:
+        s.add(AgentQuestion(user_id=s.get(Job, j).user_id, job_id=j, event="quit_check", question=said("임금을 받았나요"),
+                            options_json='["받았어요","모름"]', why=said("기한이 지남"), status="open", created_at=now_kst()))
+        s.commit()
+    assert open_qs()
+    a.post(f"/api/jobs/{j}/paid", json={"paid": True, "check": False})
+    assert not open_qs()

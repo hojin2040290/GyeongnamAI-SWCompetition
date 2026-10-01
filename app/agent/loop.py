@@ -70,6 +70,7 @@ class Goal:
     finish_required: list = field(default_factory=list)
     check: Callable[[dict], str | None] | None = None  # 문제가 있으면 AI에게 돌려줄 말
     review: Callable[[dict], list[dict]] | None = None  # 검증 장치: 판단마다 문제를 찾아 AI에게 돌려준다
+    ask: bool = True  # False면 ask_user로 묻지 않는다 (화면에 따로 기록하는 버튼이 있는 정보)
 
     def finish_spec(self) -> dict:
         return Tool("finish", "목표를 이뤘을 때 결과를 내고 끝낸다.", lambda **_: None,
