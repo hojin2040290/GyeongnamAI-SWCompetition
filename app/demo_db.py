@@ -256,6 +256,34 @@ def check_images() -> None:
 
 
 # ---------- DB에 넣기 ----------
+LAW_TABLES = ("lawarticle", "lawsource", "lawdoc")  # 법 기준표 (python -m app.law.fetch로 평소 DB에 만든 것)
+
+
+def copy_law_table(target_db: Path, src: Path | None = None) -> int:
+    """평소 DB(data/app.db)의 법 기준표를 시험 DB로 복사한다. 평소 DB는 읽기만 한다.
+    시험 DB에 법 기준표가 없으면 get_article이 모두 '미구축'이라 에이전트가 조문을 확인하지 못한다."""
+    import sqlite3
+    src = src or ROOT / "data" / "app.db"
+    if not src.exists():
+        return 0
+    copied = 0
+    with sqlite3.connect(target_db) as dst:
+        s = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+        try:
+            for t in LAW_TABLES:
+                try:
+                    src_cols = [r[1] for r in s.execute(f"pragma table_info({t})")]
+                except sqlite3.Error:
+                    continue
+                cols = [c for c in (r[1] for r in dst.execute(f"pragma table_info({t})")) if c in src_cols]
+                if not cols:
+                    continue
+                rows = s.execute(f"select {','.join(cols)} from {t}").fetchall()
+                dst.executemany(f"insert into {t} ({','.join(cols)}) values ({','.join('?' * len(cols))})", rows)
+                copied += len(rows)
+        finally:
+            s.close()
+    return copied
 def _ok(r, what: str):
     if r.status_code != 200:
         raise SystemExit(f"{what}에 실패했어요: {r.status_code} {r.text[:300]}")
@@ -353,6 +381,9 @@ def main() -> None:
     from app.db import init_db
     from app.main import app
     init_db()
+    laws = copy_law_table(config.DB_PATH)
+    print(f"법 기준표: 평소 DB에서 {laws}건 복사" if laws else
+          "법 기준표: 평소 DB(data/app.db)에 없어 복사하지 못했어요. 시험 데이터로 켠 채 법 기준표를 만들 수 있어요 (TEST_DATA=true python -m app.law.fetch)")
     c = TestClient(app)  # 서버를 띄우지 않고 앱의 API를 부른다 (예약 작업은 돌지 않음)
     _ok(c.post("/api/auth/register", json={"email": EMAIL, "password": PASSWORD, "birth_date": BIRTH}), "가입")
     uid = _ok(c.get("/api/me"), "내 정보")["id"]

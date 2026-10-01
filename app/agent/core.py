@@ -101,8 +101,11 @@ class Run:
         return Tool("check_rules", desc, check_rules)
 
     def need(self, key: str, msg: str):
-        """finish 전에 꼭 거쳐야 할 도구를 확인한다."""
-        return lambda _args: None if self.state.get(key) is not None else msg
+        """finish 전에 꼭 거쳐야 할 도구를 확인한다. 반복이 끝나 갈 때 남은 할 일로 AI에게 알린다 (loop.pending)."""
+        def check(_args: dict) -> str | None:
+            return None if self.state.get(key) is not None else msg
+        check.pending_tool = True
+        return check
 
     def log(self, step: str, detail: str) -> None:
         self.trace.append({"step": step, "detail": detail[:300]})
@@ -363,7 +366,7 @@ def run_guard_toggle(session: Session, user_id: int, job_id: int, on: bool) -> d
     goal = Goal("사용자가 사업장을 노동관계법 위반으로 신고했어요. 보복을 막기 위해 사업주에게 보낼 안내 문구를 법 기준표의 조문을 "
                 "근거로 정중하게 써서 save_warning_message로 저장하고, 사용자에게 신고 후 보호를 시작했다고 알린 뒤 finish로 끝내 주세요.",
                 ["get_profile", "get_article", "save_warning_message", "notify"], DONE,
-                check=r.need("message", "먼저 save_warning_message로 안내 문구를 저장해 주세요"))
+                check=r.need("message", "먼저 save_warning_message로 안내 문구를 저장해 주세요"), ask=False)
     r.agent(goal, {"보복 금지 관련 조항": _retaliation_laws()})
     if not r.ai_used:
         r.call("notify", "신고 후 보호를 시작했어요", "사업주에게 보낼 기본 안내 문구를 준비했고, 매일 공개 게시물을 확인해요. "
