@@ -328,3 +328,10 @@ def test_report_for_quit_job(c):
     assert c.get(f"/api/jobs/{jid}/settlement").json()["settlement"]["status"] == st["status"]
     assert ("AI 에이전트 판단 대기" in html.split("퇴직일")[1].split("</p>")[0]) == (st["status"] == "pending")
 
+
+
+def test_progress_hides_zero_ai_waiting():
+    """진행 상황의 점검 칸: AI 판단 대기는 있을 때만 적는다."""
+    from app.agent.case import check_detail
+    assert check_detail([{"status": "warn"}, {"status": "bad"}]) == "위반 의심 1, 확인 필요 1"
+    assert check_detail([{"status": "pending"}]).endswith("AI 판단 대기 1")
