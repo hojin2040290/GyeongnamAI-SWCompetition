@@ -325,6 +325,7 @@ def delete_job(job_id: int, u: User = Depends(current_user), s: Session = Depend
 
 class QuitIn(BaseModel):
     quit_date: date
+    check: bool = True  # false면 저장만 하고 바로 응답 (점검은 /agent/quit으로 따로)
 
 
 @router.post("/jobs/{job_id}/quit")
@@ -335,11 +336,12 @@ def set_quit(job_id: int, data: QuitIn, u: User = Depends(current_user), s: Sess
     job.status, job.quit_date, job.paid_after_quit = "quit", data.quit_date, None
     s.add(job)
     s.commit()
-    return {"settlement": core.run_quit_check(s, u.id, job_id)}
+    return {"settlement": core.run_quit_check(s, u.id, job_id) if data.check else None, "saved": True}
 
 
 class PaidIn(BaseModel):
     paid: bool
+    check: bool = True
 
 
 @router.post("/jobs/{job_id}/paid")
@@ -348,7 +350,48 @@ def set_paid(job_id: int, data: PaidIn, u: User = Depends(current_user), s: Sess
     job.paid_after_quit = data.paid
     s.add(job)
     s.commit()
+    return {"settlement": core.run_quit_check(s, u.id, job_id) if data.check else None, "saved": True}
+
+
+# ---------- 저장 뒤 따로 부르는 에이전트 점검 ----------
+# 저장은 바로 끝내고(화면에 '저장했어요'), 시간이 걸리는 AI 점검은 화면이 이어서 따로 부른다.
+# 점검이 늦어지거나 연결이 끊겨도 저장한 값은 이미 남아 있다.
+@router.post("/jobs/{job_id}/agent/quit")
+def agent_quit(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """퇴직 정산 점검 (그만둔 날이나 받음 여부를 저장한 뒤)."""
+    own_job(s, u, job_id)
     return {"settlement": core.run_quit_check(s, u.id, job_id)}
+
+
+@router.post("/jobs/{job_id}/agent/shift")
+def agent_shift(job_id: int, record_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """그날 근무 점검 (퇴근을 기록한 뒤)."""
+    own_job(s, u, job_id)
+    rec = s.get(WorkRecord, record_id)
+    if not rec or rec.job_id != job_id or not rec.clock_out:
+        raise HTTPException(404, "퇴근한 근무 기록을 찾을 수 없어요")
+    return core.run_shift_check(s, u.id, job_id, rec.id)
+
+
+@router.post("/jobs/{job_id}/agent/read")
+def agent_read(job_id: int, evidence_id: int, kind: str, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """올려 둔 계약서나 명세서 사진을 AI가 읽는다 (원본을 저장한 뒤)."""
+    own_job(s, u, job_id)
+    if kind not in ("contract", "payslip"):
+        raise HTTPException(400, "사진 종류가 맞지 않아요")
+    ev = s.get(Evidence, evidence_id)
+    if not ev or ev.user_id != u.id or ev.job_id != job_id:
+        raise HTTPException(404, "올린 사진을 찾을 수 없어요")
+    return _read_result(s, u, job_id, ev, kind)
+
+
+def _read_result(s: Session, u: User, job_id: int, ev: Evidence, kind: str) -> dict:
+    res = core.run_read_image(s, u.id, job_id, ev.id, kind)
+    if kind == "payslip":
+        return {**res, "evidence_id": ev.id}
+    fields = res.get("fields") or {k: "" for k in P()["written_terms"]["items"]}
+    return {"evidence": ev_out(ev), "fields": fields, "ai": res.get("ai", False), "found": res.get("found", 0),
+            "total": len(fields), "reason": res.get("reason", ""), "trace": res["trace"]}
 
 
 def _saved_judgment(s: Session, job_id: int, kind: str, now: dict, same) -> dict:
@@ -379,6 +422,7 @@ class PunchIn(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     confirm: bool = False  # 확인 질문에 '예'라고 답하고 다시 보낸 요청
+    check: bool = True  # false면 기록만 하고 바로 응답 (퇴근 뒤 근무 점검은 /agent/shift로 따로)
 
 
 def rec_out(r: WorkRecord) -> dict:
@@ -426,8 +470,10 @@ def punch(job_id: int, data: PunchIn, u: User = Depends(current_user), s: Sessio
         action = "in"
     s.commit()
     out = {"action": action, "server_time": t.isoformat(), "record": rec_out(rec)}
-    if action == "out":
+    if action == "out" and data.check:
         out["shift"] = core.run_shift_check(s, u.id, job_id, rec.id)  # 퇴근한 순간 에이전트가 그날 기록을 점검
+    elif action == "out":
+        out["shift_record"] = rec.id  # 화면이 이 번호로 근무 점검을 이어서 부른다
     return out
 
 
@@ -533,15 +579,14 @@ def evidence_file(ev_id: int, u: User = Depends(current_user), s: Session = Depe
 
 # ---------- 계약서 점검 ----------
 @router.post("/jobs/{job_id}/contract")
-async def upload_contract(job_id: int, file: UploadFile = File(...), u: User = Depends(current_user),
-                          s: Session = Depends(get_session)):
+async def upload_contract(job_id: int, file: UploadFile = File(...), read: bool = Form(True),
+                          u: User = Depends(current_user), s: Session = Depends(get_session)):
     own_job(s, u, job_id)
     ev = await store_upload(s, u, job_id, "contract", file)
+    if not read:  # 원본만 저장하고 바로 응답 (읽기는 /agent/read로 따로)
+        return {"evidence": ev_out(ev), "saved": True}
     # 비전 모델이 읽은 값은 화면에 채우기만 하고, 사용자가 확인한 뒤 저장한다 (연결 전이면 직접 입력)
-    res = core.run_read_image(s, u.id, job_id, ev.id, "contract")
-    fields = res.get("fields") or {k: "" for k in P()["written_terms"]["items"]}
-    return {"evidence": ev_out(ev), "fields": fields, "ai": res.get("ai", False), "found": res.get("found", 0),
-            "total": len(fields), "reason": res.get("reason", ""), "trace": res["trace"]}
+    return _read_result(s, u, job_id, ev, "contract")
 
 
 class FieldsIn(BaseModel):
@@ -617,7 +662,7 @@ def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depen
 # ---------- 급여 ----------
 @router.post("/jobs/{job_id}/payslip")
 async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(...), file: Optional[UploadFile] = File(None),
-                      evidence_id: Optional[int] = Form(None), mode: str = Form("add"),
+                      evidence_id: Optional[int] = Form(None), mode: str = Form("add"), check: bool = Form(True),
                       u: User = Depends(current_user), s: Session = Depends(get_session)):
     """받은 금액 저장. 같은 달에 나눠 받았으면 따로 저장해 합친다 (mode=add). mode=replace면 그 달 금액을 이것으로 바꾼다."""
     own_job(s, u, job_id)
@@ -636,17 +681,20 @@ async def add_payslip(job_id: int, month: str = Form(...), amount: int = Form(..
             s.delete(p)
     s.add(Payslip(job_id=job_id, month=month, amount=amount, evidence_id=ev_id, created_at=now_kst()))
     s.commit()
+    if not check:  # 저장만 하고 바로 응답 (급여 점검은 /agent/payday로 따로)
+        return {"saved": True, "month": month}
     return core.run_payday(s, u.id, job_id, month)
 
 
 @router.post("/jobs/{job_id}/payslip/read")
-async def read_payslip(job_id: int, file: UploadFile = File(...), u: User = Depends(current_user),
-                       s: Session = Depends(get_session)):
+async def read_payslip(job_id: int, file: UploadFile = File(...), read: bool = Form(True),
+                       u: User = Depends(current_user), s: Session = Depends(get_session)):
     """명세서 사진을 원본으로 저장하고 AI가 읽는다. 읽은 금액은 화면에 채우기만 하고 저장은 사용자가 한다."""
     own_job(s, u, job_id)
     ev = await store_upload(s, u, job_id, "payslip", file, "급여명세서")
-    res = core.run_read_image(s, u.id, job_id, ev.id, "payslip")
-    return {**res, "evidence_id": ev.id}
+    if not read:
+        return {"evidence_id": ev.id, "saved": True}
+    return _read_result(s, u, job_id, ev, "payslip")
 
 
 @router.get("/jobs/{job_id}/payslips")
@@ -667,6 +715,7 @@ def own_payslip(s: Session, u: User, pid: int) -> Payslip:
 
 class AmountIn(BaseModel):
     amount: int
+    check: bool = True
 
 
 @router.put("/payslips/{pid}")
@@ -677,6 +726,8 @@ def edit_payslip(pid: int, data: AmountIn, u: User = Depends(current_user), s: S
     p.amount = data.amount
     s.add(p)
     s.commit()
+    if not data.check:
+        return {"saved": True, "month": p.month}
     return core.run_payday(s, u.id, p.job_id, p.month)
 
 
@@ -765,6 +816,7 @@ def get_report(rep_id: int, u: User = Depends(current_user), s: Session = Depend
 # ---------- 신고 후 보호 ----------
 class ReportedIn(BaseModel):
     reported: bool
+    check: bool = True
 
 
 def post_out(p: GuardPost) -> dict:
@@ -784,8 +836,21 @@ def guard_state(job_id: int, u: User = Depends(current_user), s: Session = Depen
 
 @router.post("/jobs/{job_id}/guard")
 def set_reported(job_id: int, data: ReportedIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
-    own_job(s, u, job_id)
+    job = own_job(s, u, job_id)
+    if not data.check:  # 켬/끔만 저장하고 바로 응답 (안내 문구 작성은 /agent/guard로 따로)
+        job.reported = data.reported
+        s.add(job)
+        s.commit()
+        return {**guard_state(job_id, u, s), "saved": True}
     run = core.run_guard_toggle(s, u.id, job_id, data.reported)
+    return {**guard_state(job_id, u, s), "trace": run["trace"]}
+
+
+@router.post("/jobs/{job_id}/agent/guard")
+def agent_guard(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """신고했어요를 저장한 뒤: 켰으면 보복 금지 안내 문구 작성, 껐으면 보호 멈춤."""
+    job = own_job(s, u, job_id)
+    run = core.run_guard_toggle(s, u.id, job_id, job.reported)
     return {**guard_state(job_id, u, s), "trace": run["trace"]}
 
 
@@ -821,6 +886,7 @@ def set_keywords(job_id: int, data: KeywordsIn, u: User = Depends(current_user),
 class PostIn(BaseModel):
     url: str
     title: str = ""
+    check: bool = True
 
 
 @router.post("/jobs/{job_id}/guard/posts")
@@ -829,7 +895,16 @@ def add_post(job_id: int, data: PostIn, u: User = Depends(current_user), s: Sess
     if not data.url.startswith(("http://", "https://")) or len(data.url) > 1000 or any(c.isspace() for c in data.url):
         raise HTTPException(400, "게시물 주소는 http 또는 https로 시작하는 한 줄 주소여야 해요")
     data.title = data.title.strip()[:200]
+    if not data.check:  # 주소, 시각, 화면을 보존하고 바로 응답 (판별은 /agent/review로 따로)
+        return {**guard.preserve(s, u.id, s.get(Job, job_id), data.url, data.title), "saved": True}
     return core.run_guard_preserve(s, u.id, job_id, data.url, data.title)
+
+
+@router.post("/jobs/{job_id}/agent/review")
+def agent_review(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """보존한 게시물 가운데 판별을 기다리는 것을 AI가 판별한다."""
+    own_job(s, u, job_id)
+    return core.run_guard_review(s, u.id, job_id)
 
 
 @router.post("/jobs/{job_id}/guard/search")
@@ -886,6 +961,7 @@ def own_question(s: Session, u: User, qid: int) -> AgentQuestion:
 
 class AnswerIn(BaseModel):
     answer: str
+    check: bool = True
 
 
 @router.post("/questions/{qid}/answer")
@@ -901,6 +977,18 @@ def answer_question(qid: int, data: AnswerIn, u: User = Depends(current_user), s
     s.add(q)
     s.commit()
     _clear_question_notice(s, u.id, q.job_id)
+    if not data.check:  # 답만 저장하고 바로 응답 (다시 판단은 /questions/{qid}/rerun으로 따로)
+        return {"question": question_out(q), "event": core.RESUME.get(q.event, "contract_check"), "saved": True}
+    run = core.run_answer(s, u.id, q.job_id, q.event, json.loads(q.context_json or "{}"))
+    return {"question": question_out(q), "event": core.RESUME.get(q.event, "contract_check"), **run}
+
+
+@router.post("/questions/{qid}/rerun")
+def rerun_question(qid: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """답을 저장한 뒤: 질문했던 점검을 에이전트가 답을 근거로 다시 판단한다."""
+    q = own_question(s, u, qid)
+    if q.status != "answered":
+        raise HTTPException(400, "답한 질문만 다시 판단할 수 있어요")
     run = core.run_answer(s, u.id, q.job_id, q.event, json.loads(q.context_json or "{}"))
     return {"question": question_out(q), "event": core.RESUME.get(q.event, "contract_check"), **run}
 

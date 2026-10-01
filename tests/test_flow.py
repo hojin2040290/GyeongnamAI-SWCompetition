@@ -272,3 +272,42 @@ def test_work_period_dates_are_checked(c):
     assert job["quit_date"] == later
     assert c.post(f"/api/jobs/{job['id']}/quit", json={"quit_date": "2026-03-01"}).status_code == 400
     c.delete(f"/api/jobs/{job['id']}")
+
+
+def test_save_returns_before_agent_check(c):
+    """저장(check=false)은 에이전트를 부르지 않고 바로 응답하고, 점검은 /agent/... 로 따로 부른다."""
+    from unittest.mock import patch
+    job = c.post("/api/jobs", json={**JOB, "name": "가상분리점"}).json()
+    jid = job["id"]
+    with patch("app.agent.core.Run.agent", side_effect=AssertionError("저장 중에는 AI를 부르지 않아요")):
+        assert c.post(f"/api/jobs/{jid}/payslip", data={"month": "2026-09", "amount": "10000", "check": "false"}).json() \
+            == {"saved": True, "month": "2026-09"}
+        pid = c.get(f"/api/jobs/{jid}/payslips").json()[0]["id"]
+        assert c.put(f"/api/payslips/{pid}", json={"amount": 12000, "check": False}).json()["saved"]
+        assert c.post(f"/api/jobs/{jid}/quit", json={"quit_date": "2026-09-20", "check": False}).json() \
+            == {"settlement": None, "saved": True}
+        assert c.post(f"/api/jobs/{jid}/paid", json={"paid": False, "check": False}).json()["saved"]
+        g = c.post(f"/api/jobs/{jid}/guard", json={"reported": True, "check": False}).json()
+        assert g["reported"] and g["saved"]
+        saved = c.post(f"/api/jobs/{jid}/contract", files={"file": ("c.png", b"\x89PNG test", "image/png")},
+                       data={"read": "false"}).json()
+        assert saved["saved"] and "fields" not in saved
+    # 저장한 값은 점검 전에도 남아 있다
+    assert c.get(f"/api/jobs/{jid}/payslips").json()[0]["amount"] == 12000
+    assert c.post(f"/api/jobs/{jid}/agent/payday?month=2026-09").json()["trace"]
+    assert c.post(f"/api/jobs/{jid}/agent/quit").json()["settlement"]
+    assert c.post(f"/api/jobs/{jid}/agent/guard").json()["trace"]
+    assert c.post(f"/api/jobs/{jid}/agent/review").json()["trace"]
+    ev = saved["evidence"]
+    assert "fields" in c.post(f"/api/jobs/{jid}/agent/read?evidence_id={ev['id']}&kind=contract").json()
+    assert c.post(f"/api/jobs/{jid}/agent/read?evidence_id={ev['id']}&kind=etc").status_code == 400
+
+
+def test_punch_out_then_shift_check(c):
+    job = c.post("/api/jobs", json={**JOB, "name": "가상분리점2"}).json()
+    jid = job["id"]
+    assert c.post(f"/api/jobs/{jid}/punch", json={"check": False}).json()["action"] == "in"
+    out = c.post(f"/api/jobs/{jid}/punch", json={"check": False, "confirm": True}).json()
+    assert out["action"] == "out" and "shift" not in out and out["shift_record"]
+    assert c.post(f"/api/jobs/{jid}/agent/shift?record_id={out['shift_record']}").json()["trace"]
+    assert c.post(f"/api/jobs/{jid}/agent/shift?record_id=999999").status_code == 404
