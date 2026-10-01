@@ -209,13 +209,13 @@ def test_payday_judged_by_agent(env, monkeypatch):
     use(monkeypatch, smart_policy)
     with Session(engine) as s:
         r = core.run_payday(s, s.get(Job, ja).user_id, ja, "2026-08")
-    assert r["ai_agent"] and r["compare"]["ai_law"] == "근로기준법 제36조"
-    # 근무 기록이 없어 필요한 정보가 부족하므로 AI가 위반 의심이라 해도 확인 필요로 되돌린다
-    assert r["compare"]["status"] == "warn"
-    # 급여 화면을 다시 열어도 AI를 다시 부르지 않고 저장된 판단을 보여 준다
+    # 근무 기록이 없어 비교할 수 없으면 AI에게 체불 판단을 받지 않는다 (추측하지 않고 확인 필요)
+    assert r["ai_agent"] and r["compare"]["status"] == "warn" and "ai_law" not in r["compare"]
+    assert "근무 기록" in r["compare"]["needed"]
+    # 급여 화면을 다시 열어도 저장된 결과를 그대로 보여 준다 (판단 대기가 아님)
     monkeypatch.setattr(client, "LLM_ENABLED", False)
     again = a.get(f"/api/jobs/{ja}/pay?month=2026-08").json()["compare"]
-    assert again.get("ai_law") == "근로기준법 제36조"
+    assert again["status"] == "warn"
 
 
 def test_seek_adds_ai_questions(env, monkeypatch):
@@ -518,3 +518,33 @@ def test_daily_check_always_notifies(env, monkeypatch):
     assert out["notified"] >= 1
     notes = [n for n in a.get("/api/notifications").json() if n["title"].startswith("오늘 자동 점검")]
     assert notes and "AI 응답 대기 중" in notes[0]["body"] and ("실행한 점검" in notes[0]["body"] or "필요한 점검은 없었어요" in notes[0]["body"])
+
+
+def test_last_turn_forces_finish(env, monkeypatch):
+    """도구만 계속 부르는 모델도 마지막 반복에는 finish만 낼 수 있어, 판단 없이 '반복 초과'로 멈추지 않는다."""
+    a, ja, *_ = env
+
+    def wanders(goal, done, tools):
+        if tools == ["finish"]:  # 마지막 반복: finish만 받은 경우
+            items = called(done, "check_rules") or []
+            return reply([("finish", {"judgments": [{"i": it["i"], "status": "warn", "law": it["조항"],
+                                                      "fact": said("사실"), "reason": said("판단 이유")} for it in items]})])
+        if "check_rules" not in [n for n, _ in done]:
+            return reply([("check_rules", {})])
+        return reply([("get_profile", {})])  # 끝내지 않고 계속 돌아다닌다
+    agent = use(monkeypatch, wanders)
+    r = a.post(f"/api/jobs/{ja}/check").json()
+    assert len(agent.payloads) == loop.MAX_STEPS and r["ai_agent"] is True
+    assert agent.payloads[-1]["tool_choice"] == {"type": "function", "function": {"name": "finish"}}
+    texts = [m["content"] for m in agent.payloads[-2]["messages"] if m["role"] == "user"]
+    assert any("남았어요" in t for t in texts)  # 마무리 알림
+    assert not any("반복" in (i.get("ai_error") or "") for i in r["items"])
+
+
+def test_bad_without_rule_basis_is_sent_back(env):
+    """코드 계산으로 문제가 없는데(더 받음) 위반 의심이라 하면 검증 장치가 다시 판단하게 한다."""
+    from app.agent.tools import judgment_problems
+    with Session(engine) as s:
+        probs = judgment_problems(s, {"rule_status": "ok", "text": "계산한 금액보다 10,000원 더 받았어요."},
+                                  {"status": "bad", "law": "최저임금법 제5조", "fact": said("사실")})
+    assert any("코드 계산으로는 문제가 확인되지 않았어요" in p for p in probs)

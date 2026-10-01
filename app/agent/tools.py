@@ -72,6 +72,9 @@ def judgment_problems(session: Session, it: dict, j: dict, answered: list | tupl
         out.append(f"근거 조항 '{law}'이 법 기준표에 없어요. get_article로 확인한 조항을 써 주세요")
     if not fact:
         out.append("근거로 쓴 사실(fact)이 없어요")
+    if status == engine.BAD and it.get("rule_status") == engine.OK:
+        out.append("위반 의심이라 했지만 코드 계산으로는 문제가 확인되지 않았어요 (예: 계산한 금액 이상을 받음). 사실: "
+                   + str(it.get("text", ""))[:200])
     if status == engine.OK and it.get("rule_status") == engine.BAD:
         out.append("정상이라 했지만 코드 계산과 법 기준 대조로는 위반이 의심돼요. 사실: "
                    + ", ".join(map(str, it.get("basis", [])))[:200])
