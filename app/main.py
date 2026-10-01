@@ -1,8 +1,11 @@
 """FastAPI 진입점. 화면(HTML, CSS, JS)과 기능(API)을 함께 제공한다."""
 import logging
+import sqlite3
 import subprocess
+import sys
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -34,6 +37,28 @@ def code_version() -> str:
 VERSION = code_version()
 
 
+def _has_users(db: Path) -> bool:
+    try:
+        with sqlite3.connect(db) as c:
+            return c.execute("select count(*) from user").fetchone()[0] > 0
+    except sqlite3.Error:  # 파일이 없거나 테이블이 아직 없음
+        return False
+
+
+def prepare_test_data(log: logging.Logger) -> None:
+    """시험 데이터(data/test)가 아직 없으면(계정이 없으면) 만든다. 이미 쓰던 시험 데이터는 건드리지 않는다.
+    DB_PATH 등을 따로 정해 다른 곳을 쓰고 있으면 만들지 않는다."""
+    if config.DB_PATH != (config.TEST_DATA_DIR / "app.db").resolve() or _has_users(config.DB_PATH):
+        return
+    log.info("시험 데이터가 없어 만들어요 (python -m app.demo_db와 같음)")
+    out = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", str(config.TEST_DATA_DIR), "--force"], cwd=BASE_DIR,
+                         capture_output=True, text=True, timeout=300)
+    if out.returncode == 0:
+        log.info("시험 데이터를 만들었어요. 로그인: test@example.com / test1234")
+    else:
+        log.error("시험 데이터를 만들지 못했어요: %s", (out.stderr or out.stdout)[-500:])
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log = logging.getLogger("uvicorn.error")
@@ -41,6 +66,7 @@ async def lifespan(app: FastAPI):
     log.info("저장 위치: 기록 %s, 증거 원본 %s, 상담 사전 자료 %s", config.DB_PATH, config.UPLOAD_DIR, config.REPORT_DIR)
     if config.TEST_DATA:
         log.info("시험 데이터로 실행 중이에요 (TEST_DATA=true). 평소 데이터는 쓰지 않아요")
+        prepare_test_data(log)
     if config.LLM_FAKE:
         log.warning("가짜 AI(시험용)가 답해요. AI가 쓰는 글은 모두 '테스트 답변입니다 (...)'예요. "
                     "실제 모델을 쓰려면 .env에 LLM_ENABLED=true와 LLM_MODEL을 넣으세요")
