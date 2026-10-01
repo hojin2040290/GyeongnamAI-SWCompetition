@@ -903,9 +903,10 @@ async function quitCheck(){
   $('#quitTag').className='tag pending'; $('#quitTag').textContent=JUDGING;
   $('#quitAi').innerHTML=`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">${JUDGING}</span></p></div>`;
   const r=await checkAfterSave('#quitLive',()=>api('POST',`/api/jobs/${state.current}/agent/quit`)); if(!r){ renderQuit().catch(()=>{}); return; }
-  await loadJobs(); await renderQuit(); $('#quitLive').innerHTML=traceHTML(r.settlement?.trace, r.settlement?.trace_at);
+  await loadJobs(); await renderQuit(); $('#quitLive').innerHTML=traceHTML(r.settlement?.trace, r.settlement?.trace_at); await loadAsk();
 }
 async function setPaid(p){ try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p, check:false}); await loadJobs(); await renderQuit();
+    await loadAsk();  // 받았는지 묻던 질문은 이 버튼으로 답한 것이라 서버가 닫는다
     toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); await quitCheck(); }catch(e){ toast(e.message); } }
 $('#paidYes').onclick=()=>setPaid(true); $('#paidNo').onclick=()=>setPaid(false);
 $('#quitReport').onclick=()=>showTab('docs');
