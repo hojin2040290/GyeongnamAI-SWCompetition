@@ -11,7 +11,7 @@ from sqlmodel import Session, func, select
 
 from app import config, guard, input_rules, login_guard, notices, storage
 from app.agent import core
-from app.agent.tools import keywords_of, make_tools
+from app.agent.tools import keywords_of, make_tools, saved_settlement
 from app.auth import check_password, current_user, hash_password
 from app.calc import bizno
 from app.calc import schedule as sch
@@ -412,9 +412,7 @@ def settlement(job_id: int, u: User = Depends(current_user), s: Session = Depend
     st = make_tools(s, u.id, job_id)["settlement"]()
     if not st:
         return {"settlement": None}
-    saved = _saved_judgment(s, job_id, "quit", st, lambda x: x.get("due") == st["due"]
-                            and x.get("rule_status") == st["rule_status"] and x.get("left") == st["left"])
-    return {"settlement": saved}
+    return {"settlement": saved_settlement(s, job_id, st)}
 
 
 # ---------- 출퇴근 ----------

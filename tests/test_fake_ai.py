@@ -35,6 +35,7 @@ def test_fake_ai_runs_every_flow(c):
     r = c.post(f"/api/jobs/{j}/check").json()
     assert r["ai_agent"] and r["plan"][0].startswith(fake.PREFIX)
     assert all(i["status"] == "warn" and i["ai_reason"].startswith(fake.PREFIX) for i in r["items"] if i.get("ai_reason"))
+    assert not any("AI 판단 연결 전" in n for i in r["items"] if i.get("ai_reason") for n in i.get("needed", []))
     r = c.post(f"/api/jobs/{j}/payslip", data={"month": "2026-09", "amount": "300000"}).json()
     assert r["ai_agent"]
     r = c.post(f"/api/jobs/{j}/report").json()

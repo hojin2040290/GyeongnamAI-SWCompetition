@@ -81,6 +81,17 @@ def judgment_problems(session: Session, it: dict, j: dict, answered: list | tupl
     return out
 
 
+def saved_settlement(session: Session, job_id: int, st: dict) -> dict:
+    """코드가 다시 계산한 퇴직 정산에, 같은 사실(기한, 남은 날, 규칙 결과)로 저장된 AI 판단이 있으면 그것을 쓴다."""
+    rows = session.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "quit")
+                        .order_by(CheckRun.id.desc())).all()
+    for row in rows:
+        saved = json.loads(row.results_json)
+        if saved.get("due") == st["due"] and saved.get("rule_status") == st["rule_status"] and saved.get("left") == st["left"]:
+            return saved
+    return st
+
+
 def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = "", run_id: str = ""):
     def get_user() -> User:
         return session.get(User, user_id)
@@ -187,6 +198,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = 
                 it["needed"] = [n for n in it.get("needed", []) if "AI" in n]
                 it["basis"] = [*it.get("basis", []), *(f"사용자 답변: {q.question} → {q.answer}" for q in answers)]
                 it["answer_ids"] = [q.id for q in answers]
+            it["needed"] = [n for n in it.get("needed", []) if "AI 판단 연결 전" not in n]  # AI가 판단했으니 지운다
             it["status"], it["ai_reason"] = j["status"], scrub(str(j.get("reason", "")))[:300]
             it["ai_law"], it["ai_fact"] = law, fact[:300]
             it.pop("ai_error", None)
