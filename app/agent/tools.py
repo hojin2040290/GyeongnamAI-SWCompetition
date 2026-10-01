@@ -572,6 +572,8 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         check_output(question, why, *opts)
         if not question or not why:
             raise ValueError("질문과 묻는 이유가 필요해요")
+        if "조문" in question:
+            raise ValueError("법 조문은 사용자에게 묻지 않아요. get_article(법 기준표)에서만 확인하고, 없으면 조항 이름만 쓰세요")
         if "모름" not in opts:
             opts.append("모름")
         open_qs = session.exec(select(AgentQuestion).where(AgentQuestion.job_id == job_id,

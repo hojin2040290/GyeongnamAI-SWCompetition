@@ -628,3 +628,74 @@ def test_quit_paid_question_does_not_loop(env, monkeypatch):
     assert open_qs()
     a.post(f"/api/jobs/{j}/paid", json={"paid": True, "check": False})
     assert not open_qs()
+
+
+def _guard_policy(agent_ref: list, mode: str):
+    """실제 모델 기록(신고했어요)처럼 다른 도구만 부르다가 안내 문구 없이 finish를 내려 한다.
+    mode "save_finish": '아직 할 일' 안내를 받으면 안내 문구 저장과 finish를 함께 낸다.
+    mode "late_save_only": 첫 안내는 무시하고 finish만 내고, 마지막 반복에야 안내 문구만 저장한다 (finish 없음)."""
+    from app.agent.core import _retaliation_laws
+    save = ("save_warning_message", {"message": said("보복 금지 안내 문구"), "laws": _retaliation_laws()})
+
+    def policy(goal, done, tools):
+        last_user = [m["content"] for m in agent_ref[0].payloads[-1]["messages"] if m["role"] == "user"][-1]
+        final = len(agent_ref[0].payloads) == loop.MAX_STEPS
+        if "아직 할 일" in last_user and "save_warning_message" in tools:
+            if mode == "save_finish":
+                return reply([save, ("finish", {"note": said("한 일")})])
+            if final:
+                return reply([save])
+        if tools == ["finish"] or "남았어요" in last_user:
+            return reply([("finish", {"note": said("한 일")})])  # 안내 문구를 저장하지 않고 끝내려 함
+        return reply([("get_profile", {})])
+    return policy
+
+
+@pytest.mark.parametrize("mode", ["save_finish", "late_save_only"])
+def test_guard_on_does_not_stop_when_required_tool_left(env, monkeypatch, mode):
+    """신고했어요: 꼭 할 일(안내 문구 저장)이 남은 채 반복이 끝나 가면 남은 일을 알려 주고, 마지막 반복에도 그 도구를 쓸 수 있게 한다.
+    (예전에는 마지막 반복에 finish만 강제해 '끝내기 전 확인'에 걸려 '반복 10회 안에 끝내지 못했어요'로 멈췄다)"""
+    a, ja, *_ = env
+    ref = []
+    agent = use(monkeypatch, _guard_policy(ref, mode))
+    ref.append(agent)
+    a.post(f"/api/jobs/{ja}/guard", json={"reported": True})
+    with Session(engine) as s:
+        job = s.get(Job, ja)
+        saved = job.guard_ai_message
+        job.reported, job.guard_ai_message = False, ""
+        s.add(job)
+        s.commit()
+    assert saved.startswith("테스트 답변입니다")  # AI가 쓴 문구가 저장됨 (기본 문구로 대기하지 않음)
+    texts = [m["content"] for p in agent.payloads for m in p["messages"] if m["role"] == "user"]
+    assert any("아직 할 일" in t and "save_warning_message" in t for t in texts)
+    if mode == "late_save_only":  # 마지막 반복에 할 일이 남아 finish만 강제하지 않았다
+        assert len(agent.payloads) == loop.MAX_STEPS and agent.payloads[-1].get("tool_choice") == "auto"
+
+
+def test_ask_user_does_not_ask_law_text(env):
+    """법 조문 내용은 사용자에게 묻지 않는다 (실제 모델이 기준표에 없는 조문을 사용자에게 물은 일이 있었다)."""
+    _, ja, *_ = env
+    with Session(engine) as s:
+        ask = agent_tools(s, s.get(Job, ja).user_id, ja, {})["ask_user"].fn
+        with pytest.raises(ValueError):
+            ask("근로기준법 제104조 조문 내용을 알려주세요", ["모름"], said("조문 확인"))
+
+
+def test_copy_law_table_to_test_data(tmp_path):
+    """시험 데이터에 평소 DB의 법 기준표를 복사한다 (없으면 get_article이 모두 '미구축')."""
+    import sqlite3
+
+    from sqlmodel import SQLModel, create_engine
+
+    from app import demo_db
+    src, dst = tmp_path / "app.db", tmp_path / "test.db"
+    for p in (src, dst):
+        SQLModel.metadata.create_all(create_engine(f"sqlite:///{p}"))
+    cols = [r[1] for r in sqlite3.connect(src).execute("pragma table_info(lawarticle)")]
+    row = {c: None for c in cols if c != "id"}
+    row.update(law_name="근로기준법", article_no="제104조", title="가상 제목", text="가상 조문", fetched_at="2026-10-01 00:00:00")
+    with sqlite3.connect(src) as c:
+        c.execute(f"insert into lawarticle ({','.join(row)}) values ({','.join('?' * len(row))})", list(row.values()))
+    assert demo_db.copy_law_table(dst, src) == 1
+    assert sqlite3.connect(dst).execute("select count(*) from lawarticle").fetchone()[0] == 1
