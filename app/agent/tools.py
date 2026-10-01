@@ -73,8 +73,8 @@ def judgment_problems(session: Session, it: dict, j: dict, answered: list | tupl
     if not fact:
         out.append("근거로 쓴 사실(fact)이 없어요")
     if status == engine.BAD and it.get("rule_status") == engine.OK:
-        out.append("위반 의심이라 했지만 코드 계산으로는 문제가 확인되지 않았어요 (예: 계산한 금액 이상을 받음). 사실: "
-                   + str(it.get("text", ""))[:200])
+        out.append("위반 의심이라 했지만 코드 계산과 기록으로는 문제가 확인되지 않았어요 (예: 계산한 금액 이상을 받음, "
+                   "남은 임금을 받았다고 기록함). 사실: " + str(it.get("text", ""))[:200])
     if status == engine.OK and it.get("rule_status") == engine.BAD:
         out.append("정상이라 했지만 코드 계산과 법 기준 대조로는 위반이 의심돼요. 사실: "
                    + ", ".join(map(str, it.get("basis", [])))[:200])
@@ -84,6 +84,11 @@ def judgment_problems(session: Session, it: dict, j: dict, answered: list | tupl
     return out
 
 
+# 퇴직 후 남은 임금을 받았는지 사용자가 기록한 값 (None: 아직 기록하지 않음)
+PAID_TEXT = {True: "사용자가 남은 임금을 받았다고 기록했어요", False: "사용자가 남은 임금을 못 받았다고 기록했어요",
+             None: "사용자가 남은 임금을 받았는지 아직 기록하지 않았어요"}
+
+
 def saved_settlement(session: Session, job_id: int, st: dict) -> dict:
     """코드가 다시 계산한 퇴직 정산에, 같은 사실(기한, 규칙 결과)로 저장된 AI 판단이 있으면 그것을 쓴다.
     남은 날 수는 날마다 바뀌므로 비교하지 않고 오늘 값으로 바꿔 넣는다 (기한이 지났는지는 규칙 결과에 들어 있다)."""
@@ -91,8 +96,12 @@ def saved_settlement(session: Session, job_id: int, st: dict) -> dict:
                         .order_by(CheckRun.id.desc())).all()
     for row in rows:
         saved = json.loads(row.results_json)
-        if saved.get("due") == st["due"] and saved.get("rule_status") == st["rule_status"]:
-            return {**saved, "left": st["left"]}
+        same = saved.get("due") == st["due"] and saved.get("rule_status") == st["rule_status"] \
+            and saved.get("paid", st.get("paid")) == st.get("paid")
+        # 예전 코드가 받아 둔, 기록과 맞지 않는 위반 의심(받았다고 기록했는데 위반 의심)은 쓰지 않고 다시 판단한다
+        wrong = saved.get("status") == engine.BAD and saved.get("rule_status") == engine.OK
+        if same and not wrong:
+            return {**saved, "left": st["left"], "paid": st.get("paid"), "text": st.get("text", saved.get("text", ""))}
     return st
 
 
@@ -291,6 +300,9 @@ def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = 
             return None
         st = paycalc.settlement_status(job.quit_date, today_kst(), job.paid_after_quit)
         st["rule_status"], st["status"] = st["status"], engine.PENDING  # 기한 계산은 코드, 위반 판단은 AI
+        st["paid"] = PAID_TEXT[job.paid_after_quit]
+        when = f"지급 기한 {st['due']}까지 {st['left']}일 남았어요" if st["left"] >= 0 else f"지급 기한 {st['due']}이 {-st['left']}일 지났어요"
+        st["text"] = f"{when}. {st['paid']}."
         return st
 
     # ----- 기록, 알림 -----
@@ -427,7 +439,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         if not st:
             return {"안내": "그만둔 사업장이 아니에요"}
         return {"그만둔 날": st["quit_date"], "지급 기한": st["due"], "남은 날": st["left"],
-                "받았다고 기록함": st["rule_status"] == engine.OK,
+                "받음 여부": st["paid"], "사실": st["text"],
                 "관련 조항": [P()["settlement"]["law"], P()["wage_claim"]["law"]]}
 
     def get_article(label: str) -> dict:

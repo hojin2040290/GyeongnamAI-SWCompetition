@@ -547,4 +547,35 @@ def test_bad_without_rule_basis_is_sent_back(env):
     with Session(engine) as s:
         probs = judgment_problems(s, {"rule_status": "ok", "text": "계산한 금액보다 10,000원 더 받았어요."},
                                   {"status": "bad", "law": "최저임금법 제5조", "fact": said("사실")})
-    assert any("코드 계산으로는 문제가 확인되지 않았어요" in p for p in probs)
+    assert any("코드 계산과 기록으로는 문제가 확인되지 않았어요" in p for p in probs)
+
+
+def test_paid_after_quit_is_not_violation(env, monkeypatch):
+    """그만둔 뒤 남은 임금을 받았다고 기록했으면, 기한이 지났어도 AI가 위반 의심이라 해 그대로 받지 않는다."""
+    from app.agent.tools import saved_settlement
+    from app.models import CheckRun
+    a, *_ = env
+    j = a.post("/api/jobs", json={**JOB, "name": "가상분식 정산점"}).json()["id"]
+    a.post(f"/api/jobs/{j}/quit", json={"quit_date": "2026-08-01", "check": False})  # 기한이 지난 날
+    a.post(f"/api/jobs/{j}/paid", json={"paid": True, "check": False})
+
+    def stubborn(goal, done, tools):  # 받았다는 기록을 보고도 계속 위반 의심이라 한다
+        st = called(done, "settlement")
+        if st is None:
+            return reply([("settlement", {})])
+        return reply([("finish", {"status": "bad", "law": st["관련 조항"][0], "fact": said("지급 기한이 지남"),
+                                  "reason": said("위반 의심")})])
+    agent = use(monkeypatch, stubborn)
+    st = a.post(f"/api/jobs/{j}/agent/quit").json()["settlement"]
+    seen = results(agent.payloads[-1], "settlement")[0]
+    assert "받았다고 기록했어요" in seen["받음 여부"] and "지났어요" in seen["사실"]  # AI가 받은 사실을 본다
+    assert any("남은 임금을 받았다고 기록함" in json.dumps(m, ensure_ascii=False)
+               for p in agent.payloads for m in p["messages"] if m["role"] == "tool")  # 검증 장치가 돌려보냄
+    assert st["status"] == "ok" and not st.get("ai_reason")
+    assert a.get(f"/api/jobs/{j}/settlement").json()["settlement"]["status"] == "ok"
+    # 예전 코드가 저장한 '받았는데 위반 의심'은 화면에 쓰지 않고 다시 판단한다
+    with Session(engine) as s:
+        s.add(CheckRun(user_id=s.get(Job, j).user_id, job_id=j, kind="quit", created_at=now_kst(),
+                       results_json=json.dumps({**st, "status": "bad", "ai_reason": said("예전 판단")}, ensure_ascii=False)))
+        s.commit()
+        assert saved_settlement(s, j, {**st, "status": "pending"})["status"] != "bad"
