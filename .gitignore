@@ -231,3 +231,5 @@ data/law_probe_result.txt
 # 화면 확인(회귀 시험) 도구
 tests/ui/node_modules
 tests/ui/package-lock.json
+data/demo*.db
+data/demo*.db-*
