@@ -36,7 +36,7 @@ run() {
     DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=false LLM_FAKE_DELAY=0 \
       PYTHONPATH=. "$PY" "$UI/stale_check.py" > /dev/null 2>&1
   fi
-  env $srv DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=$fake LLM_ENABLED=false \
+  env $srv LAW_REFRESH_ON_START=false DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=$fake LLM_ENABLED=false \
     LLM_FAKE_DELAY=$delay "$PY" -m uvicorn app.main:app --port "$PORT" > "$D/server.log" 2>&1 &
   local pid=$!  # 띄운 서버의 프로세스 번호 (끝나면 이 번호로만 끈다)
   for _ in $(seq 1 50); do curl -s -o /dev/null "$BASE/api/version" && break; sleep 0.2; done
