@@ -1,0 +1,50 @@
+// 8부: 날짜와 시각 표시 (연월일, 요일, 초, 한국 시간)
+const path = require('path');
+const { B, ck, browser, page, api, summary, overflow } = require('./lib');
+const { execSync } = require('child_process');
+const tab = async (p, v) => { await p.evaluate(v=>document.querySelector(`#tabs [data-v="${v}"]`).click(), v); await p.waitForTimeout(900); };
+(async () => {
+  const b = await browser(); const p = await page(b);
+  await p.goto(B+'/'); await api(p,'POST','/api/auth/register',{email:'time@example.com',password:'test1234',birth_date:'2009-05-01'});
+  const job=(await api(p,'POST','/api/jobs',{name:'QA 가상분식',wage:10320,start_date:'2026-08-01',schedule:{'월':{start:'17:00',end:'22:30',brk:'없음'}}})).body;
+  execSync(`python3 ${path.join(__dirname,'addrec.py')} ${process.env.DB} ${job.id}`);  // 5시간 전 출근 (자정을 넘길 수 있음)
+  await api(p,'POST',`/api/jobs/${job.id}/punch`,{});
+  for (const a of ['300000','200000','57280']) { await p.evaluate(async([j,a])=>{ const fd=new FormData(); fd.append('month','2026-09'); fd.append('amount',a); await fetch(`/api/jobs/${j}/payslip`,{method:'POST',body:fd}); },[job.id,a]); }
+  await api(p,'POST',`/api/jobs/${job.id}/agent/payday?month=2026-10`);
+  await api(p,'POST',`/api/jobs/${job.id}/check`);
+  await p.evaluate(async j=>{ const fd=new FormData(); fd.append('file',new Blob(['png'],{type:'image/png'}),'메시지.png'); fd.append('kind','message'); await fetch(`/api/jobs/${j}/evidence`,{method:'POST',body:fd}); }, job.id);
+  await p.goto(B+'/'); await p.waitForSelector('#app:not(.hidden)'); await p.waitForTimeout(900);
+  const rec = await p.textContent('#records');
+  ck('[홈] 출퇴근 기록: 요일, 초', /\d+월 \d+일 \([일월화수목금토]\)/.test(rec) && /\d{2}:\d{2}:\d{2} 출근/.test(rec), rec.replace(/\s+/g,' ').slice(0,140));
+  ck('[홈] 출근 상태 줄에 초', /\d{2}:\d{2}:\d{2}/.test(await p.textContent('#clockState')), await p.textContent('#clockState'));
+  await p.evaluate(()=>document.querySelector('#recordsPanel').scrollIntoView({block:'center'})); await p.waitForTimeout(200);
+  await p.screenshot({path:'p8_home.png'});
+  await tab(p,'pay'); await p.evaluate(()=>window.scrollTo(0,document.body.scrollHeight)); await p.waitForTimeout(300);
+  const ps = await p.textContent('#payslips');
+  ck('[급여] 받은 금액: "2026년 9월분", 건마다 저장 시각', ps.includes('2026년 9월분') && (ps.match(/\d{2}:\d{2}:\d{2} 저장/g)||[]).length===3, ps.replace(/\s+/g,' ').slice(0,160));
+  await p.screenshot({path:'p8_pay.png'});
+  ck('[급여] 390px 넘침 없음', (await overflow(p)).length===0, await overflow(p));
+  await tab(p,'check');
+  ck('[계약서] 마지막 점검 시각', /마지막 점검 \d+월 \d+일 \([일월화수목금토]\) \d{2}:\d{2}:\d{2}/.test(await p.textContent('#checkAt')), await p.textContent('#checkAt'));
+  await p.screenshot({path:'p8_check.png'});
+  await p.evaluate(()=>{ const d=document.querySelector('#agentLog').closest('details'); if(d) d.open=true; document.querySelector('#agentLog').scrollIntoView({block:'center'}); }); await p.waitForTimeout(300);
+  ck('[계약서] 에이전트 동작 기록에 시각', /\d{2}:\d{2}:\d{2}/.test(await p.textContent('#agentLog')));
+  await p.screenshot({path:'p8_log.png'});
+  await tab(p,'docs');
+  ck('[자료] 올린 시각에 초', /\d{2}:\d{2}:\d{2} 올림/.test(await p.textContent('#evList')));
+  await p.click('#reportBtn'); await p.waitForURL(/reports/, {timeout:60000});
+  const doc = await p.evaluate(()=>document.body.innerText);
+  ck('[상담 자료] 작성 시각: 연월일 요일 초, 한국 시간', /작성 시각 \d{4}년 \d+월 \d+일 \([월화수목금토일]\) \d{2}:\d{2}:\d{2}\. 이 자료의 시각은 모두 한국 시간/.test(doc));
+  ck('[상담 자료] 급여 비교: 달마다 최근 1건, 점검 시각', ((doc.split('사용자가 저장한')[0].match(/2026년 9월분/g)||[]).length===1) && doc.includes('결과 (점검 시각)'), (doc.match(/급여 달[\s\S]{0,400}/)||[''])[0].replace(/\s+/g,' ').slice(0,300));
+  ck('[상담 자료] 받은 금액 표: 3건, 저장 시각', (doc.match(/\d{4}년 \d+월 \d+일 \([월화수목금토일]\) \d{2}:\d{2}:\d{2}/g)||[]).length>=6 && doc.includes('사용자가 저장한 받은 금액'));
+  ck('[상담 자료] 근무 기록 출퇴근에 요일과 초', /출근\s+퇴근[\s\S]*\d{4}년 \d+월 \d+일 \([월화수목금토일]\) \d{2}:\d{2}:\d{2}/.test(doc));
+  ck('[상담 자료] 날짜 원본 모양(2026-10-01 02:48:00) 없음', !/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(doc));
+  await p.evaluate(()=>[...document.querySelectorAll('h2')].find(h=>h.textContent.includes('급여 비교')).scrollIntoView()); await p.waitForTimeout(200);
+  await p.screenshot({path:'p8_report_pay.png'});
+  await p.evaluate(()=>[...document.querySelectorAll('h2')].find(h=>h.textContent.includes('근무 기록')).scrollIntoView()); await p.waitForTimeout(200);
+  await p.screenshot({path:'p8_report_rec.png'});
+  const wide = await p.evaluate(()=>[...document.querySelectorAll('table')].filter(t=>t.getBoundingClientRect().right>innerWidth+1 && t.scrollWidth<=t.clientWidth+1).length);
+  ck('[상담 자료] 390px: 표가 화면 밖으로 잘리지 않음 (넘치면 표 안에서 옆으로 스크롤)', wide===0, wide);
+  ck('오류 없음', !p.errs.length && !p.bad.length, [...p.errs,...p.bad].join('|'));
+  summary(); await b.close();
+})().catch(e=>{console.error('중단',e);process.exit(1);});
