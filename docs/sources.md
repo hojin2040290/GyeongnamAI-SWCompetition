@@ -25,7 +25,7 @@
 | APScheduler (4 미만) | 매일 자동 점검, AI 대기 작업 재시도 | MIT |
 | httpx | 법제처, 네이버, vLLM 호출 | BSD-3-Clause |
 | pytest | 테스트 | MIT |
-| Playwright (선택) | 게시물 화면 캡처 보존, 개발 중 휴대폰 너비 화면 캡처 확인 | Apache-2.0 |
+| Playwright (선택) | 게시물 화면 캡처 보존, 개발 중 휴대폰 너비 화면 캡처 확인, 화면 회귀 시험(tests/ui, Node.js 판) | Apache-2.0 |
 
 설치한 버전은 `pip freeze`로 확인해 제출 전에 이 표에 옮긴다.
 
