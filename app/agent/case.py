@@ -19,6 +19,13 @@ def _count(rows: list[dict], status: str) -> int:
     return sum(r.get("status") == status for r in rows)
 
 
+def check_detail(items: list[dict]) -> str:
+    """점검 칸 요약. AI 판단을 기다리는 항목은 있을 때만 적는다 (0건이면 대기 중인 것처럼 보이지 않게)."""
+    text = f"위반 의심 {_count(items, 'bad')}, 확인 필요 {_count(items, 'warn')}"
+    waiting = _count(items, "pending")
+    return text + (f", AI 판단 대기 {waiting}" if waiting else "")
+
+
 def progress(s: Session, job: Job) -> list[dict]:
     """단계마다 한 일이 있는지와 숫자 (점검, 기록, 급여, 상담 자료, 신고, 보호)."""
     check = s.exec(select(CheckRun).where(CheckRun.job_id == job.id, CheckRun.kind == "contract")
@@ -34,8 +41,7 @@ def progress(s: Session, job: Job) -> list[dict]:
     posts = s.exec(select(GuardPost).where(GuardPost.job_id == job.id)).all()
     return [
         {"key": "check", "name": "점검", "done": bool(check),
-         "detail": (f"위반 의심 {_count(items, 'bad')}, 확인 필요 {_count(items, 'warn')}, AI 판단 대기 {_count(items, 'pending')}"
-                    if check else "아직 안 함")},
+         "detail": check_detail(items) if check else "아직 안 함"},
         {"key": "record", "name": "기록", "done": bool(days or evs), "detail": f"근무 {days}일, 증거 자료 {evs}개"},
         {"key": "pay", "name": "급여", "done": bool(pays),
          "detail": f"점검한 달 {len({p['month'] for p in pays})}, 적게 받은 달 {short}" if pays else "아직 안 함"},
