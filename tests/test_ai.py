@@ -168,3 +168,20 @@ def test_parse_json_variants():
     assert client.parse_json('[{"i": 0}]') == [{"i": 0}]
     with pytest.raises(client.LLMError):
         client.parse_json("모르겠어요")
+
+
+def test_llm_extra_body_is_added_to_requests(monkeypatch):
+    """LLM_EXTRA_BODY(모델마다 필요한 요청 옵션, 예: 생각 모드 끄기)는 모든 AI 요청에 더해진다. 잘못된 JSON은 무시한다."""
+    from app.llm import client
+    sent = []
+    monkeypatch.setattr(client, "LLM_FAKE", False)
+    monkeypatch.setattr(client, "LLM_ENABLED", True)
+    monkeypatch.setattr(client, "LLM_MODEL", "m")
+    monkeypatch.setattr(client.httpx, "post", lambda url, json, headers, timeout: sent.append(json) or type(
+        "R", (), {"raise_for_status": lambda self: None, "json": lambda self: {"choices": [{"message": {"content": "{}"}}]}})())
+    monkeypatch.setattr(client, "LLM_EXTRA_BODY", '{"chat_template_kwargs": {"enable_thinking": false}}')
+    client.chat([{"role": "user", "content": "안녕"}])
+    assert sent[-1]["chat_template_kwargs"] == {"enable_thinking": False} and sent[-1]["model"] == "m"
+    monkeypatch.setattr(client, "LLM_EXTRA_BODY", "{잘못된")
+    client.chat([{"role": "user", "content": "안녕"}])
+    assert "chat_template_kwargs" not in sent[-1]

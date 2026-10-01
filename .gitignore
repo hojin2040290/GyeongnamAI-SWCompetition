@@ -232,3 +232,5 @@ data/law_probe_result.txt
 tests/ui/node_modules
 tests/ui/package-lock.json
 data/test*/
+data/bench_*/
+bench/results/

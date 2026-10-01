@@ -10,7 +10,8 @@ import re
 
 import httpx
 
-from app.config import LLM_API_KEY, LLM_BASE_URL, LLM_ENABLED, LLM_FAKE, LLM_MODEL, LLM_TIMEOUT, LLM_VISION_MODEL
+from app.config import (LLM_API_KEY, LLM_BASE_URL, LLM_ENABLED, LLM_EXTRA_BODY, LLM_FAKE, LLM_MODEL, LLM_TIMEOUT,
+                        LLM_VISION_MODEL)
 from app.llm import fake
 
 
@@ -34,7 +35,17 @@ def status() -> dict:
             "model": LLM_MODEL, "vision_model": LLM_VISION_MODEL or LLM_MODEL}
 
 
+def extra_body() -> dict:
+    """.env의 LLM_EXTRA_BODY (모델마다 필요한 요청 옵션). 잘못된 JSON이면 쓰지 않는다."""
+    try:
+        v = json.loads(LLM_EXTRA_BODY) if LLM_EXTRA_BODY else {}
+    except json.JSONDecodeError:
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
 def _post(payload: dict) -> dict:
+    payload = {**extra_body(), **payload}
     if LLM_FAKE:  # 시험용 가짜 AI: 같은 응답 모양으로 답한다
         return fake.respond(payload)
     headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}

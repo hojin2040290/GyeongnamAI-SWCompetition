@@ -47,3 +47,9 @@ IBM Plex Sans KR (Google Fonts, SIL Open Font License)
 - [ ] `pip freeze` 결과의 라이브러리 버전
 - [ ] AI 활용 표의 '직접 수정한 부분' (요구사항을 정하고 결과를 확인해 고친 내용: 예: 월급날 말일, 쉬는 시간 직접 입력, 이메일 검사 누락 지적, 로그인 상태의 단계 건너뜀 발견)
 - [ ] law_params.json의 기준값 출처를 원문과 다시 대조 (verified=false 항목)
+
+## 모델 벤치마크 (bench/, 앱에는 아직 쓰지 않음)
+| 이름 | 용도 | 출처 | 라이선스 |
+|---|---|---|---|
+| huggingface_hub | 벤치마크 후보 모델 확인과 받기 (GPU 서버의 vLLM 가상환경에 이미 있음) | https://github.com/huggingface/huggingface_hub | Apache 2.0 |
+| 후보 모델 9개 (`bench/models.json`) | 같은 시험으로 속도, 도구 호출, 판단, 사진 읽기, 한국어 비교 | Hugging Face 각 모델 페이지 | 모델마다 다름 (벤치마크 결과의 사전 확인에 라이선스를 남김. EXAONE은 비상업용) |
