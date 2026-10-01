@@ -739,7 +739,7 @@ async function answerAsk(id, answer){
 const NEXT_TAB={check:'계약서 점검하러 가기',pay:'급여 점검하러 가기',docs:'상담 사전 자료 만들러 가기',guard:'신고 후 보호로 가기'};
 async function loadCase(){
   const c=await api('GET',`/api/jobs/${state.current}/case`);
-  $('#caseSteps').innerHTML=c.progress.map(p=>`<li class="${p.done?'done':''}"><strong>${p.done?'✓ ':''}${esc(p.name)}</strong><span>${waitMark(p.detail)}</span></li>`).join('');
+  $('#caseSteps').innerHTML=c.progress.map(p=>`<li class="${p.done?'done':''} tone-${p.tone||'none'}"><strong>${p.done?'✓ ':''}${esc(p.name)}</strong><span>${waitMark(p.detail)}</span></li>`).join('');
   const a=c.advice;
   $('#caseAdvice').innerHTML=a?`<div class="advice"><div class="advice-head">에이전트 조언</div><p>${esc(a.text)}</p>
       ${a.next_tab&&NEXT_TAB[a.next_tab]?`<button class="btn ghost small" data-go="${esc(a.next_tab)}">${NEXT_TAB[a.next_tab]}</button>`:''}

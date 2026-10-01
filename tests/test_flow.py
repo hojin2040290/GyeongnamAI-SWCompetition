@@ -335,3 +335,12 @@ def test_progress_hides_zero_ai_waiting():
     from app.agent.case import check_detail
     assert check_detail([{"status": "warn"}, {"status": "bad"}]) == "위반 의심 1, 확인 필요 1"
     assert check_detail([{"status": "pending"}]).endswith("AI 판단 대기 1")
+
+
+def test_progress_tone_matches_situation():
+    """진행 상황 칸 색: 신고는 좋고 나쁨이 없어 파랑(info), 판단 결과는 가장 나쁜 것을 따른다."""
+    from app.agent.case import tone_of
+    assert tone_of(["ok", "ok"]) == "ok"
+    assert tone_of(["ok", "pending"]) == "warn"
+    assert tone_of(["warn", "bad"]) == "bad"
+    assert tone_of([]) == "none"
