@@ -39,6 +39,8 @@ async def lifespan(app: FastAPI):
     log = logging.getLogger("uvicorn.error")
     log.info("알바지킴이 코드 버전: %s", VERSION)
     log.info("저장 위치: 기록 %s, 증거 원본 %s, 상담 사전 자료 %s", config.DB_PATH, config.UPLOAD_DIR, config.REPORT_DIR)
+    if config.TEST_DATA:
+        log.info("시험 데이터로 실행 중이에요 (TEST_DATA=true). 평소 데이터는 쓰지 않아요")
     if config.LLM_FAKE:
         log.warning("가짜 AI(시험용)가 답해요. AI가 쓰는 글은 모두 '테스트 답변입니다 (...)'예요. "
                     "실제 모델을 쓰려면 .env에 LLM_ENABLED=true와 LLM_MODEL을 넣으세요")

@@ -36,6 +36,9 @@ _load_env(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 DATA_DIR = BASE_DIR / "data"  # 기록(DB), 증거 원본, 상담 사전 자료를 모두 이 폴더 아래에 둔다
+# TEST_DATA=true: 시험 데이터(data/test, python -m app.demo_db로 만듦)로 실행한다. 평소 데이터(data/app.db 등)는 건드리지 않는다
+TEST_DATA = os.getenv("TEST_DATA", "false").strip().lower() == "true"
+TEST_DATA_DIR = DATA_DIR / "test"
 
 
 def _data_path(env: str, default: Path) -> Path:
@@ -45,9 +48,10 @@ def _data_path(env: str, default: Path) -> Path:
     return (path if path.is_absolute() else BASE_DIR / path).resolve()
 
 
-DB_PATH = _data_path("DB_PATH", DATA_DIR / "app.db")
-UPLOAD_DIR = _data_path("UPLOAD_DIR", DATA_DIR / "uploads")
-REPORT_DIR = _data_path("REPORT_DIR", DATA_DIR / "reports")
+_BASE = TEST_DATA_DIR if TEST_DATA else DATA_DIR  # DB_PATH 등을 따로 적으면 그 값을 쓴다
+DB_PATH = _data_path("DB_PATH", _BASE / "app.db")
+UPLOAD_DIR = _data_path("UPLOAD_DIR", _BASE / "uploads")
+REPORT_DIR = _data_path("REPORT_DIR", _BASE / "reports")
 LAW_PARAMS_PATH = BASE_DIR / "data" / "law_params.json"
 TIMEZONE = "Asia/Seoul"
 
