@@ -34,3 +34,27 @@ def test_demo_db_builds_in_test_folder_only():
         assert (app_db.stat().st_mtime if app_db.exists() else None) == before  # 평소 DB는 그대로
     finally:
         shutil.rmtree(target, ignore_errors=True)
+
+
+def test_server_prepares_test_data_when_missing(monkeypatch):
+    """TEST_DATA=true로 켰는데 시험 데이터가 없으면 서버가 만든다 (python -m app.demo_db를 따로 안 해도 됨).
+    이미 있는 시험 데이터는 건드리지 않는다."""
+    import logging
+    import sqlite3
+
+    from app import config, main
+    target = ROOT / "data" / "test_pytest_auto"
+    shutil.rmtree(target, ignore_errors=True)
+    monkeypatch.setattr(config, "TEST_DATA_DIR", target)
+    monkeypatch.setattr(config, "DB_PATH", (target / "app.db").resolve())
+    log = logging.getLogger("test")
+    try:
+        main.prepare_test_data(log)
+        db = target / "app.db"
+        assert sqlite3.connect(db).execute("select email from user").fetchall() == [("test@example.com",)]
+        with sqlite3.connect(db) as c:
+            c.execute("update job set name='바꾼 이름' where id=2")
+        main.prepare_test_data(log)  # 이미 있으면 다시 만들지 않는다
+        assert sqlite3.connect(db).execute("select name from job where id=2").fetchone() == ("바꾼 이름",)
+    finally:
+        shutil.rmtree(target, ignore_errors=True)

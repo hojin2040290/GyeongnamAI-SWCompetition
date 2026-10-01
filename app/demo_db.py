@@ -3,6 +3,7 @@
 실행: python -m app.demo_db           → data/test 를 새로 만든다
       python -m app.demo_db --force   → data/test 가 이미 있으면 지우고 다시 만든다
 시험 데이터로 서버 실행: .env에 TEST_DATA=true (평소 데이터 data/app.db, data/uploads는 그대로)
+  TEST_DATA=true로 켰는데 data/test에 시험 데이터가 없으면 서버가 켜지면서 이 명령을 실행한다 (app/main.py)
 로그인: test@example.com / test1234 (2009-05-20생, 만 17세)
 
 알바마다 서류 사진(계약서, 급여명세서, 입금내역, 사장님 메시지)은 그 알바의 기록과 같은 값으로 그린 것이다.
