@@ -799,8 +799,11 @@ $('#punchBtn').onclick=async()=>{
     await refreshRecords(false);
     toast(r.action==='in'?'출근이 기록됐어요':'퇴근이 기록됐어요');
     if(r.shift_record){
+      renderShiftWaiting();  // 예전 결과('찾지 못했어요')가 남아 보이지 않게, 점검하는 동안은 찾는 중
       const shift=await checkAfterSave('#punchLive',()=>api('POST',`/api/jobs/${state.current}/agent/shift?record_id=${r.shift_record}`));
-      if(shift){ $('#punchLive').innerHTML=traceHTML(shift.trace, shift.trace_at); renderShift(shift); if(shift.items?.length) toast('오늘 근무에서 확인할 점이 있어요'); }
+      // 동작 보기는 결과 칸 안에 한 번만
+      if(shift){ $('#punchLive').innerHTML=''; renderShift(shift); if(shift.items?.length) toast('오늘 근무에서 확인할 점이 있어요'); }
+      else $('#shiftResult').classList.add('hidden');
     }
   }catch(e){ toast(e.message); } finally{ btn.disabled=curJob().status==='quit'; }
 };
@@ -859,6 +862,11 @@ document.addEventListener('click',e=>{
   if(v) voidRecord(Number(v.dataset.void)); else if(u) unvoidRecord(Number(u.dataset.unvoid));
 });
 // 퇴근 직후 에이전트 점검 결과
+function renderShiftWaiting(){
+  state.shiftFor=state.current;
+  const box=$('#shiftResult'); box.classList.remove('hidden');
+  box.innerHTML=`<div class="panel"><strong>오늘 근무 점검</strong><p class="sub" style="margin:2px 0 0"><span class="wait-note">퇴근 기록에서 확인할 점을 찾는 중이에요</span></p></div>`;
+}
 function renderShift(sh){
   state.shiftFor=state.current;
   const box=$('#shiftResult'); box.classList.remove('hidden');

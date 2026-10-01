@@ -52,6 +52,17 @@ const finish = async (p, box) => { await until(p, b=>!!document.querySelector(b+
   await tab(p,'home'); await tab(p,'pay'); await p.waitForTimeout(600);
   ck('[급여] 다시 열어도 그 달의 에이전트 동작 보기', (await p.textContent('#payTrace')).includes('에이전트 동작 보기'));
 
+  // 퇴근: 점검하는 동안 '찾는 중' (예전 결과 '찾지 못했어요'가 남지 않게), 두 번 퇴근해도 마찬가지
+  for(const n of [1,2]){
+    await tab(p,'home'); await p.click('#punchBtn'); await p.waitForTimeout(800);  // 출근
+    await p.click('#punchBtn'); await until(p, ()=>!!document.querySelector('#punchLive .live'), null, 10000);  // 퇴근 (바로 퇴근 확인은 자동 수락)
+    const mid=await p.textContent('#shiftResult').catch(()=>'' );
+    ck(`[퇴근 ${n}] 점검하는 동안 '찾는 중'`, mid.includes('찾는 중이에요') && !mid.includes('찾지 못했어요'), mid.replace(/\s+/g,' ').slice(0,60));
+    if(n===1) await p.screenshot({path:'p12_shift_wait.png'});
+    await finish(p,'#punchLive');
+    ck(`[퇴근 ${n}] 끝나면 결과로 바뀜`, !(await p.textContent('#shiftResult')).includes('찾는 중'));
+  }
+
   // 퇴직 정산: 그만둔 날 저장 → AI 판단 칸
   await tab(p,'home'); await p.click('#quitOpen'); await p.fill('#quitDateMain', '2026-09-20'); await p.click('#quitSave'); await until(p, ()=>!!document.querySelector('#quitLive .live'), null, 10000);
   ck('[퇴직 정산] 판단하는 동안 판단 중', (await p.textContent('#quitTag')).includes('판단 중'));
