@@ -1,11 +1,11 @@
 // 3부: AI 없음(LLM_FAKE=false) — 대기 표시, 보안
 const { B, ck, browser, page, vis, toast, api, overflow, summary } = require('./lib');
 const tab = async (p, v) => { await p.evaluate(v=>document.querySelector(`#tabs [data-v="${v}"]`).click(), v); await p.waitForTimeout(900); };
-// '대기 중' 글자가 있는 요소마다 도는 표시(자기나 조상에 대기 클래스)가 있는지
+// '대기 중', '판단 대기', '판단 중' 글자가 있는 요소마다 도는 표시(자기나 조상에 대기 클래스)가 있는지
 const waitsWithoutSpinner = p => p.evaluate(()=>{
   const out=[]; const w=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while(w.nextNode()){ const n=w.currentNode, el=n.parentElement; if(!el||!el.offsetParent) continue;
-    if(!/응답 대기 중/.test(n.textContent)) continue;
+    if(!/응답 대기 중|판단 대기|판단 중/.test(n.textContent)) continue;
     if(el.closest('.wait-note,.ai-note.wait,.tag.pending,.live,details.trace,.log,#toast,.hint')) continue;
     out.push(n.textContent.trim().slice(0,60)); }
   return out; });

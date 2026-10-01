@@ -378,3 +378,17 @@ textarea.input.field-area{min-height:0;resize:none;line-height:1.45;overflow:hid
 #fieldsBox .input::placeholder{color:var(--ink-soft);opacity:.55}
 .pay-item .pay-at{display:block;font-size:12px;margin-top:2px}
 .log .log-at{font-size:12px;margin-right:2px}
+
+/* 항목마다 AI 에이전트의 판단 칸: 코드가 정리한 사실(근거로 쓴 사실, 필요한 정보)과 구분한다 */
+.ai-judge{margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--blue-soft);font-size:13.5px}
+.ai-judge.none{background:#f3f4f7}
+.ai-judge-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ai-judge-head b{color:var(--blue);font-size:13px}
+.ai-judge p{margin:6px 0 0;font-size:13.5px;overflow-wrap:anywhere}
+.ai-judge .sub{font-size:12.5px}
+/* 에이전트 동작 기록: 실행 한 번씩 묶음, AI 판단 단계는 눈에 띄게 */
+details.run{border-top:1px solid var(--line);padding:8px 0}
+details.run summary{cursor:pointer;font-size:13px;line-height:1.5}
+details.run .log:first-of-type{margin-top:6px}
+.log.log-ai{background:var(--blue-soft);border-radius:6px;padding:6px 8px;border-top:0;margin-top:4px}
+.log.log-ai b{color:var(--blue)}

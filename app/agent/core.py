@@ -115,7 +115,7 @@ class Run:
             summary += f" (AI가 할 판단과 작성은 {AI_WAITING})"
         self.log("결과", summary)
         return {**out, "ai_agent": self.ai_used, "plan": self.state.get("plan"), "run_id": self.run_id,
-                "trace": self.trace}
+                "trace": self.trace, "trace_at": now_kst().isoformat()}  # trace_at: 에이전트가 끝난 시각 (화면의 동작 보기에 적음)
 
 
 def _short(v) -> str:
@@ -127,8 +127,8 @@ def _short(v) -> str:
 
 
 def _summary(items: list[dict]) -> str:
-    """결과 개수 요약. AI 판단 전 항목은 '확인 중'으로 센다."""
-    names = [("bad", "위반 의심"), ("warn", "확인 필요"), ("pending", "확인 중(AI 응답 대기 중)"), ("ok", "정상")]
+    """결과 개수 요약. AI 판단 전 항목은 'AI 에이전트 판단 대기'로 센다."""
+    names = [("bad", "위반 의심"), ("warn", "확인 필요"), ("pending", "AI 에이전트 판단 대기"), ("ok", "정상")]
     parts = [f"{label} {n}건" for key, label in names if (n := sum(i["status"] == key for i in items))]
     return ", ".join(parts) or "점검할 항목이 없어요"
 
@@ -145,6 +145,22 @@ def apply_one(s: Session, target: dict, out: dict | None, error: str = "") -> di
     return target
 
 
+STATUS_NAME = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심", "pending": "AI 에이전트 판단 대기"}
+
+
+def log_judgments(r: Run, items: list[dict]) -> None:
+    """항목마다 AI 에이전트의 판단(결과, 근거 조항, 사실, 이유)을 동작 기록에 읽을 수 있게 남긴다."""
+    for it in items:
+        name = it.get("law") or "비교 결과"
+        if it.get("ai_reason"):
+            r.log("AI 판단 결과", f"{name}: {STATUS_NAME.get(it['status'], it['status'])} · 근거 조항 {it.get('ai_law', '')} · "
+                                f"사실 {it.get('ai_fact', '')} · 이유 {it['ai_reason']}")
+        elif it.get("status") == engine.PENDING:
+            r.log("AI 판단 결과", f"{name}: {STATUS_NAME['pending']}" + (f" ({it['ai_error']})" if it.get("ai_error") else ""))
+        else:
+            r.log("AI 판단 결과", f"{name}: {STATUS_NAME.get(it['status'], it['status'])} (AI 판단 없음, 코드가 정리한 사실 기준)")
+
+
 def _judge_items(r: Run, goal_text: str, tools: list[str], make_items, context: dict, finish_extra: dict | None = None):
     """검토 항목 판단 (계약서, 퇴근, 지원 전 공통): AI가 check_rules로 항목을 받아 판단한다."""
     goal = Goal(goal_text, ["check_rules", *tools], {**JUDGMENTS, **(finish_extra or {})}, ["judgments"],
@@ -152,9 +168,12 @@ def _judge_items(r: Run, goal_text: str, tools: list[str], make_items, context: 
                 review=lambda a: r.tools["review_judgments"](r.state["items"], a.get("judgments")))
     out = r.agent(goal, context, [r.rules_tool(make_items, "법 기준표와 대조해 검토할 항목과 근거 사실을 받는다.")])
     if out:
-        return r.tools["apply_judgments"](r.state["items"], out.get("judgments")), out
-    items = r.state.get("items") or make_items()
-    return r.tools["wait_ai"](items, r.ai_error), None
+        items = r.tools["apply_judgments"](r.state["items"], out.get("judgments"))
+        log_judgments(r, items)
+        return items, out
+    items = r.tools["wait_ai"](r.state.get("items") or make_items(), r.ai_error)
+    log_judgments(r, items)
+    return items, None
 
 
 # ---------- 계약서, 근무 기록 점검 ----------
@@ -228,6 +247,7 @@ def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger:
         expected, paid = r.call("calc_pay", month), r.call("get_payslip", month)
         pay = {"month": month, "expected": expected, "paid": paid, "compare": r.call("compare_pay", expected, paid)}
     cmp = apply_one(session, pay["compare"], out, r.ai_error)
+    log_judgments(r, [cmp])
     r.log("판단", cmp["text"])
     r.tools["save_check"]("payday", pay)
     if not r.ai_used:
@@ -251,6 +271,7 @@ def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "
     out = r.agent(goal, {})
     st = r.state.get("settlement") or r.call("settlement")
     st = apply_one(session, st, out, r.ai_error)
+    log_judgments(r, [{**st, "law": "퇴직 후 임금 지급"}])
     r.tools["save_check"]("quit", st)
     if not r.ai_used:
         unpaid = st["rule_status"] != "ok"  # 받았다고 기록하지 않음
