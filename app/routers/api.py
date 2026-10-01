@@ -627,7 +627,8 @@ def last_check(job_id: int, u: User = Depends(current_user), s: Session = Depend
     row = s.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "contract")
                  .order_by(CheckRun.id.desc())).first()
     items = attach_refs(s, attach_articles(s, json.loads(row.results_json))) if row else None
-    return {"items": items, "created_at": row.created_at.isoformat() if row else None}
+    # ai: 지금 AI가 연결돼 있으면, AI 없이 저장된 대기 결과를 화면이 바로 다시 점검한다
+    return {"items": items, "created_at": row.created_at.isoformat() if row else None, "ai": llm_client.available()}
 
 
 @router.get("/law/status")

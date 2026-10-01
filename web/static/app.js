@@ -962,13 +962,22 @@ async function loadCheck(){
     run(); grow();  // 예전에 저장된 값에 쓸 수 없는 글자가 있으면 화면에서 빼 둔다 (점검하기를 누르면 이 값으로 저장)
     i.addEventListener('input',()=>{ grow(); autosave(`fields-${jobId}`,()=>saveFields(jobId),'#fieldsSaved'); }); });
   const r=await api('GET',`/api/jobs/${state.current}/check`); renderCheck(r.items, r.created_at); $('#checkTrace').innerHTML='';
+  const stale=r.ai && (r.items||[]).some(i=>i.status==='pending') && !rechecked.has(jobId);
   const ls=await api('GET','/api/law/status');
   const mw=(ls.min_wage?` 최저임금 ${ls.min_wage.year}년 시간급 ${won(ls.min_wage.value)}, 근거 고시: ${ls.min_wage.source}.`:'')
     +(ls.min_wage_missing_years?.length?` ${ls.min_wage_missing_years.join(', ')}년 최저임금 값은 아직 등록 전이에요.`:'');
   $('#lawStatus').textContent=ls.built?`법 기준표: 법제처 현행 법령 ${Object.keys(ls.laws).length}개, 조문 ${Object.values(ls.laws).reduce((a,b)=>a+b,0)}개, 참고 판례·해석 ${ls.refs}건.${mw}`
     :'법 기준표 미구축: 법제처 API 키를 등록하고 조문을 불러오면 결과마다 조문 원문이 붙어요.';
   await loadLog();
+  if(stale) recheck(jobId);
 }
+// AI가 없던 때 저장된 'AI 응답 대기 중' 결과: 지금 AI가 있으면 화면을 열 때 한 번 다시 점검한다 (기다려도 바뀌지 않으므로)
+const rechecked=new Set();
+async function recheck(jobId){
+  rechecked.add(jobId);
+  try{ const r=await agent('#checkTrace',()=>api('POST',`/api/jobs/${jobId}/check`)); if(jobId!==state.current) return;
+    renderCheck(r.items, r.created_at); $('#checkTrace').innerHTML=traceHTML(r.trace); await loadLog(); toast('AI 판단을 기다리던 항목을 다시 점검했어요');
+  }catch(e){ toast(e.message); } }
 function renderCheck(items, at){
   $('#checkAt').textContent=items&&at?`마지막 점검 ${fmtDT(at,{sec:true,wd:true})}`:'';
   if(!items){ $('#checkSummary').innerHTML=''; $('#checkItems').innerHTML='<p class="sub">아직 점검하지 않았어요. 계약서 내용을 확인하고 점검해 보세요.</p>'; return; }

@@ -146,8 +146,9 @@ def start() -> None:
                           misfire_grace_time=12 * 3600)
         scheduler.add_job(open_record_check, "interval", minutes=30, id="open_record_check", replace_existing=True,
                           misfire_grace_time=30 * 60)
+        # 서버를 켜고 곧바로 한 번: AI가 없던 때 저장된 'AI 응답 대기 중' 결과를 첫 주기(AI_RETRY_MIN분)까지 두지 않는다
         scheduler.add_job(retry_waiting, "interval", minutes=AI_RETRY_MIN, id="retry_waiting", replace_existing=True,
-                          misfire_grace_time=AI_RETRY_MIN * 60)
+                          misfire_grace_time=AI_RETRY_MIN * 60, next_run_time=now_kst() + timedelta(seconds=20))
         scheduler.add_job(run_due_followups, "interval", minutes=AI_RETRY_MIN, id="run_due_followups",
                           replace_existing=True, misfire_grace_time=AI_RETRY_MIN * 60)
         scheduler.start()
