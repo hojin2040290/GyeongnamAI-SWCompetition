@@ -650,7 +650,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
              {"day": {"type": "string", "description": "YYYY-MM-DD"}}, ["day"]),
         Tool("calc_work_days", "실제 출퇴근 기록으로 근무일별 근로시간, 야간 근로 시간, 그날의 만 나이를 계산한다.",
              calc_work_days, {"month": {"type": "string", "description": "YYYY-MM (비우면 전체)"}}),
-        Tool("calc_pay", "그 달 받아야 할 임금을 계산한다 (기본급, 주휴수당, 가산수당).", calc_pay, {"month": MONTH}, ["month"]),
+        Tool("calc_pay", "그 달 계약 시급 기준으로 받아야 할 임금을 계산한다 (기본급, 주휴수당, 가산수당). 최저임금 미달은 계약서 점검 항목에서 본다.", calc_pay, {"month": MONTH}, ["month"]),
         Tool("get_payslip", "그 달 받은 금액(명세서나 입금 기록)을 본다.", get_payslip, {"month": MONTH}, ["month"]),
         Tool("compare_pay", "그 달 계산한 임금과 받은 금액의 차이를 계산한다.", compare_pay, {"month": MONTH}, ["month"]),
         Tool("settlement", "그만둔 뒤 임금 지급 기한과 남은 날을 계산한다.", settlement),

@@ -919,7 +919,7 @@ function payHTML(r){
     <span>근무시간 ${fmtH(e.work_min)} 기준 기본급</span><span class="num">${won(e.base)}</span>
     <span>주휴수당</span><span class="num">${won(e.weekly_holiday)}</span>
     <span>가산수당 (야간 ${fmtH(e.night_min)}, 연장 ${fmtH(e.overtime_min)})</span><span class="num">${won(e.premium)}</span>
-    <span class="total">받아야 할 금액</span><span class="total num">${won(e.total)}</span>
+    <span class="total">계약 시급 기준 받아야 할 금액</span><span class="total num">${won(e.total)}</span>
     <span>받은 금액</span><span class="num">${r.paid==null?'미입력':won(r.paid)}</span></div>
     <div class="result ${c.status}" style="margin-top:12px"><div class="head"><span class="law">비교 결과</span><span class="tag ${c.status}">${LABEL[c.status]}</span></div><p>${esc(c.text)}</p>${aiJudgeHTML(c)}</div>
     ${e.notes.map(n=>`<p class="hint">${esc(n)}</p>`).join('')}`;
