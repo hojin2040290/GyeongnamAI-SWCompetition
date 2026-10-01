@@ -326,5 +326,5 @@ def test_report_for_quit_job(c):
     assert "퇴직일 2026년 9월 20일 (일)" in html
     # 자료의 판단은 화면(/settlement)과 같다: AI가 판단했으면 그 결과, 아니면 확인 중
     assert c.get(f"/api/jobs/{jid}/settlement").json()["settlement"]["status"] == st["status"]
-    assert ("확인 중" in html.split("퇴직일")[1].split("</p>")[0]) == (st["status"] == "pending")
+    assert ("AI 에이전트 판단 대기" in html.split("퇴직일")[1].split("</p>")[0]) == (st["status"] == "pending")
 

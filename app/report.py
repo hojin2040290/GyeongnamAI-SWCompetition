@@ -14,7 +14,25 @@ from app.calc.timeutil import fmt_date, fmt_dt, fmt_month, now_kst, today_kst
 from app.law.lookup import article_info, refs_for
 from app.models import CheckRun, Evidence, Payslip, Report, WorkRecord
 
-LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심", "pending": "확인 중(AI 판단 전)"}
+LABEL = {"ok": "정상", "warn": "확인 필요", "bad": "위반 의심", "pending": "AI 에이전트 판단 대기"}
+
+
+def ai_judgment_html(it: dict) -> str:
+    """항목에 붙은 AI 에이전트 판단 (근거 조항, 사실, 이유). 판단을 기다리면 그렇다고 적는다."""
+    if it.get("ai_reason"):
+        body = (f"<b>AI 에이전트 판단</b>: {html.escape(it['ai_reason'])} "
+                f"<span class='s'>(근거 조항 {html.escape(it.get('ai_law', ''))}, 사실: {html.escape(it.get('ai_fact', ''))})</span>")
+    elif it.get("status") == "pending":
+        body = "<b>AI 에이전트 판단</b>: <span class='wait'>AI 에이전트 판단 대기</span>"
+    else:
+        return ""
+    return f"<tr class='aj'><td colspan='5'>{body}</td></tr>"
+
+
+def status_html(status: str) -> str:
+    """판단 결과 글. AI 판단을 기다리는 중이면 도는 표시를 붙인다."""
+    text = html.escape(LABEL.get(status, str(status)))
+    return f"<span class='wait'>{text}</span>" if status == "pending" else text
 
 
 def summary_html(summary: dict | None) -> str:
@@ -78,9 +96,10 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
             art = article_info(session, it["law"])  # 저장 뒤 법 기준표가 새로 구축됐을 수 있어 다시 찾는다
             articles.setdefault(it["law"], art)
             src = "근무 기록" if it.get("source") == "records" else "입력 정보"
-            rows.append(f"<tr><td class='n'>{e(it['law'])}</td><td class='n'>{e(LABEL.get(it['status'], str(it['status'])))}</td><td>{e(it['text'])}</td>"
-                        f"<td>{e(', '.join(it['basis']))}<br><span class='s'>{src} 기준</span></td>"
-                        f"<td class='n'>{'조문 원문 첨부' if art['built'] else ('-' if art.get('na') else '법 기준표 미구축')}</td></tr>")
+            rows.append(f"<tr><td class='n'>{e(it['law'])}</td><td class='n'>{status_html(it['status'])}</td><td class='t'>{e(it['text'])}</td>"
+                        f"<td class='t'>{e(', '.join(it['basis']))}<br><span class='s'>{src} 기준</span></td>"
+                        f"<td class='n'>{'조문 원문 첨부' if art['built'] else ('-' if art.get('na') else '법 기준표 미구축')}</td></tr>"
+                        f"{ai_judgment_html(it)}")  # AI 판단은 항목 아래 한 줄 전체 (좁은 화면에서 칸이 눌리지 않게)
         rows.append(f"</table><p class='s'>점검 시각 {fmt_dt(check.created_at)}</p>")
     else:
         rows.append("<p>아직 계약 점검을 하지 않았어요.</p>")
@@ -112,7 +131,7 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
                         f"<td>{'원본 있음 (5. 증거 자료)' if s_.evidence_id else '-'}</td></tr>")
         rows.append("</table><p class='s'>한 달 급여를 나눠 받았으면 여러 건으로 저장돼 있고, 비교할 때는 합쳐서 봐요.</p>")
     if settle:
-        rows.append(f"<p>퇴직일 {fmt_date(settle['quit_date'])}, 임금 지급 기한 {fmt_date(settle['due'])} ({e(LABEL.get(settle['status'], ''))})</p>")
+        rows.append(f"<p>퇴직일 {fmt_date(settle['quit_date'])}, 임금 지급 기한 {fmt_date(settle['due'])} ({status_html(settle['status'])})</p>")
 
     rows.append("<h2>4. 근무 기록</h2><table><tr><th>출근</th><th>퇴근</th><th>출근 위치</th><th>비고</th></tr>")
     for r in recs:
@@ -163,7 +182,7 @@ def build(session: Session, user_id: int, job_id: int, summary: dict | None = No
     doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>상담 사전 자료</title>
 <style>body{{font-family:sans-serif;max-width:820px;margin:24px auto;padding:0 16px;line-height:1.6}}
 table{{border-collapse:collapse;width:100%;margin:8px 0}}th,td{{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;font-size:14px}}
-th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}@media (max-width:640px){{table{{display:block;overflow-x:auto}}th,td{{font-size:13px}}}}.w{{color:#3355cc;background:#eef2ff;padding:8px 10px;border-radius:8px}}.wait::before{{content:"";display:inline-block;width:.8em;height:.8em;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}}@keyframes spin{{to{{transform:rotate(360deg)}}}}@media print{{.wait::before{{display:none}}.back{{display:none}}}}.back a{{color:#3355cc;text-decoration:none;font-size:14px}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
+th{{background:#f2f4f8}}pre{{white-space:pre-wrap;background:#f7f8fb;padding:10px;font-size:13px}}.s{{color:#666;font-size:13px}}.h{{font-size:11px;word-break:break-all}}.n{{white-space:nowrap}}@media (max-width:640px){{table{{display:block;overflow-x:auto}}th,td{{font-size:13px}}}}.w{{color:#3355cc;background:#eef2ff;padding:8px 10px;border-radius:8px}}.wait::before{{content:"";display:inline-block;width:.8em;height:.8em;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}}@keyframes spin{{to{{transform:rotate(360deg)}}}}@media print{{.wait::before{{display:none}}.back{{display:none}}}}.back a{{color:#3355cc;text-decoration:none;font-size:14px}}tr.aj td{{background:#f5f7fe;font-size:13px}}td.t{{min-width:11em}}tr.v td{{color:#888}}tr.v td:nth-child(-n+2){{text-decoration:line-through}}</style></head>
 <body><p class="back"><a href="/">← 알바지킴이로 돌아가기</a></p><h1>상담 사전 자료</h1><p class="s">작성 시각 {fmt_dt(now_kst())}. 이 자료의 시각은 모두 한국 시간이에요.</p>{''.join(rows)}</body></html>"""
     path = storage.save_report(user_id, job_id, now_kst().strftime('%Y%m%d%H%M%S'), doc)
     rep = Report(user_id=user_id, job_id=job_id, path=path, ai_summary=bool(summary and summary.get("ai")),

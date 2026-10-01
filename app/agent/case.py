@@ -34,7 +34,7 @@ def progress(s: Session, job: Job) -> list[dict]:
     posts = s.exec(select(GuardPost).where(GuardPost.job_id == job.id)).all()
     return [
         {"key": "check", "name": "점검", "done": bool(check),
-         "detail": (f"위반 의심 {_count(items, 'bad')}, 확인 필요 {_count(items, 'warn')}, 확인 중 {_count(items, 'pending')}"
+         "detail": (f"위반 의심 {_count(items, 'bad')}, 확인 필요 {_count(items, 'warn')}, AI 판단 대기 {_count(items, 'pending')}"
                     if check else "아직 안 함")},
         {"key": "record", "name": "기록", "done": bool(days or evs), "detail": f"근무 {days}일, 증거 자료 {evs}개"},
         {"key": "pay", "name": "급여", "done": bool(pays),

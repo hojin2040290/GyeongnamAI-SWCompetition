@@ -391,7 +391,7 @@ def _read_result(s: Session, u: User, job_id: int, ev: Evidence, kind: str) -> d
         return {**res, "evidence_id": ev.id}
     fields = res.get("fields") or {k: "" for k in P()["written_terms"]["items"]}
     return {"evidence": ev_out(ev), "fields": fields, "ai": res.get("ai", False), "found": res.get("found", 0),
-            "total": len(fields), "reason": res.get("reason", ""), "trace": res["trace"]}
+            "total": len(fields), "reason": res.get("reason", ""), "trace": res["trace"], "trace_at": res.get("trace_at")}
 
 
 def _saved_judgment(s: Session, job_id: int, kind: str, now: dict, same) -> dict:
@@ -778,6 +778,27 @@ def agent_log(job_id: int, u: User = Depends(current_user), s: Session = Depends
             for r in rows]
 
 
+@router.get("/jobs/{job_id}/agent/runs")
+def agent_runs(job_id: int, events: str = "", month: str = "", limit: int = 10,
+               u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """에이전트 실행을 한 번씩 묶어 최근 것부터 (계획, AI 판단, 도구 실행, 결과).
+    events: 쉼표로 나눈 종류만 (예: contract_check). month: 그 달을 다룬 실행만 (급여 점검)."""
+    own_job(s, u, job_id)
+    q = select(AgentLog).where(AgentLog.user_id == u.id, AgentLog.job_id == job_id)
+    kinds = [e for e in events.split(",") if e]
+    if kinds:
+        q = q.where(AgentLog.event.in_(kinds))
+    rows = s.exec(q.order_by(AgentLog.id.desc()).limit(3000)).all()
+    runs: dict[str, dict] = {}
+    for r in reversed(rows):  # 오래된 단계부터 차례로 묶는다
+        run = runs.setdefault(r.run_id or f"log{r.id}", {"run_id": r.run_id, "event": r.event, "at": r.created_at.isoformat(), "steps": []})
+        run["steps"].append({"step": r.step, "detail": r.detail, "at": r.created_at.isoformat()})
+    out = list(runs.values())[::-1]
+    if month:
+        out = [x for x in out if any(month in st["detail"] for st in x["steps"])]
+    return out[:max(1, min(limit, 50))]
+
+
 # ---------- 상담 ----------
 @router.get("/counsel")
 def counsel(u: User = Depends(current_user)):
@@ -842,7 +863,7 @@ def set_reported(job_id: int, data: ReportedIn, u: User = Depends(current_user),
         s.commit()
         return {**guard_state(job_id, u, s), "saved": True}
     run = core.run_guard_toggle(s, u.id, job_id, data.reported)
-    return {**guard_state(job_id, u, s), "trace": run["trace"]}
+    return {**guard_state(job_id, u, s), "trace": run["trace"], "trace_at": run.get("trace_at")}
 
 
 @router.post("/jobs/{job_id}/agent/guard")
@@ -850,7 +871,7 @@ def agent_guard(job_id: int, u: User = Depends(current_user), s: Session = Depen
     """신고했어요를 저장한 뒤: 켰으면 보복 금지 안내 문구 작성, 껐으면 보호 멈춤."""
     job = own_job(s, u, job_id)
     run = core.run_guard_toggle(s, u.id, job_id, job.reported)
-    return {**guard_state(job_id, u, s), "trace": run["trace"]}
+    return {**guard_state(job_id, u, s), "trace": run["trace"], "trace_at": run.get("trace_at")}
 
 
 class MessageIn(BaseModel):
