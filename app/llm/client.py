@@ -50,13 +50,16 @@ def _post(payload: dict) -> dict:
         raise LLMError("AI 모델 응답을 읽지 못했어요") from exc
 
 
-def chat(messages: list[dict], tools: list[dict] | None = None, model: str | None = None) -> dict:
-    """대화 한 번. 모델이 돌려준 메시지(content, tool_calls)를 그대로 돌려준다."""
+def chat(messages: list[dict], tools: list[dict] | None = None, model: str | None = None,
+         force: str | None = None) -> dict:
+    """대화 한 번. 모델이 돌려준 메시지(content, tool_calls)를 그대로 돌려준다.
+    force: 이 도구를 반드시 부르게 한다 (반복의 마지막에 finish로 끝내게 할 때)."""
     if not available():
         raise LLMError("AI 모델이 아직 연결되지 않았어요")
     payload = {"model": model or LLM_MODEL, "messages": messages, "temperature": 0}
     if tools:
-        payload["tools"], payload["tool_choice"] = tools, "auto"
+        payload["tools"] = tools
+        payload["tool_choice"] = {"type": "function", "function": {"name": force}} if force else "auto"
     data = _post(payload)
     try:
         return data["choices"][0]["message"]

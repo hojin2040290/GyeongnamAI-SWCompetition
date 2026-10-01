@@ -236,12 +236,26 @@ def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger:
     r = Run(session, user_id, job_id, "payday", trigger, topic=notices.topic_of("payday", month))
     r.state["resume"] = {"month": month}  # 질문에 답하면 같은 달로 다시 시작
     r.log("입력", f"{month} 급여 점검")
-    goal = Goal(f"{month} 급여를 계산한 금액과 받은 금액을 compare_pay로 비교하고, 체불이 의심되는지 판단해 finish에 담아 주세요. "
-                "금액은 도구 결과만 쓰세요. 적게 받았거나 받은 금액이 없으면 사용자에게 알림을 보내 주세요.",
-                ["get_profile", "calc_pay", "get_payslip", "compare_pay", "calc_work_days", "get_article", "notify"],
-                JUDGE_ONE, list(JUDGE_ONE), check=r.need("pay", "먼저 compare_pay로 금액을 비교해 주세요"),
-                review=lambda a: r.tools["review_one"](r.state["pay"]["compare"], a))
+    tools = ["get_profile", "calc_pay", "get_payslip", "compare_pay", "calc_work_days", "get_article", "notify"]
+    missing = r.tools["compare_pay"](r.tools["calc_pay"](month), r.tools["get_payslip"](month)).get("needed")
+    if missing:  # 비교에 필요한 정보가 없으면 체불을 판단하지 않는다 (추측하지 않고 코드가 '확인 필요'로 둔다)
+        goal = Goal(f"{month} 급여는 비교에 필요한 정보({', '.join(missing)})가 없어 체불 여부를 판단하지 않아요. "
+                    "compare_pay로 상황을 확인하고, 무엇을 기록하거나 올리면 비교할 수 있는지 사용자에게 알리거나 ask_user로 물어본 뒤 "
+                    "finish로 끝내 주세요. 정보가 없는 것을 체불이나 위반으로 쓰지 마세요.",
+                    tools, DONE, check=r.need("pay", "먼저 compare_pay로 금액을 확인해 주세요"))
+    else:
+        goal = Goal(f"{month} 급여를 계산한 금액과 받은 금액을 compare_pay로 비교하고, 적게 받은 것이 의심되는지 판단해 finish에 담아 주세요. "
+                    "금액은 도구 결과만 쓰세요. 판단 기준: "
+                    "ok: 받은 금액이 계산한 금액 이상이거나 차이가 아주 작음 (더 받은 것은 체불이 아니에요). "
+                    "warn: 적게 받았지만 계산에 쓴 정보(쉬는 시간, 사업장 인원, 수당 조건 등 calc_pay의 notes)가 불확실해 단정할 수 없음. "
+                    "bad: 근무 기록으로 계산한 금액보다 분명히 적게 받았고 계산 조건에 불확실한 점이 없음. "
+                    "근거 조항(law)은 compare_pay의 '관련 조항' 가운데 차이와 관련된 것을 쓰세요. "
+                    "적게 받았거나 받은 금액이 없으면 사용자에게 알림을 보내 주세요.",
+                    tools, JUDGE_ONE, list(JUDGE_ONE), check=r.need("pay", "먼저 compare_pay로 금액을 비교해 주세요"),
+                    review=lambda a: r.tools["review_one"](r.state["pay"]["compare"], a))
     out = r.agent(goal, {"달": month})
+    if missing:
+        out = None  # 판단은 받지 않는다 (알림, 질문, 메모는 위에서 이미 했다)
     pay = r.state.get("pay")
     if not pay:
         expected, paid = r.call("calc_pay", month), r.call("get_payslip", month)

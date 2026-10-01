@@ -47,7 +47,9 @@ const finish = async (p, box) => { await until(p, b=>!!document.querySelector(b+
   await p.fill('#payAmount','300000'); await p.click('#paySave'); await until(p, ()=>!!document.querySelector('#payTrace .live'), null, 10000);
   ck('[급여] 판단하는 동안 비교 결과가 판단 중', (await p.textContent('#payBody .result .head .tag')).includes('판단 중'));
   await finish(p,'#payTrace');
-  ck('[급여] 비교 결과에 AI 에이전트 판단 칸', ((await p.textContent('#payBody .ai-judge'))||'').includes(PREFIX));
+  // 이 달은 근무 기록이 없어 비교할 수 없다: AI에게 체불 판단을 받지 않고 코드가 확인 필요로 둔다 (근무 기록이 있는 달은 part13)
+  const pj = (await p.textContent('#payBody .ai-judge'))||'';
+  ck('[급여] 근무 기록이 없는 달은 체불을 판단하지 않음', pj.includes('AI 판단 없이') && !(await p.textContent('#payBody')).includes('체불'), pj.slice(0,60));
   await p.screenshot({path:'p12_pay.png'});
   await tab(p,'home'); await tab(p,'pay'); await p.waitForTimeout(600);
   ck('[급여] 다시 열어도 그 달의 에이전트 동작 보기', (await p.textContent('#payTrace')).includes('에이전트 동작 보기'));
