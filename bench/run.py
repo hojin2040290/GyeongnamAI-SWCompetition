@@ -187,6 +187,38 @@ def installed(pkg: str) -> str | None:
         return None
 
 
+def vllm_tested_pins(pkgs=("transformers", "mistral-common", "torch")) -> dict:
+    """설치된 vLLM 버전이 공식 시험에 쓴 패키지 버전 (GitHub의 requirements/test/cuda.txt)."""
+    ver = installed("vllm")
+    if not ver:
+        return {}
+    url = f"https://raw.githubusercontent.com/vllm-project/vllm/v{ver}/requirements/test/cuda.txt"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            text = r.read().decode(errors="ignore")
+    except Exception:  # noqa: BLE001
+        return {}
+    pins = {}
+    for line in text.splitlines():
+        m = re.match(r"^([A-Za-z0-9_.\-]+)==([^\s;#]+)", line.strip())
+        if m and m.group(1).lower().replace("_", "-") in pkgs:
+            pins[m.group(1).lower().replace("_", "-")] = m.group(2)
+    return pins
+
+
+def pin_differences(pins: dict) -> list[str]:
+    """vLLM이 시험한 버전과 다르게 설치된 패키지 (torch는 +cu130 같은 꼬리를 빼고 비교)."""
+    out = []
+    for pkg, want in pins.items():
+        have = installed(pkg)
+        if have is None:
+            continue
+        if have.split("+")[0] != want.split("+")[0]:
+            out.append(f"{pkg} {have} (vLLM {installed('vllm')} 시험 버전 {want}, "
+                       f"맞추기: uv pip install --python {BASE}/venv/bin/python \"{pkg}=={want.split('+')[0]}\")")
+    return out
+
+
 def version_problems(spec: dict) -> list[str]:
     """공식 문서의 최소 버전보다 낮거나 없는 패키지 (이 파이썬 = GPU 서버의 vLLM 가상환경)."""
     from packaging.version import Version
@@ -195,7 +227,7 @@ def version_problems(spec: dict) -> list[str]:
         have = installed(pkg)
         if have is None or Version(have) < Version(need):
             out.append(f"{pkg} {have or '없음'} < 필요 {need} "
-                       f"(설치: {BASE}/venv/bin/pip install -U \"{pkg}>={need}\")")
+                       f"(설치: uv pip install --python {BASE}/venv/bin/python \"{pkg}>={need}\")")
     return out
 
 
@@ -534,6 +566,14 @@ def main() -> int:
     LOG = outdir / "run.log"
     gpu_mib = gpu_total_mib()
     say(f"벤치마크 시작: 모델 {len(specs)}개, GPU {gpu_mib} MiB, 결과 {outdir}")
+    if not args.serve_cmd:
+        pins = vllm_tested_pins()
+        diffs = pin_differences(pins)
+        (outdir / "versions.json").write_text(json.dumps(
+            {"installed": {k: installed(k) for k in ("vllm", "torch", "transformers", "mistral-common")},
+             "vllm_tested": pins, "differences": diffs}, ensure_ascii=False, indent=1), encoding="utf-8")
+        for d in diffs:  # 버전이 다르면 모델 코드가 맞지 않아 켜지지 않거나 사진 처리가 틀릴 수 있다
+            say(f"주의: vLLM이 시험한 버전과 달라요: {d}")
     stopped = False
     try:
         if not args.preflight and not args.serve_cmd:
