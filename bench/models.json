@@ -81,6 +81,8 @@
      "hf_ids": ["mistralai/Mistral-Small-4-119B-2603"],
      "docs": ["https://github.com/vllm-project/recipes/blob/main/models/mistralai/Mistral-Small-4-119B-2603.yaml"],
      "requires": {"vllm": "0.20.0", "mistral_common": "1.11.0"},
+     "requires_below": {"transformers": "5.17.0"},
+     "requires_below_note": "vLLM 0.30.0의 pixtral 코드가 불러오는 PixtralRotaryEmbedding이 transformers 5.17.0부터 없어 켜지지 않아요 (GPU 서버 2026-10-03 확인, vLLM 0.31.0에서 고쳐짐)",
      "tool_parsers": ["mistral"], "reasoning_parser": "mistral",
      "args": ["--limit-mm-per-prompt", "{\"image\":2}"], "gpu_memory_utilization": 0.92,
      "extra_body": {"reasoning_effort": "none"},
