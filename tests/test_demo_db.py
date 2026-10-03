@@ -23,7 +23,7 @@ def test_demo_db_builds_in_test_folder_only():
         out = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", "data/test_pytest"], cwd=ROOT,
                              capture_output=True, text=True, timeout=180)
         assert out.returncode == 0, out.stderr[-800:]
-        assert (target / "app.db").exists() and len(list((target / "uploads").rglob("*.png"))) == 14
+        assert (target / "app.db").exists() and len(list((target / "uploads").rglob("*.png"))) == 14 * 5  # 계정 5개가 각자 원본 사진을 가진다
         for name in ("행복편의점 도계점", "가상분식 시험점", "가상카페 시험점", "가상베이커리 시험점", "가상치킨 시험점"):
             assert name in out.stdout
         again = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", "data/test_pytest"], cwd=ROOT,
@@ -51,10 +51,23 @@ def test_server_prepares_test_data_when_missing(monkeypatch):
     try:
         main.prepare_test_data(log)
         db = target / "app.db"
-        assert sqlite3.connect(db).execute("select email from user").fetchall() == [("test@example.com",)]
+        assert [r[0] for r in sqlite3.connect(db).execute("select email from user order by id")] == [
+            "test@example.com", "test2@example.com", "test3@example.com", "test4@example.com", "test5@example.com"]
+        with sqlite3.connect(db) as c:  # 계정마다 알바 5개가 같은 내용으로
+            per = c.execute("select u.email, count(j.id), group_concat(j.name, '|') from user u join job j on j.user_id=u.id "
+                            "group by u.id").fetchall()
+        assert len(per) == 5 and all(n == 5 for _, n, _ in per) and len({names for _, _, names in per}) == 1
         with sqlite3.connect(db) as c:
             c.execute("update job set name='바꾼 이름' where id=2")
         main.prepare_test_data(log)  # 이미 있으면 다시 만들지 않는다
         assert sqlite3.connect(db).execute("select name from job where id=2").fetchone() == ("바꾼 이름",)
+        with sqlite3.connect(db) as c:  # 예전 코드로 만든 시험 DB (계정이 test@example.com 하나뿐)
+            c.execute("delete from job where user_id in (select id from user where email!='test@example.com')")
+            c.execute("delete from user where email!='test@example.com'")
+        main.prepare_test_data(log)  # 없는 시험 계정만 더한다
+        with sqlite3.connect(db) as c:
+            assert c.execute("select count(*) from user").fetchone() == (5,)
+            assert c.execute("select count(*) from job where user_id=(select id from user where email='test4@example.com')").fetchone() == (5,)
+            assert c.execute("select name from job where id=2").fetchone() == ("바꾼 이름",)  # 쓰던 계정의 기록은 그대로
     finally:
         shutil.rmtree(target, ignore_errors=True)
