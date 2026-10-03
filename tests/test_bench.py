@@ -21,3 +21,20 @@ def test_weight_bytes_counts_one_format():
     assert run.weight_bytes(both) == 10e9
     assert run.weight_bytes([F(rfilename="pytorch_model.bin", size=7e9)]) == 7e9
     assert run.weight_bytes([F(rfilename="a.safetensors", size=None)]) == 0
+
+
+def test_startup_fix_from_vllm_log():
+    """켜지다 멈춘 vLLM 로그의 오류 문장에서 고칠 옵션을 찾는다 (GPU 서버의 Qwen3.5-122B 로그 문장 그대로)."""
+    log = ("ValueError: max_num_seqs (1024) exceeds available Mamba cache blocks (868). Each decode sequence requires one "
+           "Mamba cache block, so CUDA graph capture cannot proceed. Please lower max_num_seqs to at most 868 or increase "
+           "gpu_memory_utilization.")
+    assert run.startup_fix(log) == ["--max-num-seqs", "868"]
+    kv = "Based on the available memory, the estimated maximum model length is 20480. Try increasing gpu_memory_utilization"
+    assert run.startup_fix(kv) == ["--max-model-len", "20480"]
+    assert run.startup_fix("Model architectures ['PixtralForConditionalGeneration'] failed to be inspected") is None
+
+
+def test_with_flags_replaces_existing_value():
+    cmd = ["vllm", "serve", "m", "--max-model-len", "32768"]
+    assert run.with_flags(cmd, ["--max-model-len", "20480", "--max-num-seqs", "868"]) == \
+        ["vllm", "serve", "m", "--max-model-len", "20480", "--max-num-seqs", "868"]
