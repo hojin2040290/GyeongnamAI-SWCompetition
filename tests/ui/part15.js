@@ -1,7 +1,13 @@
 // 15부: 홈의 AI 에이전트 종합 점검 — 모든 일하는 곳에 카드, 처음 열면 한 번 자동 점검(진행 칸), 코드가 정리한 사실과
-// AI 에이전트 판단(테스트 답변), 조언, 다시 열면 다시 점검하지 않음, 버튼으로 다시 점검 (가짜 AI 3초 대기)
+// AI 에이전트 판단(테스트 답변), 조언, 다시 열면 다시 점검하지 않음, 버튼으로 다시 점검 (가짜 AI 3초 대기),
+// 진행 중 화면 이동 (자동 점검은 안 움직임, 손대면 따라가기 멈춤, 진행 칸 높이 고정)
 const { B, ck, browser, page, api, overflow, summary } = require('./lib');
 const PREFIX = '테스트 답변입니다';
+const tab = async (p, v) => { await p.evaluate(v=>document.querySelector(`#tabs [data-v="${v}"]`).click(), v); await p.waitForTimeout(900); };
+// 진행 중인 동안 화면 위치(scrollY)를 모은다
+const scrolls = async (p, sel, ms=2400) => { const out=[]; const t0=Date.now();
+  while(Date.now()-t0<ms){ out.push(await p.evaluate(s=>document.querySelector(s+' .live')?Math.round(scrollY):null, sel)); await p.waitForTimeout(200); }
+  return out.filter(x=>x!==null); };
 const until = async (p, fn, arg, ms=90000) => p.waitForFunction(fn, arg, {timeout:ms}).then(()=>true).catch(()=>false);
 (async () => {
   const b = await browser(); const p = await page(b);
@@ -14,6 +20,8 @@ const until = async (p, fn, arg, ms=90000) => p.waitForFunction(fn, arg, {timeou
   // 처음 열면 자동으로 한 번 종합 점검 (판단하는 동안 판단 중 + 진행 칸)
   const live = await until(p, ()=>!!document.querySelector('#ovLive .live .wait-note'), null, 10000);
   const judging = (await p.textContent('#ovPanel')).includes('AI 에이전트가 판단 중');
+  const autoY = await scrolls(p, '#ovLive');
+  ck('[화면 이동] 홈을 열 때 자동 점검은 화면을 움직이지 않음', autoY.length>0 && autoY.every(y=>y===0), autoY.join(','));
   await p.evaluate(()=>document.querySelector('#ovPanel').scrollIntoView({block:'start'})); await p.waitForTimeout(1200);
   await p.screenshot({path:'p15_auto_live.png'});
   ck('[종합 점검] 처음 열면 자동 점검: 진행 칸(도는 표시)', live);
@@ -43,13 +51,38 @@ const until = async (p, fn, arg, ms=90000) => p.waitForFunction(fn, arg, {timeou
     const nav=document.querySelector('#tabs').getBoundingClientRect().top; return l?{gap:l.top-b.bottom, top:l.top, nav}:null; });
   await p.screenshot({path:'p15_button_live.png'});
   ck('[종합 점검] 버튼 바로 아래 진행 칸이 화면 안에', btnLive && pos && pos.gap>=0 && pos.gap<40 && pos.top+40<=pos.nav, JSON.stringify(pos));
+  let steps=0;  // 끝날 때까지 가장 컸던 진행 칸 높이
+  while(await p.$('#ovLive .live')){ steps=Math.max(steps, await p.evaluate(()=>Math.round(document.querySelector('#ovLive .live-steps')?.getBoundingClientRect().height||0))); await p.waitForTimeout(200); }
+  ck('[화면 이동] 단계가 늘어도 진행 칸 높이는 고정 (칸 안에서 스크롤)', steps>0 && steps<=170, steps+'px');
+
+  // 사용자가 직접 화면을 움직이면 그 실행 동안은 진행 칸을 따라가지 않는다
+  await p.evaluate(()=>document.querySelector('#ovRun').scrollIntoView({block:'center'}));
+  await p.click('#ovRun'); await until(p, ()=>!!document.querySelector('#ovLive .live'), null, 10000); await p.waitForTimeout(400);
+  await p.mouse.move(195,400); await p.mouse.wheel(0,-3000); await p.waitForTimeout(300);
+  const handY = await scrolls(p, '#ovLive');
+  ck('[화면 이동] 진행 중 사용자가 위로 올리면 다시 끌어내리지 않음', handY.length>0 && handY.every(y=>y===0), handY.join(','));
   await until(p, ()=>!document.querySelector('#ovLive .live'));
 
+  // 다른 화면의 진행 칸 (같은 규칙): 계약서 점검
+  await tab(p,'check'); await p.evaluate(()=>document.querySelector('#checkRun').scrollIntoView({block:'center'}));
+  await p.click('#checkRun'); await until(p, ()=>!!document.querySelector('#checkTrace .live'), null, 10000); await p.waitForTimeout(2000);
+  await p.screenshot({path:'p15_check_live.png'});
+  const cpos = await p.evaluate(()=>{ const l=document.querySelector('#checkTrace .live')?.getBoundingClientRect();
+    return l?{top:Math.round(l.top), h:Math.round(document.querySelector('#checkTrace .live-steps').getBoundingClientRect().height), nav:Math.round(document.querySelector('#tabs').getBoundingClientRect().top)}:null; });
+  ck('[화면 이동] 계약서 점검: 누르면 진행 칸이 보이는 곳에, 높이 고정', cpos && cpos.top+40<=cpos.nav && cpos.h<=170, JSON.stringify(cpos));
+  await until(p, ()=>!document.querySelector('#checkTrace .live'));
+  await tab(p,'home');
+
   // 다른 일하는 곳: 그곳에도 카드가 있고 처음이면 자동 점검
-  await p.evaluate(id=>{ state.current=id; }, j2.id); await p.evaluate(()=>loadHome()); 
-  const live2 = await until(p, ()=>!!document.querySelector('#ovLive .live'), null, 10000);
+  // (계약서를 점검해 기록이 바뀌었으므로 첫 곳은 홈에 오자마자 다시 자동 점검 중일 수 있다: 그 진행 칸이 둘째 곳에 남으면 안 된다)
+  const firstRunning = !!(await p.$(`#ovLive .live[data-job="${j1.id}"]`));
+  await p.evaluate(id=>{ state.current=id; }, j2.id); await p.evaluate(()=>loadHome());
+  const live2 = await until(p, id=>!!document.querySelector(`#ovLive .live[data-job="${id}"]`), j2.id, 10000);
+  const noOld = !(await p.$(`#ovLive .live[data-job="${j1.id}"]`));
   await until(p, ()=>!document.querySelector('#ovLive .live'));
-  ck('[종합 점검] 다른 일하는 곳에도 카드와 자동 점검', live2 && (await p.textContent('#ovAi')).includes(PREFIX));
+  const judged2 = await until(p, x=>document.querySelector('#ovAi').textContent.includes(x), PREFIX, 10000);  // 진행 칸이 닫힌 뒤 결과를 불러온다
+  ck('[종합 점검] 다른 일하는 곳에도 카드와 자동 점검', live2 && judged2, `첫 곳 점검 중이었음: ${firstRunning}, 판단 칸: ${(await p.textContent('#ovAi')).slice(0,80)}, 진행 칸: ${(await p.textContent('#ovLive')).slice(0,80)}`);
+  ck('[종합 점검] 바꾸기 전 일하는 곳의 진행 칸이 남지 않음', noOld);
   ck('콘솔 오류 없음', p.errs.length===0, p.errs.join(' / '));
   ck('5xx 응답 없음', p.bad.length===0, p.bad.join(' / '));
   summary(); await b.close();
