@@ -19,6 +19,7 @@ from app.auth import current_user
 from app.config import BASE_DIR, SECRET_KEY
 from app.db import engine, init_db
 from app.law.fetch import load_notices
+from app.long_task import LongTaskMiddleware
 from sqlmodel import Session, select
 from app.models import LawArticle, User
 from app.routers.api import router as api_router
@@ -100,6 +101,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="알바지킴이", lifespan=lifespan)
+# 오래 걸리는 AI 요청을 뒤에서 실행 (cloudflared 100초 대비). 로그인 사용자를 알아야 해서 SessionMiddleware 안쪽에 둔다
+app.add_middleware(LongTaskMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "web" / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "web" / "templates")

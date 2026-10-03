@@ -5,6 +5,7 @@ AI가 없을 때 만들고, AI(가짜)를 켠 뒤 모든 화면 API와 예약 �
 서버 오류(5xx)나 예외가 하나도 없는지 본다. 한 기능을 고치면서 다른 기능이 깨지는 일을 막으려는 시험이다.
 """
 import json
+import time
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,19 +34,35 @@ COMMON_GETS = ["/api/me", "/api/jobs", "/api/law/status", "/api/counsel", "/api/
 
 
 class Sweep:
-    """요청마다 5xx와 예외를 모은다."""
-    def __init__(self, c: TestClient):
-        self.c, self.bad = c, []
+    """요청마다 5xx와 예외를 모은다. long=True면 저장·점검 요청을 화면의 agent()처럼 뒤에서 실행하고 결과를 묻는다."""
+    def __init__(self, c: TestClient, long: bool = False):
+        self.c, self.bad, self.long, self.tasks = c, [], long, 0
 
     def __call__(self, method: str, url: str, **kw):
         try:
-            r = self.c.request(method, url, **kw)
+            if self.long and method != "GET":
+                r = self.c.request(method, url, headers={"X-Long-Task": "1"}, **kw)
+                if r.status_code == 202 and r.json().get("task_id"):
+                    self.tasks += 1
+                    r = self.wait(r.json()["task_id"], f"{method} {url}")
+            else:
+                r = self.c.request(method, url, **kw)
         except Exception as exc:  # noqa: BLE001 (예외도 문제로 모은다)
             self.bad.append(f"{method} {url} 예외 {exc!r}"[:300])
             return None
         if r.status_code >= 500:
             self.bad.append(f"{method} {url} {r.status_code} {r.text[:200]}")
         return r
+
+    def wait(self, tid: str, what: str):
+        for _ in range(600):
+            r = self.c.get(f"/api/tasks/{tid}")
+            if r.status_code != 202:
+                if r.status_code == 404:
+                    self.bad.append(f"{what} 뒤에서 실행한 작업을 찾지 못함")
+                return r
+            time.sleep(0.02)
+        raise AssertionError(f"{what} 뒤에서 실행한 작업이 끝나지 않음")
 
     def json(self, method: str, url: str, **kw):
         r = self(method, url, **kw)
@@ -209,4 +226,22 @@ def test_everything_still_works_after_ai_turns_on(c, monkeypatch):
             call("POST", f"/api/jobs/{job['id']}/check")
             call("POST", f"/api/jobs/{job['id']}/report")
             read_everything(call, job["id"])
+    assert not call.bad, "\n".join(call.bad)
+
+
+def test_everything_works_through_long_task(c, monkeypatch):
+    """화면의 AI 버튼처럼 저장·점검 요청을 뒤에서 실행해도(cloudflared 100초 대비) 모든 기능이 같은 결과로 돈다."""
+    monkeypatch.setattr(client, "LLM_FAKE", True)
+    call = Sweep(c, long=True)
+    for email, birth, kind in [("rgl_teen@example.com", "2009-05-01", "teen"), ("rgl_quit@example.com", "2008-01-01", "quit")]:
+        login(c, email, birth)
+        common(call)
+        j = call.json("POST", "/api/jobs", json={"name": f"가상뒤가게 {kind}", "wage": 9000, "start_date": "2026-07-01",
+                                                 "schedule": SCHED, "payday": 10})["id"]
+        add_rows(c.get("/api/me").json()["id"], j)
+        use_everything(call, j)
+        if kind == "quit":
+            quit_job(call, j)
+        read_everything(call, j)
+    assert call.tasks >= 40, f"뒤에서 실행한 요청이 {call.tasks}개뿐이에요"
     assert not call.bad, "\n".join(call.bad)

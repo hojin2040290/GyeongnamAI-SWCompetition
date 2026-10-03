@@ -80,7 +80,7 @@ def max_steps_from_env(value: str, default: int = 30, low: int = 3, high: int = 
     return n if low <= n <= high else default
 
 
-# 에이전트 판단 반복 최대 횟수. 반복이 많으면 요청 하나가 길어져 cloudflared(100초)에 끊길 수 있다
+# 에이전트 판단 반복 최대 횟수. 화면의 AI 버튼은 뒤에서 실행되므로(app/long_task.py) 반복이 많아도 cloudflared(100초)에 끊기지 않는다
 AGENT_MAX_STEPS = max_steps_from_env(os.getenv("AGENT_MAX_STEPS", ""))
 # 가짜 AI (시험용): 실제 모델 대신 app/llm/fake.py가 '테스트 답변입니다 (...)'로 답한다.
 # auto(기본): 실제 모델 설정(LLM_ENABLED=true와 LLM_MODEL)이 없으면 가짜 AI를 쓴다. true: 늘 가짜 AI. false: 가짜 AI를 쓰지 않음
