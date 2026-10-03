@@ -185,3 +185,20 @@ def test_llm_extra_body_is_added_to_requests(monkeypatch):
     monkeypatch.setattr(client, "LLM_EXTRA_BODY", "{잘못된")
     client.chat([{"role": "user", "content": "안녕"}])
     assert "chat_template_kwargs" not in sent[-1]
+
+
+def test_llm_max_tokens_limits_every_request(monkeypatch):
+    """AI 답 길이 제한(LLM_MAX_TOKENS): 모델이 끝없이 써도 요청이 몇 분씩 걸리지 않게 모든 요청에 붙는다 (0이면 붙이지 않음)."""
+    from app.llm import client
+    sent = []
+    monkeypatch.setattr(client, "LLM_FAKE", False)
+    monkeypatch.setattr(client, "LLM_ENABLED", True)
+    monkeypatch.setattr(client, "LLM_MODEL", "m")
+    monkeypatch.setattr(client.httpx, "post", lambda url, json, headers, timeout: sent.append(json) or type(
+        "R", (), {"raise_for_status": lambda self: None, "json": lambda self: {"choices": [{"message": {"content": "{}"}}]}})())
+    monkeypatch.setattr(client, "LLM_MAX_TOKENS", 4096)
+    client.chat([{"role": "user", "content": "안녕"}])
+    assert sent[-1]["max_tokens"] == 4096
+    monkeypatch.setattr(client, "LLM_MAX_TOKENS", 0)
+    client.chat([{"role": "user", "content": "안녕"}])
+    assert "max_tokens" not in sent[-1]

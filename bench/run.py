@@ -281,6 +281,7 @@ def main() -> int:
     ap.add_argument("--skip", default="", help="건너뛸 시험 (speed,vision,flows)")
     ap.add_argument("--serve-cmd", default="", help="(로컬 확인용) vLLM 대신 띄울 명령, {port} 치환")
     ap.add_argument("--out", default="")
+    ap.add_argument("--resume", default="", help="이 결과 폴더에 이어서 (완료된 모델은 건너뜀)")
     args = ap.parse_args()
     os.environ["HF_HOME"] = args.hf_home  # huggingface_hub를 불러오기 전에
     specs = json.loads((ROOT / "bench" / "models.json").read_text(encoding="utf-8"))["models"]
@@ -289,7 +290,8 @@ def main() -> int:
     elif args.models != "all":
         want = args.models.split(",")
         specs = [s for s in specs if s["key"] in want]
-    outdir = Path(args.out) if args.out else ROOT / "bench" / "results" / datetime.now().strftime("%Y%m%d_%H%M")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S") + ("_preflight" if args.preflight else "")
+    outdir = Path(args.resume or args.out) if (args.resume or args.out) else ROOT / "bench" / "results" / stamp
     outdir.mkdir(parents=True, exist_ok=True)
     LOG = outdir / "run.log"
     gpu_mib = gpu_total_mib()
@@ -299,6 +301,10 @@ def main() -> int:
         if not args.preflight and not args.serve_cmd:
             stopped = stop_app_vllm(args.yes)
         for spec in specs:
+            done = outdir / f"{spec['key']}.meta.json"
+            if args.resume and done.exists() and json.loads(done.read_text(encoding="utf-8")).get("status") == "완료":
+                say(f"[{spec['key']}] 이미 완료 → 건너뜀")
+                continue
             bench_one(args, spec, outdir, gpu_mib)
     finally:
         if stopped:

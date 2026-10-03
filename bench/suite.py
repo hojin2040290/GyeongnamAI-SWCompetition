@@ -109,7 +109,11 @@ def record(payload: dict, data, err: str | None, sec: float) -> None:
                 texts += strings_in(args)
             except json.JSONDecodeError:
                 bad += 1
-        e.update(n_tool_calls=len(calls), bad_args=bad, texts=[t for t in texts if t],
+        try:
+            finish = data["choices"][0].get("finish_reason")
+        except (KeyError, IndexError, TypeError):
+            finish = None
+        e.update(n_tool_calls=len(calls), bad_args=bad, texts=[t for t in texts if t], finish_reason=finish,
                  # 도구를 줬는데 도구 호출 대신 글 속에 호출 모양이 들어 있으면 파서가 읽지 못한 것
                  raw_tool_text=bool(payload.get("tools") and not calls and re.search(r"<tool_call>|\"arguments\"|\[\w+\(", content)),
                  reasoning_chars=len(msg.get("reasoning_content") or msg.get("reasoning") or ""))
@@ -238,7 +242,7 @@ def run_flow(s, core, uid: int, job, kind: str, month: str):
     raise ValueError(kind)
 
 
-def flows_test() -> list[dict]:
+def flows_test(on_flow=None) -> list[dict]:
     from sqlmodel import Session, func, select
 
     from app.agent import core
@@ -283,6 +287,8 @@ def flows_test() -> list[dict]:
                             "guard_message": job.guard_ai_message[:500] if kind == "guard" else "",
                             "result": json.dumps(res, ensure_ascii=False, default=str)[:300] if not items else ""},
             })
+            if on_flow:
+                on_flow(list(out))
     return out
 
 
@@ -301,6 +307,7 @@ def summarize(speed: list, vision: list, flows: list) -> dict:
                   "errors": sum(1 for x in speed if x["error"]),
                   "reasoning_chars": sum(x["reasoning_chars"] for x in speed)},
         "requests": {"count": len(reqs), "errors": sum(1 for r in reqs if r.get("error")),
+                     "truncated": sum(1 for r in reqs if r.get("finish_reason") == "length"),
                      "sec_p50": pct(secs, .5), "sec_p95": pct(secs, .95), "sec_max": max(secs, default=None),
                      "over_100s": sum(1 for x in secs if x > 100),
                      "prompt_tokens": sum(r.get("prompt_tokens") or 0 for r in reqs),
@@ -347,7 +354,8 @@ def main() -> int:
     env = {"DB_PATH": str(ROOT / data_dir / "app.db"), "UPLOAD_DIR": str(ROOT / data_dir / "uploads"),
            "REPORT_DIR": str(ROOT / data_dir / "reports"), "LLM_ENABLED": "true", "LLM_FAKE": "false",
            "LLM_BASE_URL": args.base_url, "LLM_MODEL": args.model, "LLM_VISION_MODEL": "", "LLM_TIMEOUT": "600",
-           "LLM_EXTRA_BODY": args.extra_body, "LAW_REFRESH_ON_START": "false", "TEST_DATA": "false",
+           "LLM_EXTRA_BODY": args.extra_body, "LLM_MAX_TOKENS": os.environ.get("LLM_MAX_TOKENS", "4096"),
+           "LAW_REFRESH_ON_START": "false", "TEST_DATA": "false",
            "NAVER_CLIENT_ID": "", "NAVER_CLIENT_SECRET": ""}
     os.environ.update(env)
     # 시험 데이터 (알바 5개, 사진, 평소 DB의 법 기준표 복사)를 이 모델 전용 폴더에 새로 만든다
@@ -360,16 +368,27 @@ def main() -> int:
     install_recorder(client)
     extra = json.loads(args.extra_body or "{}")
     started = time.time()
-    speed = [] if "speed" in skip else speed_test(args.base_url, args.model, extra)
-    vision = [] if "vision" in skip else vision_test(ocr)
-    flows = [] if "flows" in skip else flows_test()
-    result = {"key": args.key, "base_url": args.base_url, "extra_body": extra, "law_table": law_line,
-              "suite_sec": round(time.time() - started, 1), "summary": summarize(speed, vision, flows),
-              "speed": speed, "vision": vision, "flows": flows,
-              "requests": [{k: v for k, v in r.items() if k != "texts"} for r in REC["requests"]]}
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
-    print(f"시험 결과: {args.out} ({result['suite_sec']}초)")
+    state = {"speed": [], "vision": [], "flows": []}
+
+    def save(stage: str) -> None:
+        """단계마다 지금까지의 결과를 쓴다 (중간에 멈춰도 남게)."""
+        result = {"key": args.key, "base_url": args.base_url, "extra_body": extra, "law_table": law_line,
+                  "max_tokens": os.environ.get("LLM_MAX_TOKENS"), "stage": stage,
+                  "suite_sec": round(time.time() - started, 1),
+                  "summary": summarize(state["speed"], state["vision"], state["flows"]), **state,
+                  "requests": [{k: v for k, v in r.items() if k != "texts"} for r in REC["requests"]]}
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    if "speed" not in skip:
+        state["speed"] = speed_test(args.base_url, args.model, extra)
+        save("속도 끝")
+    if "vision" not in skip:
+        state["vision"] = vision_test(ocr)
+        save("사진 끝")
+    if "flows" not in skip:
+        flows_test(lambda done: (state.__setitem__("flows", done), save(f"흐름 {len(done)}/{len(FLOWS)}")))
+    save("완료")
+    print(f"시험 결과: {args.out} ({round(time.time() - started, 1)}초)")
     return 0
 
 

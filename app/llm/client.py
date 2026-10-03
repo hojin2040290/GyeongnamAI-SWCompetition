@@ -10,8 +10,8 @@ import re
 
 import httpx
 
-from app.config import (LLM_API_KEY, LLM_BASE_URL, LLM_ENABLED, LLM_EXTRA_BODY, LLM_FAKE, LLM_MODEL, LLM_TIMEOUT,
-                        LLM_VISION_MODEL)
+from app.config import (LLM_API_KEY, LLM_BASE_URL, LLM_ENABLED, LLM_EXTRA_BODY, LLM_FAKE, LLM_MAX_TOKENS, LLM_MODEL,
+                        LLM_TIMEOUT, LLM_VISION_MODEL)
 from app.llm import fake
 
 
@@ -46,6 +46,8 @@ def extra_body() -> dict:
 
 def _post(payload: dict) -> dict:
     payload = {**extra_body(), **payload}
+    if LLM_MAX_TOKENS and "max_tokens" not in payload:
+        payload["max_tokens"] = LLM_MAX_TOKENS
     if LLM_FAKE:  # 시험용 가짜 AI: 같은 응답 모양으로 답한다
         return fake.respond(payload)
     headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
