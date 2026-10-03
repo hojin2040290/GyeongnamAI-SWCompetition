@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta
 from sqlmodel import Session, select
 
 from app.agent.loop import Tool
+from app.agent.rewrite import for_user
 from app.agent.safety import output_problem, scrub
 from app.calc import pay as paycalc
 from app.calc import records as reccalc
@@ -228,7 +229,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = 
                 it["basis"] = [*it.get("basis", []), *(f"사용자 답변: {q.question} → {q.answer}" for q in answers)]
                 it["answer_ids"] = [q.id for q in answers]
             it["needed"] = [n for n in it.get("needed", []) if "AI 판단 연결 전" not in n]  # AI가 판단했으니 지운다
-            it["status"], it["ai_reason"] = j["status"], scrub(str(j.get("reason", "")))[:300]
+            it["status"], it["ai_reason"] = j["status"], for_user(scrub(str(j.get("reason", ""))))[:300]
             it["ai_law"], it["ai_fact"] = law, fact[:300]
             it.pop("ai_error", None)
         for it in items:
@@ -534,7 +535,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
             raise PermissionError("이 사업장의 게시물이 아니에요")
         if status not in POST_STATUS or not str(reason).strip():
             raise ValueError("status는 suspect, ok, unclear 중 하나이고 판별 근거가 필요해요")
-        post.status, post.ai_reason = status, scrub(str(reason).strip())[:300]
+        post.status, post.ai_reason = status, for_user(scrub(str(reason).strip()))[:300]
         session.add(post)
         session.commit()
         state.setdefault("posts", []).append({"post_id": post_id, "status": status})

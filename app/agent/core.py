@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from app import notices
 from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
+from app.agent.rewrite import for_user
 from app.agent.safety import scrub
 from app.calc import pay as paycalc
 from app.agent.tools import agent_tools, for_ai, make_tools, text, texts
@@ -149,7 +150,7 @@ def apply_one(s: Session, target: dict, out: dict | None, error: str = "") -> di
         target.pop("ai_reason", None)
         return engine.cross_check([target])[0]
     if out and out.get("status") in (engine.OK, engine.WARN, engine.BAD) and fact and known_law(s, law):
-        target.update(status=out["status"], ai_reason=scrub(str(out.get("reason", "")))[:300], ai_law=law, ai_fact=fact[:300])
+        target.update(status=out["status"], ai_reason=for_user(scrub(str(out.get("reason", ""))))[:300], ai_law=law, ai_fact=fact[:300])
         target.pop("ai_error", None)
         return engine.cross_check([target])[0]
     if target.get("status") == engine.PENDING:
@@ -190,7 +191,7 @@ def _judge_items(r: Run, goal_text: str, tools: list[str], make_items, context: 
 
 # ---------- 계약서, 근무 기록 점검 ----------
 CONTRACT_GOAL = ("이 사업장의 기본 정보, 계약서 내용, 실제 출퇴근 기록을 법 기준과 대조해 주세요. check_rules로 검토 항목을 받고, "
-                 "필요하면 조문과 계산 결과를 확인한 뒤, 항목마다 정상(ok), 확인 필요(warn), 위반 의심(bad) 중 하나로 판단해 "
+                 "필요하면 조문과 계산 결과를 확인한 뒤, 항목마다 정상, 확인 필요, 위반 의심 중 하나로 판단해 (status 값은 ok, warn, bad) "
                  "finish의 judgments에 담아 주세요. 위반 의심이 있으면 사용자에게 알림을 보내 주세요.")
 
 
@@ -236,7 +237,7 @@ def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
     extra_q = {"extra_questions": texts(200, 5, "더 물어볼 질문 (없으면 빈 배열)")}
     items, out = _judge_items(r, goal, ["get_profile", "get_age_on", "get_article", "find_refs"],
                               lambda: seek["items"], {"공고": data}, extra_q)
-    questions = seek["questions"] + [scrub(str(q))[:200] for q in (out or {}).get("extra_questions") or []
+    questions = seek["questions"] + [for_user(scrub(str(q)))[:200] for q in (out or {}).get("extra_questions") or []
                                      if str(q).strip() and q not in seek["questions"]][:5]
     res = {"items": r.tools["attach_law"](items), "questions": questions}
     r.tools["save_check"]("seek", {"input": data, **res})
@@ -471,7 +472,7 @@ def run_advice(session: Session, user_id: int, job_id: int, trigger: str = "sche
 # ---------- 홈의 AI 에이전트 종합 점검 ----------
 OVERVIEW_GOAL = ("홈 화면의 종합 점검이에요. 먼저 get_all_facts로 이 사업장의 모든 기록을 코드가 정리한 사실과 결과를 받고, "
                  "필요하면 get_saved_checks, calc_work_days, settlement, list_evidence 같은 도구로 자세히 확인한 뒤, "
-                 "모든 정보를 조합해 이 사업장의 종합 결과를 정상(ok), 확인 필요(warn), 위반 의심(bad) 중 하나로 판단해 finish에 "
+                 "모든 정보를 조합해 이 사업장의 종합 결과를 정상, 확인 필요, 위반 의심 중 하나로 판단해 (status 값은 ok, warn, bad) finish에 "
                  "담아 주세요. 근거 조항은 get_article로 확인한 조항(get_all_facts의 '관련 조항' 등)을, 사실은 get_all_facts의 "
                  "'사실'에서 가져오세요. 끝내기 전에 모든 정보를 조합해 이 사용자에게 지금 가장 도움이 될 조언을 give_advice로 "
                  "남겨 주세요. 판단에 필요한 정보가 기록에 없으면 추측하지 말고 warn으로 두고, 사용자에게 물어볼 것이 있으면 "
