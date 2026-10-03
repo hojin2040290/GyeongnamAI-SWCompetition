@@ -64,6 +64,8 @@ LLM_API_KEY = os.getenv("LLM_API_KEY", "")            # vLLM에 키를 걸었을
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 # 모델마다 필요한 요청 옵션 (JSON). 예: 생각 모드 끄기 {"chat_template_kwargs": {"enable_thinking": false}}
 LLM_EXTRA_BODY = os.getenv("LLM_EXTRA_BODY", "").strip()
+# AI 답 하나의 최대 길이(토큰). 모델이 같은 말을 반복하거나 끝맺지 못해도 요청이 몇 분씩 걸리지 않게 한다 (0이면 제한 없음)
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096") or 0)
 # 가짜 AI (시험용): 실제 모델 대신 app/llm/fake.py가 '테스트 답변입니다 (...)'로 답한다.
 # auto(기본): 실제 모델 설정(LLM_ENABLED=true와 LLM_MODEL)이 없으면 가짜 AI를 쓴다. true: 늘 가짜 AI. false: 가짜 AI를 쓰지 않음
 def fake_mode(value: str, enabled: bool, model: str) -> bool:

@@ -38,11 +38,17 @@
    - 시작할 때 앱이 쓰는 8000번 vLLM을 끄고(vllm.pid의 번호로만), 끝나거나 중간에 멈춰도 `start_vllm.sh`로 다시 켠다. 벤치마크 동안 웹 앱의 AI는 멈춘다.
    - 일부만: `--models hcx_seed_32b_think,exaone45_33b` (key는 `models.json`)
    - 중간에 멈추기: `kill <nohup 실행 때 나온 번호>` (끝 정리로 8000번을 다시 켠다)
-4. 결과: `bench/results/<시각>/report.md` (모델별 JSON, vLLM 로그, 진행 로그도 같은 폴더)
+4. 결과: `bench/results/<연월일_시분초>/report.md` (모델별 JSON, vLLM 로그, 진행 로그도 같은 폴더). 사전 확인은 `<시각>_preflight` 폴더에 따로 남는다.
+5. 중간에 멈췄으면 이어서 하기 (완료된 모델은 건너뜀, 결과는 단계마다 저장돼 있음):
+   ```bash
+   cd /home/work/llm_alba/app
+   nohup /home/work/llm_alba/venv/bin/python bench/run.py --yes --resume bench/results/<폴더 이름> > bench/nohup.log 2>&1 &
+   ```
 
 ## 알아 둘 점
 - 모델 이름과 vLLM 옵션은 검색으로 정한 값이다. 사전 확인에서 이름이 없거나 GPU보다 큰 모델은 받지 않고 건너뛴다.
   도구 파서와 생각 파서는 모델 README의 `vllm serve` 예시에서 찾고, 없으면 `models.json`의 값을 쓴다.
+- AI 답 하나는 최대 4096토큰까지만 받는다 (앱과 같은 `LLM_MAX_TOKENS`). 모델이 같은 말을 반복하거나 끝맺지 못해도 요청이 몇 분씩 걸리지 않게 하려는 것이고, 제한에 걸린 요청 수는 비교표의 '길이 제한 걸림'에 남는다.
 - 생각(thinking) 모드가 있는 모델은 `extra_body`로 끄고 시험한다. 앱에서 그 모델을 쓰려면 `.env`의 `LLM_EXTRA_BODY`에 같은 값을 넣는다.
 - 받은 모델은 `/home/work/llm_alba/hf`(저장 폴더)에 남는다. 다 받으면 수백 GB라 끝난 뒤 쓰지 않을 모델은 지워도 된다.
 - 지금 vLLM 버전이 지원하지 않는 모델은 '실패'와 vLLM 로그 끝부분이 비교표에 남는다.

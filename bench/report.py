@@ -56,10 +56,12 @@ def build(outdir: Path) -> str:
     lines += ["", "## 2. 속도", "",
               "첫 글자까지 시간(TTFT)과 초당 생성 토큰은 한국어 질문 3개를 2번씩 보낸 중간값이에요. "
               "요청 시간은 에이전트와 사진 읽기에서 보낸 모든 요청이에요. 100초를 넘으면 cloudflared가 끊어요.", ""] + table(
-        ["모델", "TTFT", "초당 토큰", "요청 수", "요청 중간값", "요청 95%", "요청 최대", "100초 초과", "생각 글자(속도 시험)"],
+        ["모델", "TTFT", "초당 토큰", "요청 수", "요청 중간값", "요청 95%", "요청 최대", "100초 초과", "길이 제한 걸림",
+         "생각 글자(속도 시험)"],
         [[r["label"], fmt(S(r)["speed"]["ttft_p50"], "초"), fmt(S(r)["speed"]["tok_per_s_p50"]),
           S(r)["requests"]["count"], fmt(S(r)["requests"]["sec_p50"], "초"), fmt(S(r)["requests"]["sec_p95"], "초"),
-          fmt(S(r)["requests"]["sec_max"], "초"), S(r)["requests"]["over_100s"], S(r)["speed"]["reasoning_chars"]]
+          fmt(S(r)["requests"]["sec_max"], "초"), S(r)["requests"]["over_100s"], S(r)["requests"].get("truncated", "-"),
+          S(r)["speed"]["reasoning_chars"]]
          for r in done])
     lines += ["", "## 3. 에이전트 (실제 앱 흐름 13개)", "",
               "계약서 점검 5, 급여 점검 4, 퇴직 정산 2, 상담 자료 1, 신고 후 보호 1.", ""] + table(
