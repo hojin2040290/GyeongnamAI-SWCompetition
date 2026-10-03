@@ -25,6 +25,7 @@ from app.law.lookup import known_law
 from app.llm import client
 from app.models import AgentLog, CaseNote, Job
 
+LOG_MAX = 1200  # 동작 기록 한 줄 (계획 8단계 × 120자가 다 들어가게)
 MAX_STEPS = 10  # AI 응답이 없을 때 정해 둔 순서의 도구 호출 수 제한
 FOLLOWUP_NOTE: ContextVar[str] = ContextVar("followup_note", default="")  # 예약한 확인을 실행할 때 그 이유
 
@@ -107,10 +108,13 @@ class Run:
         check.pending_tool = True
         return check
 
-    def log(self, step: str, detail: str) -> None:
-        self.trace.append({"step": step, "detail": detail[:300]})
+    def log(self, step: str, detail: str, tags: list[str] | None = None) -> None:
+        """한 단계를 남긴다. 계획처럼 긴 줄도 끝까지 (LOG_MAX), tags는 AI가 고른 도구 이름 (판단 글과 따로)."""
+        tags = list(dict.fromkeys(tags or []))
+        self.trace.append({"step": step, "detail": detail[:LOG_MAX], "tags": tags})
         self.s.add(AgentLog(user_id=self.user_id, job_id=self.job_id, run_id=self.run_id, event=self.event,
-                            step=step, detail=detail[:1000], created_at=now_kst()))
+                            step=step, detail=detail[:LOG_MAX], tags=json.dumps(tags, ensure_ascii=False) if tags else "",
+                            created_at=now_kst()))
         self.s.commit()
 
     def done(self, out: dict, summary: str) -> dict:

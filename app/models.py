@@ -203,6 +203,7 @@ class AgentLog(SQLModel, table=True):
     step: str
     detail: str
     created_at: datetime
+    tags: str = ""  # 이 단계에서 AI가 고른 도구 이름들 (JSON 목록). 화면은 판단 글과 따로 태그로 보여 준다
 
 
 class LawArticle(SQLModel, table=True):

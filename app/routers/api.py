@@ -782,8 +782,24 @@ def agent_log(job_id: int, u: User = Depends(current_user), s: Session = Depends
     rows = s.exec(select(AgentLog).where(AgentLog.user_id == u.id,
                                          (AgentLog.job_id == job_id) | (AgentLog.job_id == None))  # noqa: E711
                   .order_by(AgentLog.id.desc()).limit(60)).all()
-    return [{"run_id": r.run_id, "event": r.event, "step": r.step, "detail": r.detail, "at": r.created_at.isoformat()}
-            for r in rows]
+    return [{"run_id": r.run_id, "event": r.event, "step": r.step, "detail": r.detail, "tags": _tags(r),
+             "at": r.created_at.isoformat()} for r in rows]
+
+
+def _tags(r: AgentLog) -> list[str]:
+    """AI가 고른 도구 이름. 예전 기록은 'AI 판단' 글에 '도구 선택: a, b'로 남아 있어 그것을 태그로 바꾼다."""
+    if r.tags:
+        try:
+            return [str(x) for x in json.loads(r.tags)]
+        except ValueError:
+            return []
+    if r.step.startswith("AI 판단 ") and r.detail.startswith("도구 선택: "):
+        return [x.strip() for x in r.detail.removeprefix("도구 선택: ").split(",") if x.strip()]
+    return []
+
+
+def _detail(r: AgentLog) -> str:
+    return "" if r.step.startswith("AI 판단 ") and r.detail.startswith("도구 선택: ") and not r.tags else r.detail
 
 
 @router.get("/jobs/{job_id}/agent/runs")
@@ -800,7 +816,7 @@ def agent_runs(job_id: int, events: str = "", month: str = "", limit: int = 10,
     runs: dict[str, dict] = {}
     for r in reversed(rows):  # 오래된 단계부터 차례로 묶는다
         run = runs.setdefault(r.run_id or f"log{r.id}", {"run_id": r.run_id, "event": r.event, "at": r.created_at.isoformat(), "steps": []})
-        run["steps"].append({"step": r.step, "detail": r.detail, "at": r.created_at.isoformat()})
+        run["steps"].append({"step": r.step, "detail": _detail(r), "tags": _tags(r), "at": r.created_at.isoformat()})
     out = list(runs.values())[::-1]
     if month:
         out = [x for x in out if any(month in st["detail"] for st in x["steps"])]
@@ -1074,7 +1090,7 @@ def agent_live(after: int = 0, u: User = Depends(current_user), s: Session = Dep
     """after 번호 뒤에 새로 남은 동작 기록 (에이전트가 일하는 동안 화면이 불러 간다)."""
     rows = s.exec(select(AgentLog).where(AgentLog.user_id == u.id, AgentLog.id > after)
                   .order_by(AgentLog.id).limit(50)).all()
-    return [{"id": r.id, "event": r.event, "step": r.step, "detail": r.detail[:300]} for r in rows]
+    return [{"id": r.id, "event": r.event, "step": r.step, "detail": _detail(r), "tags": _tags(r)} for r in rows]
 
 
 # ---------- 입력 칸 규칙 (화면이 입력하는 동안 거르고 안내하는 데 쓴다) ----------
