@@ -229,6 +229,13 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 .qs{margin:0;padding-left:20px}
 .qs li{margin-bottom:8px}
 .quit-panel{border:2px solid #d9a21b}
+.ov-parts{list-style:none;margin:10px 0 0;padding:0}
+.ov-parts li{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-top:1px solid var(--line,#e6e8ef);font-size:13.5px}
+.ov-parts li:first-child{border-top:0}
+.ov-parts .ov-name{font-weight:700;white-space:nowrap}
+.ov-parts .ov-text{flex:1;color:var(--ink-soft,#555);min-width:0;overflow-wrap:anywhere}
+.ov-parts .tag{flex:none}
+.ov-note{margin:8px 0 0}
 .quit-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .quit-panel p{margin:6px 0 0}
 .seek-entry{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:var(--paper);border-radius:var(--radius-lg);padding:14px 14px 14px 18px;margin-bottom:14px;cursor:pointer}
@@ -330,6 +337,7 @@ em.hint.bad{color:var(--bad)}
 
 /* 확인 중 (AI 판단 전) */
 .tag.pending{color:var(--blue);background:var(--blue-soft)}
+.tag.none{color:var(--ink-soft);background:#eef0f4}
 /* AI 응답 대기 중: 도는 표시로 기다리는 중임을 알린다 */
 .tag.pending::before,.ai-note.wait::before,.wait-note::before{content:"";display:inline-block;width:.8em;height:.8em;margin-right:6px;vertical-align:-1px;
   border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}

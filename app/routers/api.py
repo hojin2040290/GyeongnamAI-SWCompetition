@@ -953,6 +953,29 @@ def case_state(job_id: int, u: User = Depends(current_user), s: Session = Depend
                        "created_at": adv.created_at.isoformat()} if adv else None}
 
 
+# ---------- 홈의 AI 에이전트 종합 점검 ----------
+@router.get("/jobs/{job_id}/overview")
+def overview_state(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """코드가 지금 정리한 사실(parts)과 마지막 종합 점검(AI 판단), 최근 조언.
+    need: 아직 없거나 AI 판단 대기라 화면이 바로 점검해야 함 (AI가 있을 때). changed: 지난 점검 뒤로 기록이 바뀜."""
+    from app.agent import case, overview
+    job = own_job(s, u, job_id)
+    last = overview.latest(s, job_id)
+    live = overview.parts(s, u.id, job_id)
+    adv = case.latest_advice(s, job_id)
+    ai = llm_client.available()
+    return {"overview": last, "parts": live, "rule_status": overview.rule_status(live), "ai": ai,
+            "need": ai and (not last or last.get("status") == "pending"),
+            "changed": bool(last) and last.get("basis_key") != case.data_key(s, job),
+            "advice": {"text": adv.text, "next_tab": adv.next_tab, "created_at": adv.created_at.isoformat()} if adv else None}
+
+
+@router.post("/jobs/{job_id}/agent/overview")
+def run_overview(job_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    own_job(s, u, job_id)
+    return core.run_overview(s, u.id, job_id)
+
+
 @router.delete("/followups/{task_id}")
 def cancel_followup(task_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
     """에이전트가 예약한 확인을 사용자가 취소한다."""

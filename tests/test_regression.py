@@ -28,7 +28,7 @@ USERS = [("rg_none@example.com", "2009-05-01", None), ("rg_teen@example.com", "2
          ("rg_young@example.com", "2012-03-01", "young"), ("rg_adult@example.com", "1999-01-01", "adult"),
          ("rg_quit@example.com", "2008-01-01", "quit"), ("rg_legacy@example.com", "2010-02-01", "legacy")]
 JOB_GETS = ["settlement", "records", "evidence", "contract/fields", "check", "payslips", "pay?month=2026-09",
-            "pay?month=2026-02", "agent/log", "reports", "guard", "case", "questions"]
+            "pay?month=2026-02", "agent/log", "reports", "guard", "case", "questions", "overview"]
 COMMON_GETS = ["/api/me", "/api/jobs", "/api/law/status", "/api/counsel", "/api/agent/last", "/api/agent/live",
                "/api/input-rules", "/api/ai/status", "/api/notifications"]
 
@@ -143,6 +143,7 @@ def use_everything(call: Sweep, j: int) -> None:
         call("POST", f"/api/questions/{q['id']}/answer", json={"answer": "가상 답: 없었어요", "check": False})
         call("POST", f"/api/questions/{q['id']}/rerun")
     call("POST", f"/api/jobs/{j}/report")
+    call("POST", f"/api/jobs/{j}/agent/overview")  # 홈의 종합 점검 (모든 기록을 모아 판단)
 
 
 def quit_job(call: Sweep, j: int) -> None:
@@ -225,6 +226,7 @@ def test_everything_still_works_after_ai_turns_on(c, monkeypatch):
             read_everything(call, job["id"])
             call("POST", f"/api/jobs/{job['id']}/check")
             call("POST", f"/api/jobs/{job['id']}/report")
+            call("POST", f"/api/jobs/{job['id']}/agent/overview")
             read_everything(call, job["id"])
     assert not call.bad, "\n".join(call.bad)
 

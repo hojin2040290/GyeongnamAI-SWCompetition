@@ -8,7 +8,7 @@ const LABEL = {ok:'정상', warn:'확인 필요', bad:'위반 의심', pending:'
 const JUDGING = 'AI 에이전트가 판단 중';  // 에이전트가 지금 판단하고 있을 때
 const EVENT = {contract_check:'계약서 점검', shift_check:'퇴근 점검', seek_check:'지원 전 확인', payday:'급여 점검', quit_check:'퇴직 정산',
   report:'상담 자료', guard_on:'신고 후 보호 시작', guard_off:'신고 후 보호 끔', guard_search:'게시물 검색', guard_preserve:'게시물 보존',
-  guard_review:'게시물 판별', daily:'매일 자동 점검', advice:'매일 종합 조언'};
+  guard_review:'게시물 판별', daily:'매일 자동 점검', advice:'매일 종합 조언', overview:'종합 점검'};
 const KIND = {contract:'근로계약서', payslip:'급여명세서', message:'사업주 메시지', schedule:'근무표', deposit:'입금 내역', post:'게시물 화면', notice:'채용공고', other:'기타'};
 
 const state = { me:null, jobs:[], current:null, mode:null, cards:[], adding:false, seekFromApp:false,
@@ -724,10 +724,34 @@ async function loadHome(){
   await refreshRecords();
   if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
   await renderQuit();
+  await loadOverview();
   await loadAsk();
   await loadCase();
   await loadAlerts();
 }
+// 홈의 AI 에이전트 종합 점검: 코드가 정리한 사실(지금 기록) + 마지막 AI 종합 판단과 조언.
+// 아직 없거나 AI 판단 대기면 AI가 있을 때 한 번 바로 점검한다. 그 뒤로는 버튼과 매일 자동 점검으로 새로 한다
+async function loadOverview(){
+  const jobId=state.current;
+  const o=await api('GET',`/api/jobs/${jobId}/overview`); if(jobId!==state.current || $('#ovLive .live')) return;
+  const v=o.overview;
+  $('#ovTag').className='tag '+(v?v.status:'none'); $('#ovTag').textContent=v?LABEL[v.status]:'아직 안 함';
+  $('#ovParts').innerHTML=o.parts.map(p=>`<li><span class="ov-name">${esc(p.name)}</span><span class="ov-text">${esc(p.text)}${p.wait?`${p.text?' ':''}<span class="wait-note">${esc(p.wait)}</span>`:''}</span>${
+    p.status?`<span class="tag ${p.status}">${LABEL[p.status]}</span>`:p.todo?'<span class="tag none">아직 안 함</span>':''}</li>`).join('');
+  $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
+  $('#ovNote').textContent=v?`${fmtDT(v.at)} 점검${o.changed?' · 그 뒤로 기록이 바뀌었어요. 다시 점검해 보세요':''}`:'';
+  if(!$('#ovLive').innerHTML) lastTrace('#ovLive','overview');
+  if(o.need) rejudgeOnce(`overview-${jobId}-${v?.at||'new'}`, runOverview);
+}
+async function runOverview(){
+  $('#ovTag').className='tag pending'; $('#ovTag').textContent=JUDGING;
+  $('#ovAi').innerHTML=`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">${JUDGING}</span></p></div>`;
+  try{ const r=await agent('#ovLive',()=>api('POST',`/api/jobs/${state.current}/agent/overview`));
+    $('#ovLive').innerHTML=traceHTML(r.trace, r.trace_at);
+  }catch(e){ toast(e.message); }
+  await loadOverview(); await loadAsk(); await loadCase(); await loadAlerts();
+}
+$('#ovRun').onclick=runOverview;
 // 에이전트의 질문: 답하면 질문했던 점검을 에이전트가 다시 판단한다
 const RESUME_TAB={contract_check:'check',payday:'pay',report:'docs',guard_review:'guard'};
 async function loadAsk(){
@@ -762,9 +786,9 @@ async function loadCase(){
   const a=c.advice;
   $('#caseAdvice').innerHTML=a?`<div class="advice"><div class="advice-head">에이전트 조언</div><p>${esc(a.text)}</p>
       ${a.next_tab&&NEXT_TAB[a.next_tab]?`<button class="btn ghost small" data-go="${esc(a.next_tab)}">${NEXT_TAB[a.next_tab]}</button>`:''}
-      <div class="sub note-at">${a.event==='advice'?'매일 종합 조언':`${esc(EVENT[a.event]||a.event)} 뒤`} ${fmtDT(a.created_at)}</div></div>`
+      <div class="sub note-at">${a.event==='advice'?'매일 종합 조언':a.event==='overview'?'종합 점검':`${esc(EVENT[a.event]||a.event)} 뒤`} ${fmtDT(a.created_at)}</div></div>`
     // 조언이 아직 없을 때: AI가 있으면 점검을 기다리는 것이지 AI를 기다리는 게 아니다 (도는 표시는 AI를 기다릴 때만)
-    :c.ai?'<p class="ai-note">아직 조언이 없어요. 계약서나 급여를 점검하면 에이전트가 조언을 남겨요.</p>'
+    :c.ai?'<p class="ai-note">아직 조언이 없어요. 종합 점검을 하면 에이전트가 조언을 남겨요.</p>'
     :'<p class="ai-note wait">AI 응답 대기 중: AI가 연결되면 에이전트가 조언해 드려요.</p>';
   $$('#caseAdvice [data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
   const fdt=t=>{ const d=new Date(t.replace(' ','T')); return `${d.getMonth()+1}월 ${d.getDate()}일 ${d.getHours()}시`; };

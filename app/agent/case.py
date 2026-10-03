@@ -108,14 +108,15 @@ def _last_id(s: Session, model, job_id: int, *extra) -> int:
 
 
 def data_key(s: Session, job: Job) -> str:
-    """사용자에게서 얻은 기록과 에이전트가 만든 기록의 요약값. 하나라도 새로 생기거나 바뀌면 달라진다."""
+    """사용자에게서 얻은 기록과 에이전트가 만든 기록의 요약값. 하나라도 새로 생기거나 바뀌면 달라진다.
+    종합 점검 결과(overview)는 빼서, 종합 점검을 저장해도 '기록이 바뀌었어요'가 되지 않게 한다."""
     parts = {
         "job": [job.wage, job.schedule_json, job.size, job.probation, job.contract_written, job.copy_received,
                 job.consent, job.status, str(job.quit_date), job.paid_after_quit, job.reported, job.biz_no],
         "records": [_last_id(s, WorkRecord, job.id),
                     len(s.exec(select(WorkRecord).where(WorkRecord.job_id == job.id, WorkRecord.void_at != None)).all())],  # noqa: E711
         "evidence": _last_id(s, Evidence, job.id), "contract": _last_id(s, ContractFields, job.id),
-        "payslip": _last_id(s, Payslip, job.id), "checks": _last_id(s, CheckRun, job.id),
+        "payslip": _last_id(s, Payslip, job.id), "checks": _last_id(s, CheckRun, job.id, CheckRun.kind != "overview"),
         "reports": _last_id(s, Report, job.id), "memory": _last_id(s, CaseNote, job.id, CaseNote.kind == "memory"),
         "answers": [(q.id, q.status) for q in s.exec(select(AgentQuestion).where(AgentQuestion.job_id == job.id)).all()],
         "posts": [(p.id, p.status) for p in s.exec(select(GuardPost).where(GuardPost.job_id == job.id)).all()],
