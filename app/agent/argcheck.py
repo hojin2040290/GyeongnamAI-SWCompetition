@@ -51,6 +51,8 @@ def fit(schema: dict, value, where: str):
     kind = schema.get("type")
     if kind == "string":
         value = _string(value, where)
+        if "maxLength" in schema and len(value.strip()) > schema["maxLength"]:  # 몰래 자르면 화면에 끊긴 글이 나온다
+            raise ArgError(f"{where}이(가) {len(value.strip())}자예요. 뜻이 끊기지 않게 {schema['maxLength']}자 안으로 줄여 다시 내 주세요")
     elif kind == "integer":
         value = _integer(value, where)
     elif kind == "number":
@@ -60,6 +62,8 @@ def fit(schema: dict, value, where: str):
     elif kind == "array":
         if not isinstance(value, list):
             raise ArgError(f"{where}에는 목록(배열)을 넣어 주세요")
+        if "maxItems" in schema and len(value) > schema["maxItems"]:
+            raise ArgError(f"{where}은(는) {schema['maxItems']}개까지예요 (지금 {len(value)}개). 중요한 것만 골라 다시 내 주세요")
         items = schema.get("items") or {}
         value = [fit(items, v, f"{where}[{n}]") for n, v in enumerate(value)] if items else value
     elif kind == "object":

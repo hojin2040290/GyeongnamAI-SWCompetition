@@ -61,11 +61,18 @@ class Scene:
         hits = [r for n, r in self.done if n == name]
         return hits[-1] if hits else None
 
-    def text(self, what: str) -> str:
-        """AI가 쓰는 글: 무엇에 대한 답인지와 AI에게 넘긴 내용을 괄호에 적는다."""
+    def text(self, what: str, limit: int = TEXT_MAX) -> str:
+        """AI가 쓰는 글: 무엇에 대한 답인지와 AI에게 넘긴 내용을 괄호에 적는다.
+        칸의 글자 수(limit)를 넘으면 도구 목록을 줄인다 (끝을 잘라 괄호가 끊기지 않게)."""
         goal = _short(self.goal.split("\n")[0].removeprefix("목표: "))
-        used = ", ".join(dict.fromkeys(n for n in self.names if n != "make_plan")) or "없음"
-        return f"{PREFIX} ({what}. AI에게 넘긴 내용: 목표 '{goal}', 받은 도구 결과: {used})"[:TEXT_MAX]
+        used = list(dict.fromkeys(n for n in self.names if n != "make_plan"))
+        for k in range(len(used), -1, -1):
+            names = ", ".join(used[:k]) + (f" 외 {len(used) - k}개" if k < len(used) else "") if used else "없음"
+            out = f"{PREFIX} ({what}. AI에게 넘긴 내용: 목표 '{goal}', 받은 도구 결과: {names})"
+            if len(out) <= limit:
+                return out
+        out = f"{PREFIX} ({what})"
+        return out if len(out) <= limit else PREFIX[:limit]
 
     def law_candidates(self) -> list[str]:
         """도구 결과의 '관련 조항', 검토 항목의 '조항', 그 밖에 대화에 나온 조항 이름 순서."""
@@ -115,13 +122,13 @@ def _args(scene: Scene, name: str) -> dict | None:
         elif kind == "array" and key in ("laws", "basis"):
             value = laws[:2]  # 찾은 조항이 없으면 빈 목록 (지어내지 않음)
         elif kind == "array":
-            value = [scene.text(f"{name}의 {key}")]
+            value = [scene.text(f"{name}의 {key}", spec.get("items", {}).get("maxLength", TEXT_MAX))]
         elif kind == "string" and spec.get("enum"):
             value = next((x for x in ("warn", "unclear") if x in spec["enum"]), spec["enum"][0])
         elif kind == "string" and key == "title":  # 제목은 짧게 (알림 제목은 100자까지)
             value = f"{PREFIX} ({name}의 제목)"
         elif kind == "string":
-            value = scene.text(f"{name}의 {key}")
+            value = scene.text(f"{name}의 {key}", spec.get("maxLength", TEXT_MAX))
         elif kind == "boolean":
             value = True
         else:
@@ -129,6 +136,16 @@ def _args(scene: Scene, name: str) -> dict | None:
         if value is not None:
             out[key] = value
     return out if all(k in out for k in required) else None
+
+
+def _fit_fact(fact: str, n: int) -> str:
+    """근거 사실이 칸보다 길면 앞에서부터 사실 단위('; ')로 들어가는 만큼만 (글자 중간에서 자르지 않게)."""
+    out = ""
+    for part in str(fact).split("; "):
+        if len(out) + len(part) + 2 > n:
+            break
+        out = f"{out}; {part}" if out else part
+    return out or str(fact)[:n]
 
 
 def _finish(scene: Scene) -> dict:
@@ -144,7 +161,8 @@ def _finish(scene: Scene) -> dict:
         laws = scene.law_candidates()
         facts = [r.get("사실") or (f"지급 기한 {r['지급 기한']}" if r.get("지급 기한") else "")
                  for _, r in scene.done if isinstance(r, dict)]
-        out.update(status="warn", law=laws[0] if laws else "", fact=next((f for f in facts if f), "기록 확인"),
+        fact = _fit_fact(next((f for f in facts if f), "기록 확인"), spec.get("fact", {}).get("maxLength", 300))
+        out.update(status="warn", law=laws[0] if laws else "", fact=fact,
                    reason=scene.text("판단 이유"))
     if "note" in spec:
         out["note"] = scene.text("한 일 요약")
@@ -164,7 +182,8 @@ def agent_step(scene: Scene) -> dict:
     """에이전트 반복의 한 단계: 계획 → 도구 → finish."""
     plan = scene.plan()
     if "make_plan" in scene.tools and "make_plan" not in scene.names:
-        steps = [f"{PREFIX} ({n} 부르기)" for n in plan] + [f"{PREFIX} (finish로 끝내기)"]
+        most = scene.tools["make_plan"].get("parameters", {}).get("properties", {}).get("steps", {}).get("maxItems", 99)
+        steps = [f"{PREFIX} ({n} 부르기)" for n in plan][:most - 1] + [f"{PREFIX} (finish로 끝내기)"]  # 단계 수 제한 안에서
         return _reply([("make_plan", {"steps": steps})], scene.text("먼저 계획 세우기"))
     for name in plan:
         if name in scene.names:
