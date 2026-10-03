@@ -704,3 +704,14 @@ def test_copy_law_table_to_test_data(tmp_path):
 def test_prompt_says_not_to_ask_law_text():
     """실제 모델이 법 기준표에 없는 조문 내용을 사용자에게 물은 일이 있었다: 묻지 말라는 규칙이 프롬프트에 있어야 한다."""
     assert "법 조문 내용은 사용자에게 묻지 마세요. 기준표에 없으면 조항 이름만 근거로 쓰고 이어 하세요." in loop.AGENT_SYSTEM
+
+
+def test_agent_max_steps_default_30_and_env_range():
+    """에이전트 판단 반복 한도: 기본 30회, .env의 AGENT_MAX_STEPS로 바꾸되 범위(3~50)를 벗어나거나 숫자가 아니면 기본값."""
+    from app import config
+    from app.agent import loop
+    assert loop.MAX_STEPS == 30
+    assert config.max_steps_from_env("") == 30
+    assert config.max_steps_from_env("12") == 12
+    assert config.max_steps_from_env("1300") == 30 and config.max_steps_from_env("0") == 30
+    assert config.max_steps_from_env("열") == 30

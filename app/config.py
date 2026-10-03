@@ -69,6 +69,19 @@ LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096") or 0)
 # 모델 공식 문서의 권장 생성 설정 (JSON). 앱이 정한 temperature 0 위에 덮어쓴다. null은 그 값을 빼서 모델 기본값을 쓰게 한다.
 # 예: EXAONE 4.5 {"temperature": 0.6, "top_p": 0.95, "top_k": 20, "presence_penalty": 1.5}
 LLM_SAMPLING = os.getenv("LLM_SAMPLING", "").strip()
+
+
+def max_steps_from_env(value: str, default: int = 30, low: int = 3, high: int = 50) -> int:
+    """에이전트 판단 반복 한도 (.env의 AGENT_MAX_STEPS). 숫자가 아니거나 범위를 벗어나면 기본값."""
+    try:
+        n = int((value or "").strip())
+    except ValueError:
+        return default
+    return n if low <= n <= high else default
+
+
+# 에이전트 판단 반복 최대 횟수. 반복이 많으면 요청 하나가 길어져 cloudflared(100초)에 끊길 수 있다
+AGENT_MAX_STEPS = max_steps_from_env(os.getenv("AGENT_MAX_STEPS", ""))
 # 가짜 AI (시험용): 실제 모델 대신 app/llm/fake.py가 '테스트 답변입니다 (...)'로 답한다.
 # auto(기본): 실제 모델 설정(LLM_ENABLED=true와 LLM_MODEL)이 없으면 가짜 AI를 쓴다. true: 늘 가짜 AI. false: 가짜 AI를 쓰지 않음
 def fake_mode(value: str, enabled: bool, model: str) -> bool:

@@ -20,7 +20,7 @@
 app/
   main.py            FastAPI 진입점
   routers/api.py     화면이 부르는 API
-  agent/loop.py      에이전트 판단 반복 (최대 10회, 매 단계 기록)
+  agent/loop.py      에이전트 판단 반복 (최대 30회, 매 단계 기록)
   agent/core.py      상황별 목표와 도구, AI 응답이 없을 때의 정해 둔 순서
   agent/tools.py     에이전트가 호출하는 도구 (user_id는 코드가 고정)
   agent/argcheck.py  AI가 낸 도구 입력 검사
@@ -179,6 +179,6 @@ docs/실행가이드.md    실행 명령과 인자, .env 설정값, 자주 겪�
 - 증거 저장 점검: `python -m app.evidence_check`
 
 ## 선택 사항 (필요 없으면 이 절을 지운다)
-- 에이전트 판단 반복은 최대 10회로 제한하고, 매 단계의 판단과 도구 호출을 기록한다.
+- 에이전트 판단 반복은 최대 30회(.env의 AGENT_MAX_STEPS)로 제한하고, 매 단계의 판단과 도구 호출을 기록한다.
 - 최저임금 금액은 법 조문이 아닌 고용노동부 고시에 있으므로, 법제처 API로 고시도 함께 불러온다.
 - 증거 자료는 파일 고유값(SHA-256)을 함께 저장한다.
