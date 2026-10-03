@@ -12,7 +12,7 @@
 | 도구 호출 | 도구 호출 없이 글만 온 수, 글 속 호출(파서가 못 읽음), 입력 형식 오류, 지정한 도구 무시 |
 | 에이전트 | 시험 데이터(알바 5개)로 실제 흐름 13개: 끝까지 마침, 반복 10회 초과, 평균 반복, 흐름 시간, 검증 장치 돌려보냄, 도구 오류, 질문, 조문 질문 |
 | 판단 | 코드 규칙이 분명한 항목에서 AI 판단이 같음 / 확인 필요로 조심 / 반대 |
-| 사진 | 계약서 4장 x 7항목, 명세서 3장 x 5항목 정답과 맞은 수 |
+| 사진 | 계약서 4장 x 7항목, 명세서 3장 x 5항목 정답과 맞은 수, 답을 JSON으로 읽지 못한 장 수와 그중 길이 제한에 걸린 수, 실패한 답 원문 앞뒤 |
 | 한국어 | AI가 쓴 글의 한글 비율, 한자(중국어 섞임) 글자 수, 글 예시 |
 
 ## 실행 (GPU 서버 터미널)
@@ -49,7 +49,14 @@
 - 모델 이름과 vLLM 옵션은 검색으로 정한 값이다. 사전 확인에서 이름이 없거나 GPU보다 큰 모델은 받지 않고 건너뛴다.
   도구 파서와 생각 파서는 모델 README의 `vllm serve` 예시에서 찾고, 없으면 `models.json`의 값을 쓴다.
 - AI 답 하나는 최대 4096토큰까지만 받는다 (앱과 같은 `LLM_MAX_TOKENS`). 모델이 같은 말을 반복하거나 끝맺지 못해도 요청이 몇 분씩 걸리지 않게 하려는 것이고, 제한에 걸린 요청 수는 비교표의 '길이 제한 걸림'에 남는다.
+- 사진 읽기에 실패하면 그 답 원문 앞뒤가 모델별 JSON과 비교표 '모델별 자세히'에 남는다. 한 모델의 사진 시험만 다시 하려면
+  (예: EXAONE, 끝나면 8000번을 다시 켬):
+  ```bash
+  cd /home/work/llm_alba/app
+  nohup /home/work/llm_alba/venv/bin/python bench/run.py --yes --models exaone45_33b --skip speed,flows > bench/nohup_vision.log 2>&1 &
+  ```
+  결과는 새 폴더에 따로 생기고, 전체 실행 폴더는 바뀌지 않는다. 전체 실행이 끝난 뒤에 한다 (GPU를 함께 쓰면 둘 다 멈춘다).
 - 생각(thinking) 모드가 있는 모델은 `extra_body`로 끄고 시험한다. 앱에서 그 모델을 쓰려면 `.env`의 `LLM_EXTRA_BODY`에 같은 값을 넣는다.
 - 받은 모델은 `/home/work/llm_alba/hf`(저장 폴더)에 남는다. 다 받으면 수백 GB라 끝난 뒤 쓰지 않을 모델은 지워도 된다.
 - 지금 vLLM 버전이 지원하지 않는 모델은 '실패'와 vLLM 로그 끝부분이 비교표에 남는다.
-- GPU 없이 흐름만 확인 (개발자용): `python bench/run.py --serve-cmd "python3 bench/fake_server.py --port {port}" --suite-python python3`
+- GPU 없이 흐름만 확인 (개발자용): `python bench/run.py --serve-cmd "python3 bench/fake_server.py --port {port}" --suite-python python3`. 사진 읽기 실패 모양을 보려면 `fake_server.py`에 `--broken-vision`을 더한다.
