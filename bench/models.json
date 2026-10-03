@@ -52,8 +52,8 @@
      "tool_parsers": ["qwen3_coder", "qwen3_xml"], "reasoning_parser": "qwen3",
      "args": ["--limit-mm-per-prompt", "{\"image\":2}"],
      "extra_body": {"chat_template_kwargs": {"enable_thinking": false}},
-     "sampling": "auto",
-     "sampling_note": "Qwen GitHub의 vllm serve 예시는 qwen3_coder, vLLM 레시피 기본은 qwen3_xml이라 둘 다 후보. 생각 끄기는 레시피의 enable_thinking=false. 생각을 끈 때의 권장 생성 설정은 Hugging Face 모델 카드에만 있어 확인하지 못해 모델 기본값(generation_config.json)을 쓴다"},
+     "sampling": {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0.0, "presence_penalty": 1.5, "repetition_penalty": 1.0},
+     "sampling_note": "Qwen GitHub의 vllm serve 예시는 qwen3_coder, vLLM 레시피 기본은 qwen3_xml이라 둘 다 후보. 생각 끄기는 레시피의 enable_thinking=false. 생성 설정은 모델 카드 README의 'Instruct (or non-thinking) mode: temperature=0.7, top_p=0.80, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0' (GPU 서버가 받은 README에서 확인, 2026-10-03 벤치마크는 모델 기본값으로 돌았다)"},
 
     {"key": "gemma4_31b", "label": "Gemma 4 31B (구글)",
      "hf_ids": ["google/gemma-4-31B-it", "google/gemma-4-31b-it"],
@@ -74,8 +74,8 @@
      "tool_parsers": ["qwen3_coder", "qwen3_xml"], "reasoning_parser": "qwen3",
      "args": ["--trust-remote-code", "--limit-mm-per-prompt", "{\"image\":2}"], "gpu_memory_utilization": 0.92,
      "extra_body": {"chat_template_kwargs": {"enable_thinking": false}},
-     "sampling": "auto",
-     "sampling_note": "vLLM 레시피: qwen3_coder, qwen3, --trust-remote-code, 생각 끄기 enable_thinking=false. 권장 생성 설정은 모델 카드에만 있어 모델 기본값"},
+     "sampling": {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0.0, "presence_penalty": 1.5, "repetition_penalty": 1.0},
+     "sampling_note": "vLLM 레시피: qwen3_coder, qwen3, --trust-remote-code, 생각 끄기 enable_thinking=false. 생성 설정은 모델 카드 README의 'Instruct (or non-thinking) mode for general tasks' 값 (GPU 서버가 받은 README에서 확인)"},
 
     {"key": "mistral_small4_fp8", "label": "Mistral Small 4 (119B-A6B, FP8)",
      "hf_ids": ["mistralai/Mistral-Small-4-119B-2603"],
