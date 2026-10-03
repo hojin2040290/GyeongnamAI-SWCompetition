@@ -11,9 +11,10 @@ from typing import Callable
 
 from app.agent.argcheck import ArgError, fit_args
 from app.agent.safety import neutralize
+from app.config import AGENT_MAX_STEPS
 from app.llm import client
 
-MAX_STEPS = 10  # AI 판단 반복 최대 횟수
+MAX_STEPS = AGENT_MAX_STEPS  # AI 판단 반복 최대 횟수 (기본 30, .env의 AGENT_MAX_STEPS)
 REFLECT_MAX = 2  # 검증 장치가 판단을 돌려보내 다시 판단하게 하는 최대 횟수
 WRAP_UP = 2  # 남은 반복이 이만큼이면 마무리하라고 알린다 (마지막 한 번은 finish만 낼 수 있다)
 RESULT_MAX = 6000  # AI에게 돌려주는 도구 결과 글자 수
