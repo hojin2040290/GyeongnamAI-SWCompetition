@@ -82,14 +82,32 @@ function failText(status){
   return `요청을 처리하지 못했어요 (${status})`;
 }
 
+// agent() 진행 칸이 떠 있는 동안(값이 0보다 큼) 보내는 저장·점검 요청은 서버가 뒤에서 실행한다 (app/long_task.py).
+// AI가 여러 번 불려 오래 걸려도 cloudflared의 100초 제한에 끊기지 않게, 작업 번호를 받고 결과를 따로 묻는다.
+let longDepth=0;
+const NET_ERR='서버에 연결하지 못했어요. 인터넷 연결이나 서버가 켜져 있는지 확인해 주세요';
+async function waitTask(id){
+  let fails=0;
+  for(let i=0; i<3600; i++){  // 1초마다, 최대 1시간
+    await new Promise(r=>setTimeout(r,1000));
+    let r;
+    try{ r=await fetch(`/api/tasks/${id}`); fails=0; }
+    catch(e){ if(++fails>=30){ const err=new Error(NET_ERR); err.status=0; throw err; } continue; }  // 잠깐 끊겨도 다시 묻는다
+    if(r.status!==202 || !r.headers.get('x-task-pending')) return r;
+  }
+  const err=new Error('작업이 너무 오래 걸려요. 잠시 뒤 화면을 다시 열어 결과를 확인해 주세요'); err.status=0; throw err;
+}
 async function api(method, url, body, isForm){
   const opt = { method, headers:{} };
   if (body !== undefined) {
     if (isForm) opt.body = body; else { opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
   }
+  const long = longDepth>0 && method!=='GET';
+  if (long) opt.headers['X-Long-Task']='1';
   let r;
   try { r = await fetch(url, opt); }
-  catch(e){ const err=new Error('서버에 연결하지 못했어요. 인터넷 연결이나 서버가 켜져 있는지 확인해 주세요'); err.status=0; throw err; }
+  catch(e){ const err=new Error(NET_ERR); err.status=0; throw err; }
+  if (long && r.status===202) { const j=await r.json(); if (j.task_id) r=await waitTask(j.task_id); }
   if (!r.ok) {
     let msg = failText(r.status);
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : msg; } catch(e) {}
@@ -585,7 +603,8 @@ async function agent(box, run){
         el.querySelector('.live-steps')?.insertAdjacentHTML('beforeend',rows.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail.slice(0,120))}</div>`).join(''));
         reveal(el.querySelector('.live')); } }catch(e){}  // 단계가 늘어 칸이 커지면 다시 보이게 (맨 아래에 있던 칸도)
     await new Promise(r=>setTimeout(r,700)); } })();
-  try{ return await run(); }catch(e){ el.innerHTML=''; throw e; }finally{ stop=true; }
+  longDepth++;
+  try{ return await run(); }catch(e){ el.innerHTML=''; throw e; }finally{ stop=true; longDepth--; }
 }
 function stepHTML(t){ return `<div class="log${/^AI (판단|끝냄)/.test(t.step)?' log-ai':''}"><b>${esc(t.step)}</b> ${esc(t.detail)}</div>`; }
 function traceHTML(trace, at){

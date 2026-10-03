@@ -34,6 +34,7 @@ app/
   agent/safety.py    AI에게 넘기는 글의 특수 토큰 제거, AI가 쓴 글의 링크와 전화번호 검사
   input_rules.py     입력 칸마다 쓸 수 있는 글자와 안내 (화면, 서버, 사진 읽기가 함께 씀)
   login_guard.py     로그인 시도 제한
+  long_task.py       오래 걸리는 AI 요청을 뒤에서 실행 (cloudflared 100초 대비)
   judge/engine.py    법 기준 대조와 검증 장치 (정상, 확인 필요, 위반 의심)
   calc/              시간, 나이, 근무 시간표, 실제 근무 기록, 임금과 퇴직 정산 계산
   law/fetch.py       법제처 API로 조문을 불러와 법 기준표(DB)에 저장
@@ -155,7 +156,7 @@ AI가 연결돼 있으면 스케줄러가 `AI_RETRY_MIN`분(기본 10분)마다 
 - `.env`는 서버를 켤 때만 읽는다. 고친 뒤에는 서버를 다시 켠다. `cp .env.example .env`를 다시 하면 채운 키가 지워지니 `cp -n`을 쓴다.
 - 외부에 열 때: `SECRET_KEY` 바꾸기, `--reload` 빼기, 실제 모델 연결(안 하면 가짜 AI가 '테스트 답변입니다'로 답함), `DEV_TOOLS=false`, 가상 정보만.
 - 8000번 포트의 vLLM 서버는 끄거나 다시 켜지 않는다. 웹 서버는 8080을 쓴다.
-- cloudflared는 `127.0.0.1` 주소와 `--protocol http2`로 연다. 응답이 100초를 넘으면 끊기므로 실제 AI로 오래 걸리는 점검은 새로고침으로 결과를 확인한다.
+- cloudflared는 `127.0.0.1` 주소와 `--protocol http2`로 연다. 응답이 100초를 넘으면 끊기지만(Cloudflare 고정값), AI 버튼은 서버가 뒤에서 실행하고 화면이 결과를 따로 물어서 오래 걸려도 끊기지 않는다 (`app/long_task.py`).
 - 휴대폰 위치 기록은 https 주소(cloudflared)에서만 된다.
 
 AI
