@@ -97,6 +97,11 @@ def _dump(v) -> str:
     return text if len(text) <= RESULT_MAX else text[:RESULT_MAX] + "…(생략)"
 
 
+def _cut(text: str, n: int) -> str:
+    """동작 기록에 남길 때 줄인다. 줄였으면 '…'을 붙여 끊긴 것이 아니라 줄인 것임을 보인다."""
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
 def use_tool(run, tools: dict[str, Tool], allowed: list[str], name: str, args: dict):
     """AI가 고른 도구를 코드가 실행한다. 목표에 없는 도구, 잘못된 입력, 권한 오류는 AI에게 오류로 돌려준다."""
     if name not in allowed or name not in tools:
@@ -116,7 +121,10 @@ def use_tool(run, tools: dict[str, Tool], allowed: list[str], name: str, args: d
         except Exception as exc:  # 예상 못 한 오류도 요청 전체를 멈추지 않고 AI에게 돌려준다
             run.s.rollback()
             result = {"error": f"도구를 실행하지 못했어요 ({type(exc).__name__})"}
-    run.log(f"도구 {name}", f"입력 {_dump(args)[:150]} → {_dump(result)[:250]}")
+    if name == "make_plan":  # 계획은 바로 앞 '계획' 줄에 끝까지 적었으므로 결과만
+        run.log("도구 make_plan", f"→ {_dump(result)}")
+    else:
+        run.log(f"도구 {name}", f"입력 {_cut(_dump(args), 150)} → {_cut(_dump(result), 250)}")
     return result
 
 
@@ -173,7 +181,7 @@ def run_agent(run, goal: Goal, tools: dict[str, Tool], context: dict) -> dict | 
             return None
         calls = msg.get("tool_calls") or []
         content = msg.get("content") or ""
-        run.log(f"AI 판단 {turn}", content.strip() or "도구 선택: " + ", ".join(c["function"]["name"] for c in calls))
+        run.log(f"AI 판단 {turn}", content.strip(), [c["function"]["name"] for c in calls])  # 고른 도구는 태그로 따로
         if not calls:
             messages += [{"role": "assistant", "content": content},
                          {"role": "user", "content": "도구를 쓰거나, 목표를 이뤘으면 finish 도구로 끝내 주세요."}]
@@ -199,7 +207,7 @@ def run_agent(run, goal: Goal, tools: dict[str, Tool], context: dict) -> dict | 
                     run.log(f"검증 장치 {run.state['reflect']}", "다시 판단 요청: " + "; ".join(
                         f"{f.get('i', '')} {f['문제']}" for f in feedback)[:280])
                 elif problem is None:
-                    run.log("AI 끝냄", _dump(args)[:300])
+                    run.log("AI 끝냄", _cut(_dump(args), 600))
                     return args
                 else:
                     result = {"error": problem}

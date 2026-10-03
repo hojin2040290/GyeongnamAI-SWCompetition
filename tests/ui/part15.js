@@ -41,6 +41,9 @@ const until = async (p, fn, arg, ms=90000) => p.waitForFunction(fn, arg, {timeou
   await p.reload(); await p.waitForSelector('#app:not(.hidden)'); await p.waitForTimeout(2500);
   ck('[종합 점검] 다시 열면 또 점검하지 않음', !(await p.$('#ovLive .live')));
   ck('[종합 점검] 다시 열어도 에이전트 동작 보기', (await p.textContent('#ovLive')).includes('에이전트 동작 보기'));
+  const traceTxt = await p.evaluate(()=>document.querySelector('#ovLive').textContent);
+  ck('[동작 보기] AI가 고른 도구는 판단 글과 따로 태그로 (도구 선택 글 없음)', !!(await p.$('#ovLive .log-ai .chip.tool')) && !traceTxt.includes('도구 선택'));
+  ck('[동작 보기] 계획은 마지막 단계까지 (finish로 끝내기)', /계획[^]*finish로 끝내기\)/.test(traceTxt));
 
   // 버튼: 누른 버튼 바로 아래 진행 칸
   await p.evaluate(()=>document.querySelector('#ovRun').scrollIntoView({block:'center'}));

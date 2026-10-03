@@ -610,7 +610,7 @@ async function agent(box, run){
     try{ const rows=await api('GET',`/api/agent/live?after=${last}`);
       const steps=ours()?mine.querySelector('.live-steps'):null;
       if(rows.length && !stop && steps){ last=rows[rows.length-1].id;
-        steps.insertAdjacentHTML('beforeend',rows.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail.slice(0,120))}</div>`).join(''));
+        steps.insertAdjacentHTML('beforeend',rows.map(stepHTML).join(''));
         steps.scrollTop=steps.scrollHeight;  // 칸 높이는 그대로, 칸 안에서 최근 단계가 보이게
         steps.classList.toggle('cut',steps.scrollTop>0);  // 위로 밀린 단계가 있으면 윗줄을 흐리게 (잘린 글자가 보이지 않게)
         if(follow) reveal(mine); } }catch(e){}
@@ -618,7 +618,11 @@ async function agent(box, run){
   longDepth++;
   try{ return await run(); }catch(e){ if(ours()) el.innerHTML=''; throw e; }finally{ stop=true; longDepth--; HAND.forEach(t=>removeEventListener(t,hands)); }
 }
-function stepHTML(t){ return `<div class="log${/^AI (판단|끝냄)/.test(t.step)?' log-ai':''}"><b>${esc(t.step)}</b> ${esc(t.detail)}</div>`; }
+// 단계 한 줄: AI가 고른 도구는 판단 글과 따로 태그로 (예전 기록의 '도구 선택: a, b' 글도 서버가 태그로 바꿔 준다)
+function stepHTML(t){
+  const tags=(t.tags||[]).map(x=>`<span class="chip tool">${esc(x)}</span>`).join('');
+  return `<div class="log${/^AI (판단|끝냄)/.test(t.step)?' log-ai':''}"><b>${esc(t.step)}</b>${tags?` <span class="log-tags">${tags}</span>`:''}${t.detail?` ${esc(t.detail)}`:''}</div>`;
+}
 function traceHTML(trace, at){
   if(!trace?.length) return '';
   return `<details class="more trace"><summary>에이전트 동작 보기 (${trace.length}단계${at?`, ${fmtDT(at,{sec:true})}`:''})</summary>${trace.map(stepHTML).join('')}</details>`;
