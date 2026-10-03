@@ -75,7 +75,7 @@ async function watch(p, name, box, action, shot) {
   const ask = await p.$('#askList [data-a]');
   if (ask) await watch(p, '에이전트 질문에 답하기', '#askTrace', ()=>ask.click()); else ck('에이전트 질문에 답하기: 질문 카드', false);
   await p.click('#quitOpen'); await p.fill('#quitDateMain', new Date().toISOString().slice(0,10));
-  await watch(p, '그만둔 날 저장(퇴직 정산 점검)', '#quitLive', ()=>p.click('#quitSave'), 'p7_quit.png');
+  await watch(p, '그만둔 날 저장(퇴직 정산 점검)', '#quitFormLive', ()=>p.click('#quitSave'), 'p7_quit.png');
   await watch(p, '남은 임금 받았어요', '#quitLive', ()=>p.click('#paidYes'));
   ck('오류 없음', !p.errs.length && !p.bad.length, [...p.errs,...p.bad].join('|'));
   summary(); await b.close();

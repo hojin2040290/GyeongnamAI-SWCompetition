@@ -170,6 +170,20 @@
         <div class="quit-head"><strong>AI 에이전트 종합 점검</strong><span class="tag" id="ovTag"></span></div>
         <p class="sub" style="margin:4px 0 0">이 일하는 곳의 모든 기록을 모아 에이전트가 판단하고 조언해요.</p>
         <ul class="ov-parts" id="ovParts"></ul>
+        <!-- 그만둔 곳: 퇴직 정산은 종합 점검의 한 줄로 (판단은 종합 점검 하나, 이 항목의 판단은 펼칠 때만) -->
+        <div class="quit-sub hidden" id="quitPanel">
+          <div class="quit-head"><span class="ov-name">퇴직 후 임금 정산</span><span class="tag" id="quitTag"></span></div>
+          <p class="ov-text" id="quitText"></p>
+          <div class="seg" style="margin-top:8px">
+            <button type="button" id="paidYes">남은 임금 받았어요</button>
+            <button type="button" id="paidNo">아직 못 받았어요</button>
+          </div>
+          <p class="hint">퇴직 후 14일 안에 남은 임금을 지급해야 해요. 당사자가 합의해 기한을 늘린 경우는 예외예요. 받지 못한 임금은 3년 안에 청구할 수 있어요.</p>
+          <button class="btn block hidden" id="quitReport">상담 사전 자료 만들러 가기</button>
+          <div class="quit-links"><button class="link" id="quitEdit">그만둔 날 고치기</button></div>
+          <details class="more quit-ai"><summary>이 항목의 AI 판단</summary><div id="quitAi"></div></details>
+          <div id="quitLive"></div>
+        </div>
         <div id="ovAi"></div>
         <div id="caseAdvice"></div>
         <p class="sub ov-note" id="ovNote"></p>
@@ -184,24 +198,12 @@
         </div>
         <p class="lead">출퇴근 버튼으로 남긴 근무 기록이에요. 급여 계산과 체불 증명의 근거가 돼요.</p>
         <p class="sched-line" id="schedLine"></p>
-        <div class="panel quit-panel hidden" id="quitPanel">
-          <div class="quit-head"><strong>퇴직 후 임금 정산</strong><span class="tag" id="quitTag"></span></div>
-          <p id="quitText"></p>
-          <div id="quitAi"></div>
-          <div class="seg" style="margin-top:10px">
-            <button type="button" id="paidYes">남은 임금 받았어요</button>
-            <button type="button" id="paidNo">아직 못 받았어요</button>
-          </div>
-          <p class="hint">퇴직 후 14일 안에 남은 임금을 지급해야 해요. 당사자가 합의해 기한을 늘린 경우는 예외예요. 받지 못한 임금은 3년 안에 청구할 수 있어요.</p>
-          <button class="btn block hidden" id="quitReport">상담 사전 자료 만들러 가기</button>
-          <button class="link" style="margin-top:10px" id="quitEdit">그만둔 날 고치기</button>
-        </div>
         <button class="link muted" id="quitOpen">이곳을 그만뒀어요</button>
         <div class="panel hidden" id="quitForm">
           <label class="field"><span>그만둔 날</span><input class="input" type="date" id="quitDateMain"></label>
           <div class="row-actions"><button class="btn ghost" id="quitCancel">취소</button><button class="btn" id="quitSave">저장하기</button></div>
         </div>
-        <div id="quitLive"></div>
+        <div id="quitFormLive"></div>
         <div class="panel empty-state hidden" id="recordsEmpty">
           <strong>아직 근무 기록이 없어요</strong>
           <p>위의 출근하기를 누르면 이곳에 쌓여요.</p>
