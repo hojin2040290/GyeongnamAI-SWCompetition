@@ -43,6 +43,13 @@ def build(outdir: Path) -> str:
     rows = load(outdir)
     lines = [f"# 알바지킴이 모델 벤치마크 ({outdir.name})", "",
              "같은 시험 데이터(알바 5개)와 같은 앱 코드로 모델마다 실행한 결과예요. 숫자는 모두 이 GPU 서버에서 잰 값이에요.", ""]
+    vf = outdir / "versions.json"
+    if vf.exists():
+        v = json.loads(vf.read_text(encoding="utf-8"))
+        lines += ["설치된 버전: " + ", ".join(f"{k} {x or '없음'}" for k, x in v.get("installed", {}).items()), ""]
+        if v.get("differences"):
+            lines += ["**vLLM이 공식 시험에 쓴 버전과 다른 패키지** (모델 코드가 맞지 않아 켜지지 않거나 결과가 틀릴 수 있어요):", ""]
+            lines += [f"- {d}" for d in v["differences"]] + [""]
     lines += ["## 1. 준비", ""] + table(
         ["모델", "상태", "Hugging Face", "크기", "받기", "켜기", "GPU 최대", "도구 파서", "생각 파서"],
         [[r["label"], r["status"], (r.get("preflight") or {}).get("hf_id", "-"),

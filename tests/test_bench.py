@@ -50,3 +50,11 @@ def test_parser_from_tool_text():
     assert checks.parser_from_text('[TOOL_CALLS]save_note[ARGS]{"text": "a"}') == "mistral"
     # EXAONE 4.5가 쓴 모양: vLLM 0.30.0에 이 모양을 읽는 파서가 없다
     assert checks.parser_from_text('<tool> {"name": "save_note", "arguments": {"text": "a"}} </tool>') == ""
+
+
+def test_pin_differences(monkeypatch):
+    """vLLM이 시험한 버전과 다르게 설치된 패키지를 찾는다 (GPU 서버: transformers 5.18.0, vLLM 0.30.0 시험 버전 5.16.1)."""
+    have = {"vllm": "0.30.0", "transformers": "5.18.0", "torch": "2.13.0+cu130", "mistral-common": "1.11.6"}
+    monkeypatch.setattr(run, "installed", lambda pkg: have.get(pkg))
+    diffs = run.pin_differences({"transformers": "5.16.1", "torch": "2.13.0+cu130", "mistral-common": "1.11.6"})
+    assert len(diffs) == 1 and diffs[0].startswith("transformers 5.18.0") and 'transformers==5.16.1' in diffs[0]

@@ -61,6 +61,11 @@
   ```
 
 ## 알아 둘 점
+- vLLM은 그 버전이 공식 시험에 쓴 패키지 버전과 함께 설치한다. vLLM은 transformers의 최소 버전만 정해 두어서 그냥 설치하면 더 새 버전이 깔리고, 모델 코드가 맞지 않을 수 있다 (예: vLLM 0.30.0 + transformers 5.18.0에서 Mistral Small 4가 켜지지 않음, 5.17.0부터 바뀐 이름 때문). 벤치마크는 시작할 때 `requirements/test/cuda.txt`의 버전과 비교해 다르면 로그와 비교표에 남긴다.
+  ```bash
+  export PATH=$HOME/.local/bin:$PATH
+  uv pip install --python /home/work/alba/venv/bin/python "vllm==0.30.0" "transformers==5.16.1" "mistral-common==1.11.6" --torch-backend=auto
+  ```
 - 모델 이름과 vLLM 옵션은 공식 문서(`models.json`의 docs)에서 확인한 값이다. 사전 확인에서 이름이 없거나 GPU보다 큰 모델은 받지 않고 건너뛴다.
   도구 파서와 생각 파서는 공식 문서 값을 쓰고, `auto`인 모델(공식 문서를 Hugging Face에서만 볼 수 있는 모델)은 README의 `vllm serve` 예시에서 찾는다.
 - AI 답 하나는 최대 4096토큰까지만 받는다 (앱과 같은 `LLM_MAX_TOKENS`). 모델이 같은 말을 반복하거나 끝맺지 못해도 요청이 몇 분씩 걸리지 않게 하려는 것이고, 제한에 걸린 요청 수는 비교표의 '길이 제한 걸림'에 남는다.
