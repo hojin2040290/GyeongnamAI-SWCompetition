@@ -192,3 +192,15 @@ def test_update_email_checks_format():
         r = c.put("/api/me", json={"birth_date": "2009-05-01", "email": "Me.Fixed@example.com"})
         assert r.status_code == 200 and r.json()["email"] == "me.fixed@example.com"
         assert c.put("/api/me", json={"birth_date": "2009-05-01"}).json()["email"] == "me.fixed@example.com"  # 안 보내면 그대로
+
+
+def test_ai_text_with_chinese_is_sent_back_or_cleaned():
+    """AI가 쓴 글에 한자(중국어)가 섞이면: 다시 쓰게 할 수 있는 곳은 돌려보내고, 바로 저장하는 곳은 지운다.
+    (실제 모델: 상담 사전 자료 요약에 '받은 753,360元之间 124,872원이 부족합니다'가 나왔다)"""
+    from app.agent import safety
+    bad = "계산한 금액 878,232원과 실제 받은 753,360元之间 124,872원이 부족합니다."
+    msg = safety.output_problem(bad)
+    assert msg and "한국어" in msg and "元之间" in msg
+    assert safety.output_problem("주휴수당 114,552원이 빠졌어요. 근로기준법 제55조") is None
+    cleaned = safety.scrub(bad)
+    assert "元" not in cleaned and "之间" not in cleaned and "753,360" in cleaned and "124,872원" in cleaned

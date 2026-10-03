@@ -715,3 +715,28 @@ def test_agent_max_steps_default_30_and_env_range():
     assert config.max_steps_from_env("12") == 12
     assert config.max_steps_from_env("1300") == 30 and config.max_steps_from_env("0") == 30
     assert config.max_steps_from_env("열") == 30
+
+
+def test_report_summary_with_chinese_is_sent_back(env, monkeypatch):
+    """상담 사전 자료 요약에 한자(중국어)가 섞이면 AI에게 돌려보내고, 다시 쓴 한국어 요약으로 만든다
+    (실제 모델: '받은 753,360元之间 124,872원이 부족합니다')."""
+    a, ja, _, _ = env
+
+    def policy(goal, done, tools):
+        names = [n for n, _ in done]
+        if "build_report" in tools:
+            reports = [r for n, r in done if n == "build_report"]
+            if not reports:
+                return reply([("build_report", {"summary": said("받은 753,360元之间 124,872원이 부족"), "points": [said("물어볼 점")],
+                                                "basis": []})])
+            if len(reports) == 1:
+                return reply([("build_report", {"summary": said("받은 753,360원과 124,872원 차이"), "points": [said("물어볼 점")],
+                                                "basis": []})])
+            return reply([("finish", {"note": said("상담 자료")})])
+        return smart_policy(goal, done, tools)
+    agent = use(monkeypatch, policy)
+    rep = a.post(f"/api/jobs/{ja}/report").json()
+    first = results(agent.payloads[-1], "build_report")[0]
+    assert "한국어" in json.dumps(first, ensure_ascii=False) and "元之间" in json.dumps(first, ensure_ascii=False)
+    html = a.get(rep["url"]).text
+    assert "元" not in html and "753,360원과 124,872원 차이" in html
