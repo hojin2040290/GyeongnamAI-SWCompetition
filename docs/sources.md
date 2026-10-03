@@ -11,7 +11,8 @@
 |---|---|---|---|
 | 법제처 국가법령정보 공동활용 OPEN API | 현행법령(시행일) 조문과 별표, 최저임금 고시(행정규칙), 판례, 법제처 법령해석례, 고용노동부 법령해석, 노동위원회 결정문 | https://open.law.go.kr | 이용 신청 필요 (등록한 IP에서만 호출) |
 | 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com | 이용 신청 필요 |
-| vLLM OpenAI 호환 API (/v1/chat/completions) | 조항 판단, 도구 호출(tool calling), 계약서와 급여명세서 사진 읽기 | https://docs.vllm.ai | 모델 이름과 라이선스는 선정 후 기록 |
+| vLLM OpenAI 호환 API (/v1/chat/completions), vLLM 0.30.0 | 조항 판단, 도구 호출(tool calling), 계약서와 급여명세서 사진 읽기 | https://docs.vllm.ai | Apache 2.0 |
+| AI 모델: Qwen3.8-27B (`Qwen/Qwen3.8-27B`, 55.6GB) | 위 모든 AI 작업. 후보 9개 비교(bench/)로 선정. 실행: `deploy/start_vllm.sh` | https://huggingface.co/Qwen/Qwen3.8-27B, https://github.com/QwenLM/Qwen3.8 | 모델 카드의 라이선스 (확인 후 기록) |
 
 ## 라이브러리
 | 이름 | 용도 | 라이선스 |
@@ -48,7 +49,7 @@ IBM Plex Sans KR (Google Fonts, SIL Open Font License)
 - [ ] AI 활용 표의 '직접 수정한 부분' (요구사항을 정하고 결과를 확인해 고친 내용: 예: 월급날 말일, 쉬는 시간 직접 입력, 이메일 검사 누락 지적, 로그인 상태의 단계 건너뜀 발견)
 - [ ] law_params.json의 기준값 출처를 원문과 다시 대조 (verified=false 항목)
 
-## 모델 벤치마크 (bench/, 앱에는 아직 쓰지 않음)
+## 모델 벤치마크 (bench/, 앱 모델 선정에 씀)
 | 이름 | 용도 | 출처 | 라이선스 |
 |---|---|---|---|
 | huggingface_hub | 벤치마크 후보 모델 확인과 받기 (GPU 서버의 vLLM 가상환경에 이미 있음) | https://github.com/huggingface/huggingface_hub | Apache 2.0 |
