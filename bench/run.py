@@ -336,6 +336,36 @@ def run_suite(args, spec: dict, outdir: Path, extra: dict, sampling: dict) -> tu
     return suite.returncode, (suite.stdout + suite.stderr)[-1500:], out_json
 
 
+# 켜지다 멈춘 vLLM 로그에서 알아볼 수 있는 오류와 고치는 옵션 (오류 문장이 알려 주는 값을 그대로 쓴다)
+STARTUP_FIXES = [
+    # Mamba 계층이 있는 모델(Qwen3.5 등): 동시 처리 수 기본값(1024)이 Mamba 칸보다 많음
+    (r"lower max_num_seqs to at most (\d+)", lambda m: ["--max-num-seqs", m.group(1)]),
+    # KV 캐시가 최대 길이를 담지 못함: vLLM이 계산한 최대 길이로 줄인다
+    (r"estimated maximum model length is (\d+)", lambda m: ["--max-model-len", m.group(1)]),
+]
+PARSER_ERROR = re.compile(r"tool[_ -]?call[_ -]?parser|ToolParser|tool_parser|reasoning[_ -]?parser|chat[_ -]?template", re.I)
+
+
+def startup_fix(log_text: str) -> list[str] | None:
+    for pattern, make in STARTUP_FIXES:
+        m = re.search(pattern, log_text)
+        if m:
+            return make(m)
+    return None
+
+
+def with_flags(cmd: list[str], flags: list[str]) -> list[str]:
+    """--옵션 값 쌍을 넣는다. 이미 있는 옵션이면 값만 바꾼다."""
+    cmd = list(cmd)
+    for i in range(0, len(flags), 2):
+        name, value = flags[i], flags[i + 1]
+        if name in cmd[:-1]:
+            cmd[cmd.index(name) + 1] = value
+        else:
+            cmd += [name, value]
+    return cmd
+
+
 def check_line(c: dict) -> str:
     t = c["thinking"]
     think = "생각 꺼짐" if t.get("ok") and not t.get("fixed") else ("생각 끄기 옵션 바꿈" if t.get("fixed") else "생각 못 끔")
@@ -378,22 +408,41 @@ def bench_one(args, spec: dict, outdir: Path, gpu_mib: int) -> dict:
             say(f"[{spec['key']}] 받는 중: {pre['hf_id']} ({pre['size_gb']}GB)")
             meta["download_s"] = download(pre["hf_id"])
         peak.start()
+        fixes: list[str] = []  # 시작 오류를 보고 더한 옵션 (다음 파서에도 쓴다)
+        n = 0
         for i, tp in enumerate(parsers):
             last = i == len(parsers) - 1
-            cmd = serve_cmd(args, spec, pre, tp, template)
-            vlog = outdir / (f"{spec['key']}.vllm.log" if i == 0 else f"{spec['key']}.{tp}.vllm.log")
-            attempt = {"tool_parser": tp, "serve_cmd": cmd, "log": vlog.name}
-            meta["attempts"].append(attempt)
-            meta["serve_cmd"] = cmd
-            say(f"[{spec['key']}] 켜는 중 (도구 파서 {tp or '없음'}, 로그 {vlog.name})")
-            t0 = time.time()
-            try:
-                proc = start_server(args, cmd, vlog)
-            except RuntimeError as exc:
-                attempt["error"] = str(exc)[-1500:]
-                if last:
-                    raise
-                say(f"[{spec['key']}] 켜지지 않아 다음 도구 파서로 다시 해요")
+            for _ in range(4):  # 같은 파서로 옵션을 고쳐 다시 켜기 (오류 종류마다 한 번)
+                cmd = with_flags(serve_cmd(args, spec, pre, tp, template), fixes)
+                vlog = outdir / (f"{spec['key']}.vllm.log" if n == 0 else f"{spec['key']}.{n}.vllm.log")
+                n += 1
+                attempt = {"tool_parser": tp, "serve_cmd": cmd, "log": vlog.name, "fixes": list(fixes)}
+                meta["attempts"].append(attempt)
+                meta["serve_cmd"] = cmd
+                say(f"[{spec['key']}] 켜는 중 (도구 파서 {tp or '없음'}{', 더한 옵션 ' + ' '.join(fixes) if fixes else ''}, 로그 {vlog.name})")
+                t0 = time.time()
+                try:
+                    proc = start_server(args, cmd, vlog)
+                    break
+                except RuntimeError as exc:
+                    attempt["error"] = str(exc)[-1500:]
+                    text = vlog.read_text(errors="ignore") if vlog.exists() else str(exc)
+                    fix = startup_fix(text)
+                    if fix and not all(x in fixes for x in fix):
+                        fixes = with_flags(fixes, fix) if fixes else fix
+                        attempt["fix_next"] = fix
+                        say(f"[{spec['key']}] 켜지지 않음: 로그가 알려 준 대로 {' '.join(fix)}를 더해 다시 켜요")
+                        continue
+                    proc = None
+                    # 오류 문장만 본다 (vLLM 사용법 안내 줄에도 --tool-call-parser가 들어 있어서)
+                    err_lines = "\n".join([x for x in text.splitlines() if re.search(r"Error|error:", x)][-5:])
+                    if last or not PARSER_ERROR.search(err_lines):
+                        raise  # 파서와 상관없는 오류는 다른 파서로 켜도 같아서 멈춘다
+                    say(f"[{spec['key']}] 도구 파서 오류로 켜지지 않아 다음 도구 파서로 다시 해요")
+                    break
+            else:
+                raise RuntimeError("옵션을 고쳐도 켜지지 않았어요")
+            if proc is None:
                 continue
             try:
                 meta["load_s"] = round(time.time() - t0, 1)
@@ -407,7 +456,7 @@ def bench_one(args, spec: dict, outdir: Path, gpu_mib: int) -> dict:
                     say(f"[{spec['key']}] 도구 호출을 읽지 못해 다음 도구 파서로 다시 켜요")
                     continue
                 meta["checks"], meta["extra_body_used"] = c, c["extra_body"]
-                meta["tool_parser_used"] = tp
+                meta["tool_parser_used"], meta["startup_fixes"] = tp, fixes
                 say(f"[{spec['key']}] 시험 시작")
                 t1 = time.time()
                 code, tail, out_json = run_suite(args, spec, outdir, c["extra_body"], sampling)

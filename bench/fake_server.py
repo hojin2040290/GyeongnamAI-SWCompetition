@@ -69,9 +69,15 @@ if __name__ == "__main__":
     ap.add_argument("--fail-parser", default="", help="이 파서로 켜면 바로 멈춘다 (켜지지 않는 경우)")
     ap.add_argument("--think-unless", default="", help="이 chat_template_kwargs를 보내야 생각 글이 사라진다")
     ap.add_argument("--record", default="", help="받은 요청을 남길 파일")
+    ap.add_argument("--need-max-seqs", type=int, default=0, help="--max-num-seqs가 이 값보다 크거나 없으면 멈춘다 (Mamba 칸 부족)")
+    ap.add_argument("--max-num-seqs", type=int, default=1024)
+    ap.add_argument("--max-model-len", type=int, default=32768)
     a = ap.parse_args()
-    if a.fail_parser and a.tool_parser == a.fail_parser:
-        sys.exit(f"지원하지 않는 도구 파서예요: {a.tool_parser}")
+    if a.fail_parser and a.tool_parser == a.fail_parser:  # vLLM과 같은 모양의 오류 문장
+        sys.exit(f"KeyError: 'invalid tool call parser: {a.tool_parser} (chose from hermes, mistral)'")
+    if a.need_max_seqs and a.max_num_seqs > a.need_max_seqs:
+        sys.exit(f"ValueError: max_num_seqs ({a.max_num_seqs}) exceeds available Mamba cache blocks ({a.need_max_seqs}). "
+                 f"Please lower max_num_seqs to at most {a.need_max_seqs} or increase gpu_memory_utilization.")
     OPT.update(broken_vision=a.broken_vision, tool_parser=a.tool_parser, working_parser=a.working_parser,
                think_unless=a.think_unless, record=a.record)
     uvicorn.run(app, host="127.0.0.1", port=a.port, log_level="warning")

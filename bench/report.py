@@ -137,6 +137,8 @@ def build(outdir: Path) -> str:
         ct = r.get("chat_template") or {}
         if ct.get("want"):
             lines.append(f"- 대화 틀: {ct.get('url') or ct.get('error')}")
+        if r.get("startup_fixes"):
+            lines.append(f"- 시작 오류를 보고 더한 옵션: `{' '.join(r['startup_fixes'])}`")
         if r.get("extra_body_used") is not None:
             lines.append(f"- 실제로 쓴 요청 옵션: `{json.dumps(r['extra_body_used'], ensure_ascii=False)}`")
         for a in r.get("attempts") or []:
