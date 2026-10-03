@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bench"))  # checks.py
 BASE = Path("/home/work/llm_alba")
 LOG = None
 
@@ -125,23 +126,70 @@ def start_app_vllm() -> None:
 
 
 # ---------- 모델 확인, 받기 ----------
-def parsers_from_readme(api, hid: str) -> dict:
-    """모델 README의 vllm serve 예시에서 도구 호출 파서와 생각 파서를 찾는다."""
+DOC_FILES = ("README.md", "generation_config.json", "chat_template.jinja", "chat_template.json", "tokenizer_config.json")
+
+
+def model_docs(api, hid: str, keep: Path | None) -> dict:
+    """모델의 README, 생성 기본값, 대화 틀을 받아 keep 폴더에 남기고 필요한 값을 꺼낸다 (가중치는 받지 않음)."""
     from huggingface_hub import hf_hub_download
+    texts = {}
+    for name in DOC_FILES:
+        try:
+            texts[name] = Path(hf_hub_download(hid, name, token=api.token)).read_text(encoding="utf-8", errors="ignore")
+        except Exception:  # noqa: BLE001 (모델마다 있는 파일이 다르다)
+            continue
+        if keep:
+            keep.mkdir(parents=True, exist_ok=True)
+            (keep / name).write_text(texts[name], encoding="utf-8")
+    readme = texts.get("README.md", "")
+    tp = re.findall(r"--tool-call-parser[ =]+[\"']?([\w\-]+)", readme)
+    rp = re.findall(r"--reasoning-parser[ =]+[\"']?([\w\-]+)", readme)
     try:
-        text = Path(hf_hub_download(hid, "README.md", token=api.token)).read_text(encoding="utf-8", errors="ignore")
-    except Exception:  # noqa: BLE001
-        return {}
-    tp = re.findall(r"--tool-call-parser[ =]+[\"']?([\w\-]+)", text)
-    rp = re.findall(r"--reasoning-parser[ =]+[\"']?([\w\-]+)", text)
+        gen = json.loads(texts.get("generation_config.json") or "{}")
+    except json.JSONDecodeError:
+        gen = {}
+    template = texts.get("chat_template.jinja", "") + texts.get("chat_template.json", "")
+    try:
+        t = json.loads(texts.get("tokenizer_config.json") or "{}").get("chat_template") or ""
+        template += t if isinstance(t, str) else json.dumps(t, ensure_ascii=False)
+    except (json.JSONDecodeError, AttributeError):
+        pass
     return {"tool_parser": tp[0] if tp else "", "reasoning_parser": rp[0] if rp else "",
-            "trust_remote_code": "--trust-remote-code" in text}
+            "trust_remote_code": "--trust-remote-code" in readme,
+            # 비교표에 남겨 공식 권장 생성 설정을 다시 확인할 수 있게 (README의 temperature가 들어간 줄)
+            "sampling_lines": [x.strip()[:200] for x in readme.splitlines() if re.search(r"temperature|top_p|presence_penalty", x)][:8],
+            "generation_config": {k: gen[k] for k in ("temperature", "top_p", "top_k", "min_p", "repetition_penalty",
+                                                      "presence_penalty") if k in gen},
+            "template_switches": sorted({n for n in ("enable_thinking", "thinking", "skip_reasoning", "force_reasoning",
+                                                     "reasoning_effort") if re.search(rf"\b{n}\b", template)}),
+            "template_text": template}
 
 
-def preflight(spec: dict, gpu_mib: int) -> dict:
+def installed(pkg: str) -> str | None:
+    from importlib.metadata import PackageNotFoundError, version
+    try:
+        return version(pkg)
+    except PackageNotFoundError:
+        return None
+
+
+def version_problems(spec: dict) -> list[str]:
+    """공식 문서의 최소 버전보다 낮거나 없는 패키지 (이 파이썬 = GPU 서버의 vLLM 가상환경)."""
+    from packaging.version import Version
+    out = []
+    for pkg, need in (spec.get("requires") or {}).items():
+        have = installed(pkg)
+        if have is None or Version(have) < Version(need):
+            out.append(f"{pkg} {have or '없음'} < 필요 {need} "
+                       f"(설치: {BASE}/venv/bin/pip install -U \"{pkg}>={need}\")")
+    return out
+
+
+def preflight(spec: dict, gpu_mib: int, keep: Path | None = None, ignore_versions: bool = False) -> dict:
     from huggingface_hub import HfApi
     api = HfApi(token=os.getenv("HF_TOKEN") or None)
     notes = []
+    versions = {pkg: installed(pkg) for pkg in ["vllm", "transformers", *(spec.get("requires") or {})]}
     for hid in spec["hf_ids"]:
         try:
             info = api.model_info(hid, files_metadata=True)
@@ -149,22 +197,60 @@ def preflight(spec: dict, gpu_mib: int) -> dict:
             notes.append(f"{hid}: {type(exc).__name__}")
             continue
         size = sum((s.size or 0) for s in info.siblings or [] if s.rfilename.endswith((".safetensors", ".bin", ".pt")))
-        readme = parsers_from_readme(api, hid)
+        docs = model_docs(api, hid, keep)
         util = spec.get("gpu_memory_utilization", 0.85)
         out = {"hf_id": hid, "size_gb": round(size / 1e9, 1), "gated": bool(info.gated),
-               "license": (info.card_data or {}).get("license") if info.card_data else None, "readme": readme,
-               "notes": notes, "util": util}
+               "license": (info.card_data or {}).get("license") if info.card_data else None,
+               "readme": {k: v for k, v in docs.items() if k != "template_text"}, "notes": notes, "util": util,
+               "versions": versions, "version_problems": version_problems(spec)}
+        out["_template"] = docs["template_text"]
         if gpu_mib and size / 2 ** 20 > gpu_mib * util * 0.95:
             out["skip"] = f"모델({out['size_gb']}GB)이 GPU 메모리({gpu_mib / 1024:.0f}GiB x {util})보다 커요"
+        elif out["version_problems"] and not ignore_versions:
+            out["skip"] = "공식 문서의 최소 버전보다 낮아요: " + "; ".join(out["version_problems"])
         return out
     return {"skip": "Hugging Face에서 모델을 찾지 못했거나 접근 권한이 없어요 (HF_TOKEN, 라이선스 동의 확인)", "notes": notes}
 
 
-def pick(spec: dict, readme: dict, name: str) -> str:
-    v = spec.get(name, "")
-    if v == "auto":
-        v = readme.get(name) or spec.get(f"{name}_fallback", "")
-    return v
+def tool_parser_list(spec: dict, readme: dict) -> list[str]:
+    """도구 파서 후보 (공식 문서 값 먼저, auto는 README 값). 같은 이름은 한 번만."""
+    out = []
+    for v in spec.get("tool_parsers") or [spec.get("tool_parser", "")]:
+        v = readme.get("tool_parser", "") if v == "auto" else v
+        if v and v not in out:
+            out.append(v)
+    return out or [""]
+
+
+def reasoning_parser(spec: dict, readme: dict) -> str:
+    v = spec.get("reasoning_parser", "")
+    return (readme.get("reasoning_parser") or spec.get("reasoning_parser_fallback", "")) if v == "auto" else v
+
+
+def sampling_of(spec: dict) -> dict:
+    """공식 권장 생성 설정. auto는 temperature를 보내지 않아 모델 기본값(generation_config.json)을 쓰게 한다."""
+    v = spec.get("sampling", {})
+    return {"temperature": None} if v == "auto" else dict(v or {})
+
+
+def chat_template_file(spec: dict, outdir: Path) -> tuple[str, str]:
+    """vllm:examples/파일 → 설치된 vLLM 버전의 GitHub 파일을 받는다 (없으면 main). (경로, 받은 주소)"""
+    ref = spec.get("chat_template", "")
+    if not ref.startswith("vllm:"):
+        return ref, ""
+    rel = ref[5:]
+    dest = outdir / "templates" / Path(rel).name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    ver = installed("vllm")
+    for tag in ([f"v{ver}"] if ver else []) + ["main"]:
+        url = f"https://raw.githubusercontent.com/vllm-project/vllm/{tag}/{rel}"
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                dest.write_bytes(r.read())
+            return str(dest), url
+        except Exception:  # noqa: BLE001
+            continue
+    return "", ""
 
 
 def download(hid: str) -> float:
@@ -175,91 +261,155 @@ def download(hid: str) -> float:
 
 
 # ---------- 켜기, 시험, 끄기 ----------
-def serve_cmd(args, spec: dict, pre: dict) -> list[str]:
+def serve_cmd(args, spec: dict, pre: dict, tool_parser: str = "", template: str = "") -> list[str]:
     if args.serve_cmd:  # 로컬 확인용 (가짜 서버)
-        return args.serve_cmd.format(port=args.port).split()
-    tp, rp = pick(spec, pre.get("readme", {}), "tool_parser"), pick(spec, pre.get("readme", {}), "reasoning_parser")
+        return args.serve_cmd.format(port=args.port, parser=tool_parser).split()
+    readme = pre.get("readme", {})
+    rp = reasoning_parser(spec, readme)
     cmd = [args.vllm, "serve", pre["hf_id"], "--served-model-name", "bench", "--host", "127.0.0.1",
            "--port", str(args.port), "--max-model-len", str(args.max_len),
            "--gpu-memory-utilization", str(pre.get("util", 0.85))]
-    if tp:
-        cmd += ["--enable-auto-tool-choice", "--tool-call-parser", tp]
+    if tool_parser:
+        cmd += ["--enable-auto-tool-choice", "--tool-call-parser", tool_parser]
+    if template:
+        cmd += ["--chat-template", template]
     if rp:
         cmd += ["--reasoning-parser", rp]
     extra = list(spec.get("args", []))
-    if pre.get("readme", {}).get("trust_remote_code") and "--trust-remote-code" not in extra:
+    if readme.get("trust_remote_code") and "--trust-remote-code" not in extra:
         extra.append("--trust-remote-code")
     return cmd + extra
 
 
+def start_server(args, cmd: list[str], vlog: Path) -> subprocess.Popen:
+    """vLLM을 켜고 /v1/models가 답할 때까지 기다린다. 켜지다 멈추면 로그 끝을 담아 예외."""
+    t0 = time.time()
+    with open(vlog, "w") as lf:
+        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, start_new_session=True, cwd=ROOT,
+                                env={**os.environ, "HF_HOME": str(args.hf_home)})
+    while not ready(args.port):
+        if proc.poll() is not None:
+            stop_server(args, proc)  # 남은 하위 프로세스(엔진)가 GPU를 잡고 있지 않게
+            raise RuntimeError("vLLM이 켜지다 멈췄어요: " + vlog.read_text(errors="ignore")[-1500:])
+        if time.time() - t0 > args.ready_timeout:
+            stop_server(args, proc)
+            raise RuntimeError(f"{args.ready_timeout}초 안에 켜지지 않았어요")
+        time.sleep(5)
+    return proc
+
+
+def stop_server(args, proc: subprocess.Popen) -> None:
+    """이 스크립트가 켠 vLLM만 끈다 (프로세스 묶음 번호로)."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=120)
+    except Exception:  # noqa: BLE001
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    if not args.serve_cmd:
+        wait_gpu_free()
+
+
+def run_suite(args, spec: dict, outdir: Path, extra: dict, sampling: dict) -> tuple[int, str, Path]:
+    out_json = outdir / f"{spec['key']}.json"
+    suite = subprocess.run([args.suite_python, str(ROOT / "bench" / "suite.py"), "--key", spec["key"],
+                            "--base-url", f"http://127.0.0.1:{args.port}/v1", "--model", "bench",
+                            "--extra-body", json.dumps(extra), "--sampling", json.dumps(sampling), "--out", str(out_json)]
+                           + (["--skip", args.skip] if args.skip else []),
+                           cwd=ROOT, capture_output=True, text=True, timeout=args.suite_timeout)
+    return suite.returncode, (suite.stdout + suite.stderr)[-1500:], out_json
+
+
+def check_line(c: dict) -> str:
+    t = c["thinking"]
+    think = "생각 꺼짐" if t.get("ok") and not t.get("fixed") else ("생각 끄기 옵션 바꿈" if t.get("fixed") else "생각 못 끔")
+    return (f"{think}, 도구 auto {'성공' if c['tools']['auto']['ok'] else '실패'}, "
+            f"도구 지정 {'성공' if c['tools']['forced']['ok'] else '실패'}, 사진 JSON {'성공' if c['vision']['ok'] else '실패'}")
+
+
 def bench_one(args, spec: dict, outdir: Path, gpu_mib: int) -> dict:
-    meta = {"key": spec["key"], "label": spec["label"], "status": "시작"}
+    meta = {"key": spec["key"], "label": spec["label"], "status": "시작", "docs": spec.get("docs", []),
+            "sampling_note": spec.get("sampling_note", "")}
     path = outdir / f"{spec['key']}.meta.json"
 
     def save():
         path.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-    pre = {"hf_id": "fake", "util": 0.85} if args.serve_cmd else preflight(spec, gpu_mib)
+    keep = outdir / "docs" / spec["key"]
+    pre = {"hf_id": "fake", "util": 0.85} if args.serve_cmd else preflight(spec, gpu_mib, keep, args.ignore_versions)
+    template_text = pre.pop("_template", "")
     meta["preflight"] = pre
+    sampling, extra = sampling_of(spec), dict(spec.get("extra_body", {}))
+    meta["sampling"], meta["extra_body"] = sampling, extra
+    parsers = (args.fake_parsers.split(",") if args.serve_cmd else tool_parser_list(spec, pre.get("readme", {})))
+    meta["tool_parsers"] = parsers
     if pre.get("skip"):
         meta["status"] = f"건너뜀: {pre['skip']}"
         save()
         return meta
+    template, template_url = ("", "") if args.serve_cmd else chat_template_file(spec, outdir)
+    meta["chat_template"] = {"want": spec.get("chat_template", ""), "path": template, "url": template_url}
+    if spec.get("chat_template") and not template:
+        meta["chat_template"]["error"] = "대화 틀 파일을 받지 못해 모델 기본 대화 틀로 켜요 (도구 호출이 안 될 수 있음)"
     if args.preflight:
         meta["status"] = "확인만"
-        meta["serve_cmd"] = serve_cmd(args, spec, pre)
+        meta["serve_cmd"] = serve_cmd(args, spec, pre, parsers[0], template)
         save()
         return meta
+    meta["attempts"] = []
+    peak = GpuPeak()
     try:
         if not args.serve_cmd:
             say(f"[{spec['key']}] 받는 중: {pre['hf_id']} ({pre['size_gb']}GB)")
             meta["download_s"] = download(pre["hf_id"])
-        cmd = serve_cmd(args, spec, pre)
-        meta["serve_cmd"] = cmd
-        vlog = outdir / f"{spec['key']}.vllm.log"
-        say(f"[{spec['key']}] 켜는 중 (로그 {vlog.name})")
-        peak = GpuPeak()
         peak.start()
-        t0 = time.time()
-        with open(vlog, "w") as lf:
-            proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, start_new_session=True, cwd=ROOT,
-                                    env={**os.environ, "HF_HOME": str(args.hf_home)})
-        try:
-            while not ready(args.port):
-                if proc.poll() is not None:
-                    raise RuntimeError("vLLM이 켜지다 멈췄어요: " + vlog.read_text(errors="ignore")[-1500:])
-                if time.time() - t0 > args.ready_timeout:
-                    raise RuntimeError(f"{args.ready_timeout}초 안에 켜지지 않았어요")
-                time.sleep(5)
-            meta["load_s"] = round(time.time() - t0, 1)
-            meta["gpu_after_load_mib"] = gpu_used_mib()
-            say(f"[{spec['key']}] 켜짐 ({meta['load_s']}초). 시험 시작")
-            out_json = outdir / f"{spec['key']}.json"
-            t1 = time.time()
-            suite = subprocess.run([args.suite_python, str(ROOT / "bench" / "suite.py"), "--key", spec["key"],
-                                    "--base-url", f"http://127.0.0.1:{args.port}/v1", "--model", "bench",
-                                    "--extra-body", json.dumps(spec.get("extra_body", {})), "--out", str(out_json)]
-                                   + (["--skip", args.skip] if args.skip else []),
-                                   cwd=ROOT, capture_output=True, text=True, timeout=args.suite_timeout)
-            meta["suite_s"] = round(time.time() - t1, 1)
-            meta["suite_tail"] = (suite.stdout + suite.stderr)[-1500:]
-            meta["status"] = "완료" if suite.returncode == 0 and out_json.exists() else "시험 실패"
-        finally:
-            peak.stop = True
-            meta["gpu_peak_mib"] = peak.peak
-            say(f"[{spec['key']}] 끄는 중")
+        for i, tp in enumerate(parsers):
+            last = i == len(parsers) - 1
+            cmd = serve_cmd(args, spec, pre, tp, template)
+            vlog = outdir / (f"{spec['key']}.vllm.log" if i == 0 else f"{spec['key']}.{tp}.vllm.log")
+            attempt = {"tool_parser": tp, "serve_cmd": cmd, "log": vlog.name}
+            meta["attempts"].append(attempt)
+            meta["serve_cmd"] = cmd
+            say(f"[{spec['key']}] 켜는 중 (도구 파서 {tp or '없음'}, 로그 {vlog.name})")
+            t0 = time.time()
             try:
-                os.killpg(proc.pid, signal.SIGTERM)
-                proc.wait(timeout=120)
-            except Exception:  # noqa: BLE001
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            if not args.serve_cmd:
-                wait_gpu_free()
+                proc = start_server(args, cmd, vlog)
+            except RuntimeError as exc:
+                attempt["error"] = str(exc)[-1500:]
+                if last:
+                    raise
+                say(f"[{spec['key']}] 켜지지 않아 다음 도구 파서로 다시 해요")
+                continue
+            try:
+                meta["load_s"] = round(time.time() - t0, 1)
+                meta["gpu_after_load_mib"] = gpu_used_mib()
+                say(f"[{spec['key']}] 켜짐 ({meta['load_s']}초). 자동 점검")
+                from checks import run_all
+                c = run_all(args.port, extra, sampling, template_text, ROOT / "테스트자료" / "02_근로계약서.png")
+                attempt["checks"] = c
+                say(f"[{spec['key']}] 점검: {check_line(c)}")
+                if not c["tools"]["ok"] and not last:
+                    say(f"[{spec['key']}] 도구 호출을 읽지 못해 다음 도구 파서로 다시 켜요")
+                    continue
+                meta["checks"], meta["extra_body_used"] = c, c["extra_body"]
+                meta["tool_parser_used"] = tp
+                say(f"[{spec['key']}] 시험 시작")
+                t1 = time.time()
+                code, tail, out_json = run_suite(args, spec, outdir, c["extra_body"], sampling)
+                meta["suite_s"] = round(time.time() - t1, 1)
+                meta["suite_tail"] = tail
+                meta["status"] = "완료" if code == 0 and out_json.exists() else "시험 실패"
+                break
+            finally:
+                say(f"[{spec['key']}] 끄는 중")
+                stop_server(args, proc)
     except Exception as exc:  # noqa: BLE001 (한 모델이 실패해도 다음 모델로)
         meta["status"] = "실패"
         meta["error"] = f"{type(exc).__name__}: {exc}"[-2000:]
+    finally:
+        peak.stop = True
+        meta["gpu_peak_mib"] = peak.peak
     say(f"[{spec['key']}] {meta['status']}")
     save()
     return meta
@@ -280,13 +430,17 @@ def main() -> int:
     ap.add_argument("--suite-timeout", type=int, default=3 * 3600)
     ap.add_argument("--skip", default="", help="건너뛸 시험 (speed,vision,flows)")
     ap.add_argument("--serve-cmd", default="", help="(로컬 확인용) vLLM 대신 띄울 명령, {port} 치환")
+    ap.add_argument("--fake-sampling", default="{}", help="(로컬 확인용) 가짜 서버에 보낼 생성 설정 JSON")
+    ap.add_argument("--fake-parsers", default="", help="(로컬 확인용) 도구 파서 후보 (쉼표, --serve-cmd의 {parser})")
     ap.add_argument("--out", default="")
     ap.add_argument("--resume", default="", help="이 결과 폴더에 이어서 (완료된 모델은 건너뜀)")
+    ap.add_argument("--ignore-versions", action="store_true", help="공식 문서의 최소 버전보다 낮아도 실행")
     args = ap.parse_args()
     os.environ["HF_HOME"] = args.hf_home  # huggingface_hub를 불러오기 전에
     specs = json.loads((ROOT / "bench" / "models.json").read_text(encoding="utf-8"))["models"]
     if args.serve_cmd:
-        specs = [{"key": "fake", "label": "가짜 서버 (로컬 확인용)", "hf_ids": [], "extra_body": {}}]
+        specs = [{"key": "fake", "label": "가짜 서버 (로컬 확인용)", "hf_ids": [], "extra_body": {},
+                  "sampling": json.loads(args.fake_sampling)}]
     elif args.models != "all":
         want = args.models.split(",")
         specs = [s for s in specs if s["key"] in want]

@@ -7,6 +7,7 @@
 | 분류 | 지표 |
 |---|---|
 | 준비 | 모델 크기, 받은 시간, 켜는 시간, GPU 메모리 최대 |
+| 자동 점검 | 켠 뒤 시험 전에: 생각 모드가 실제로 꺼졌는지, 도구 호출을 파서가 읽는지(auto, 지정), 사진을 JSON으로 답하는지 |
 | 속도 | 첫 글자까지 시간(TTFT), 초당 생성 토큰, 요청 시간(중간값, 95%, 최대), 100초 넘은 요청 수 |
 | 토큰 | 입력, 출력 토큰 합계, 흐름 하나당 토큰 |
 | 도구 호출 | 도구 호출 없이 글만 온 수, 글 속 호출(파서가 못 읽음), 입력 형식 오류, 지정한 도구 무시 |
@@ -45,9 +46,23 @@
    nohup /home/work/llm_alba/venv/bin/python bench/run.py --yes --resume bench/results/<폴더 이름> > bench/nohup.log 2>&1 &
    ```
 
+## 모델마다 다른 점에 대한 대비
+`models.json`에 모델마다 공식 문서(vLLM 레시피, 모델 회사 GitHub)에서 확인한 값과 그 주소(`docs`)를 적었다. 실행할 때는 다음 순서로 확인하고 고친다.
+1. 버전: GPU 서버의 vLLM 가상환경에 있는 vllm, transformers, mistral_common이 공식 문서의 최소 버전(`requires`)보다 낮으면 설치 명령을 남기고 건너뛴다. 그래도 돌리려면 `--ignore-versions`.
+2. 문서: 모델의 README, generation_config.json, 대화 틀을 결과 폴더 `docs/<key>/`에 남기고, README의 vllm serve 예시(파서), 권장 생성 설정 줄, 대화 틀의 생각 끄기 이름을 비교표에 적는다.
+3. 대화 틀: Gemma 4, Llama 4처럼 vLLM이 주는 도구 호출용 대화 틀이 필요한 모델은 설치된 vLLM 버전의 GitHub 파일을 받아 `--chat-template`로 쓴다.
+4. 켜기: 도구 파서 후보(`tool_parsers`)를 차례로 쓴다. 켜지지 않거나 자동 점검에서 도구 호출을 못 읽으면 다음 후보로 다시 켠다.
+5. 생각 모드: 끄는 옵션(`extra_body`)을 보냈는데도 생각 글이 오면 대화 틀에서 찾은 다른 끄기 옵션(enable_thinking, thinking, skip_reasoning, reasoning_effort 등)을 차례로 시도하고, 꺼진 옵션으로 시험한다. 끝내 못 끄면 비교표에 '못 끔'으로 남긴다.
+6. 생성 설정: 공식 문서의 권장값(`sampling`, 예: EXAONE은 temperature 0.6, presence_penalty 1.5)을 모든 요청에 쓴다. 문서에서 확인하지 못한 모델은 모델 기본값(generation_config.json)을 쓴다. 앱에서 그 모델을 쓰려면 `.env`의 `LLM_SAMPLING`에 같은 값을 넣는다.
+7. 답 모양: 생각 글(`<think>`, `[THINK]`, Gemma thought 채널)이나 GLM 답 상자 표시가 답에 섞여 와도 앱이 지우고 JSON을 읽는다.
+- GPU 없이 이 대처를 확인하는 가짜 서버 옵션: `--fail-parser`(켜지지 않음), `--working-parser`(파서 불일치), `--think-unless`(생각 글 섞임), `--broken-vision`(사진 답 반복), `--record`(보낸 요청 기록). 예:
+  ```bash
+  python3 bench/run.py --yes --serve-cmd "python3 bench/fake_server.py --port {port} --tool-parser {parser} --fail-parser bad --working-parser good --think-unless skip_reasoning" --fake-parsers bad,hermes2,good --suite-python python3
+  ```
+
 ## 알아 둘 점
-- 모델 이름과 vLLM 옵션은 검색으로 정한 값이다. 사전 확인에서 이름이 없거나 GPU보다 큰 모델은 받지 않고 건너뛴다.
-  도구 파서와 생각 파서는 모델 README의 `vllm serve` 예시에서 찾고, 없으면 `models.json`의 값을 쓴다.
+- 모델 이름과 vLLM 옵션은 공식 문서(`models.json`의 docs)에서 확인한 값이다. 사전 확인에서 이름이 없거나 GPU보다 큰 모델은 받지 않고 건너뛴다.
+  도구 파서와 생각 파서는 공식 문서 값을 쓰고, `auto`인 모델(공식 문서를 Hugging Face에서만 볼 수 있는 모델)은 README의 `vllm serve` 예시에서 찾는다.
 - AI 답 하나는 최대 4096토큰까지만 받는다 (앱과 같은 `LLM_MAX_TOKENS`). 모델이 같은 말을 반복하거나 끝맺지 못해도 요청이 몇 분씩 걸리지 않게 하려는 것이고, 제한에 걸린 요청 수는 비교표의 '길이 제한 걸림'에 남는다.
 - 사진 읽기에 실패하면 그 답 원문 앞뒤가 모델별 JSON과 비교표 '모델별 자세히'에 남는다. 한 모델의 사진 시험만 다시 하려면
   (예: EXAONE, 끝나면 8000번을 다시 켬):
@@ -56,7 +71,7 @@
   nohup /home/work/llm_alba/venv/bin/python bench/run.py --yes --models exaone45_33b --skip speed,flows > bench/nohup_vision.log 2>&1 &
   ```
   결과는 새 폴더에 따로 생기고, 전체 실행 폴더는 바뀌지 않는다. 전체 실행이 끝난 뒤에 한다 (GPU를 함께 쓰면 둘 다 멈춘다).
-- 생각(thinking) 모드가 있는 모델은 `extra_body`로 끄고 시험한다. 앱에서 그 모델을 쓰려면 `.env`의 `LLM_EXTRA_BODY`에 같은 값을 넣는다.
+- 생각(thinking) 모드가 있는 모델은 끄고 시험한다. 앱에서 그 모델을 쓰려면 비교표 '모델별 자세히'의 '실제로 쓴 요청 옵션'을 `.env`의 `LLM_EXTRA_BODY`에, 생성 설정을 `LLM_SAMPLING`에 넣는다.
 - 받은 모델은 `/home/work/llm_alba/hf`(저장 폴더)에 남는다. 다 받으면 수백 GB라 끝난 뒤 쓰지 않을 모델은 지워도 된다.
 - 지금 vLLM 버전이 지원하지 않는 모델은 '실패'와 vLLM 로그 끝부분이 비교표에 남는다.
 - GPU 없이 흐름만 확인 (개발자용): `python bench/run.py --serve-cmd "python3 bench/fake_server.py --port {port}" --suite-python python3`. 사진 읽기 실패 모양을 보려면 `fake_server.py`에 `--broken-vision`을 더한다.
