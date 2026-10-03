@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from app.agent.argcheck import ArgError, fit_args
-from app.agent.safety import neutralize
+from app.agent.safety import neutralize, output_problem
 from app.config import AGENT_MAX_STEPS
 from app.llm import client
 
@@ -29,10 +29,13 @@ AGENT_SYSTEM = (
     "- 법 조문 내용은 사용자에게 묻지 마세요. 기준표에 없으면 조항 이름만 근거로 쓰고 이어 하세요.\n"
     "- 법 조문 내용은 사용자에게 묻지 마세요. get_article 결과가 '법 기준표 미구축'이면 조항 이름만 근거로 쓰고 "
     "다음 할 일을 이어 하세요.\n"
-    "- 판단에 필요한 정보가 기록에 없으면 추측하지 말고 확인 필요(warn)로 두세요. 사용자가 알 만한 정보면 ask_user로 "
+    "- 판단에 필요한 정보가 기록에 없으면 추측하지 말고 확인 필요로 두세요 (finish의 status 값은 warn). 사용자가 알 만한 정보면 ask_user로 "
     "선택지와 함께 물어보세요 (한 번에 1~2개). 답을 받으면 judgments의 answer_ids에 근거로 쓴 답변 번호를 넣으세요.\n"
     "- 판단마다 근거로 쓴 조항(law)과 사실(fact)을 함께 내세요.\n"
     "- 법적 판단을 확정하지 말고 참고 의견으로 쓰세요. 사용자에게 보내는 글은 청소년이 이해하기 쉬운 존댓말로 쓰세요. 모든 글은 한국어(한글)로만 쓰고 한자나 중국어를 섞지 마세요.\n"
+    "- 사용자에게 보이는 글(판단 이유, 조언, 메모, 질문, 알림, 요약)에는 도구 이름(get_article, schedule_followup 등)이나 "
+    "영어 값(ok, warn, bad, quit_check, payday 등)을 쓰지 마세요. 사용자는 모르는 말이에요. 한국어로 풀어 쓰세요 "
+    "(예: warn → 확인 필요, quit_check 예약 → 퇴직 정산 확인 예약, get_article로 확인 → 법 조문을 확인).\n"
     "- 도구를 쓰기 전에 make_plan으로 할 일 계획을 세우세요. 도구 결과를 보고 계획이 바뀌면 make_plan으로 고치세요.\n"
     "- 상황의 '지난 메모'는 지난 실행에서 당신이 remember로 남긴 메모예요. 참고하되 사실은 도구로 다시 확인하세요.\n"
     "- 나중에 다시 확인할 일(지급 기한이 지난 뒤 받았는지, 명세서를 올리기로 한 날 등)은 schedule_followup으로 예약하세요. "
@@ -95,6 +98,13 @@ def _args(call: dict) -> dict:
 def _dump(v) -> str:
     text = json.dumps(v, ensure_ascii=False, default=str)
     return text if len(text) <= RESULT_MAX else text[:RESULT_MAX] + "…(생략)"
+
+
+def _shown(args: dict) -> list:
+    """finish 입력 중 화면에 보이는 AI 글 (판단 이유, 한 일 요약, 더 물어볼 질문)."""
+    out = [args.get("reason"), args.get("note"), *(args.get("extra_questions") or [])]
+    out += [j.get("reason") for j in args.get("judgments") or [] if isinstance(j, dict)]
+    return [x for x in out if x]
 
 
 def _cut(text: str, n: int) -> str:
@@ -196,6 +206,7 @@ def run_agent(run, goal: Goal, tools: dict[str, Tool], context: dict) -> dict | 
                 try:
                     args = fit_args(goal.finish, goal.finish_required, args)
                     problem = goal.check(args) if goal.check else None
+                    problem = problem or output_problem(*_shown(args))  # 판단 이유, 요약도 사용자에게 보이는 글
                 except ArgError as exc:
                     problem = f"finish 입력이 맞지 않아요: {exc}"
                 feedback = goal.review(args) if goal.review and problem is None else []
