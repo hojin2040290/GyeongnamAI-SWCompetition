@@ -1,5 +1,6 @@
 """홈의 AI 에이전트 종합 점검: 코드가 모든 기록을 정리하고, 에이전트가 종합 판단과 조언, 필요하면 질문을 남긴다."""
 import json
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,7 +34,7 @@ def results(payload: dict, name: str) -> list:
 def env():
     init_db()
     with TestClient(app) as a:
-        email = f"ov{id(a)}@example.com"
+        email = f"ov{uuid.uuid4().hex[:10]}@example.com"  # id()는 앞 시험 것과 겹칠 수 있다
         a.post("/api/auth/register", json={"email": email, "password": "test1234", "birth_date": "2009-03-02"})
         a.post("/api/auth/login", json={"email": email, "password": "test1234"})
         j = a.post("/api/jobs", json=JOB).json()["id"]
@@ -175,3 +176,26 @@ def test_contract_waiting_count_is_separate_for_spinner(env, monkeypatch):
     assert part["wait"].startswith("AI 에이전트 판단 대기") and "판단 대기" not in part["text"]
     with Session(engine) as s:
         assert part["wait"] in overview.target(s, s.get(Job, j).user_id, j)["text"]
+
+
+def test_long_advice_is_sent_back_and_saved_whole(env, monkeypatch):
+    """실제 사례: 조언이 400자에서 몰래 잘려 '시작해'로 끝났다. 길면 돌려보내고, AI가 줄인 조언이 끝까지 저장된다."""
+    a, j = env
+    long_advice = said("가" * 600 + " 시작해요")
+    short_advice = said("계약서 탭에서 점검을 시작해요")
+
+    def policy(goal, done, tools):
+        names = [n for n, _ in done]
+        view = called(done, "get_all_facts")
+        if view is None:
+            return reply([("get_all_facts", {})])
+        if names.count("give_advice") == 0:
+            return reply([("give_advice", {"advice": long_advice})])
+        if not called(done, "give_advice") or "error" in json.dumps(called(done, "give_advice"), ensure_ascii=False):
+            return reply([("give_advice", {"advice": short_advice})])
+        return reply([("finish", {"status": "warn", "law": view["관련 조항"][0], "fact": view["사실"][:200], "reason": said("종합")})])
+    agent = use(monkeypatch, policy)
+    a.post(f"/api/jobs/{j}/agent/overview")
+    errors = [json.dumps(x, ensure_ascii=False) for p in agent.payloads for x in results(p, "give_advice")]
+    assert any("자 안으로 줄여" in e for e in errors)
+    assert a.get(f"/api/jobs/{j}/overview").json()["advice"]["text"] == short_advice

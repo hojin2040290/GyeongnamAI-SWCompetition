@@ -384,6 +384,18 @@ def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = 
 
 # ---------- AI가 골라 쓰는 도구 ----------
 S = {"type": "string"}
+
+
+def text(n: int, desc: str = "") -> dict:
+    """AI가 쓰고 화면에 보이는 글 칸. 길면 몰래 자르지 않고 줄여 다시 내라고 돌려보낸다 (argcheck)."""
+    return {"type": "string", "maxLength": n, "description": f"{desc + ' ' if desc else ''}({n}자 이내)"}
+
+
+def texts(n: int, most: int, desc: str = "") -> dict:
+    return {"type": "array", "items": text(n), "maxItems": most, "description": f"{desc + ' ' if desc else ''}({most}개까지)"}
+
+
+ADVICE_MAX = 500
 MONTH = {"type": "string", "description": "YYYY-MM 형식의 달"}
 LAW_LABEL = {"type": "string", "description": "조항 이름 (예: 근로기준법 제70조)"}
 LAW_LIST = {"type": "array", "items": {"type": "string"}, "description": "근거로 든 조항 이름들"}
@@ -633,7 +645,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         """사용자에게 조언한다. 홈에 보이고, next_tab이 있으면 그 화면 바로 가기가 붙는다."""
         from app.agent.case import NEXT_TABS
         t["get_job"]()
-        advice = str(advice).strip()[:400]
+        advice = str(advice).strip()[:ADVICE_MAX]  # 길이는 argcheck가 먼저 걸러 AI에게 줄이게 한다
         if not advice:
             raise ValueError("조언이 비어 있어요")
         check_output(advice)
@@ -691,24 +703,28 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
              {"pending_only": {"type": "boolean", "description": "판별 전 게시물만 볼지"}}),
         Tool("set_post_status", "게시물 판별 결과를 저장한다. suspect(보복 의심), ok(문제 없음), unclear(확인 필요).",
              set_post_status, {"post_id": {"type": "integer"}, "status": {"type": "string", "enum": list(POST_STATUS)},
-                               "reason": S}, ["post_id", "status", "reason"]),
+                               "reason": text(300, "판별 이유")}, ["post_id", "status", "reason"]),
         Tool("remember", "다음 실행 때 읽을 메모를 남긴다 (무엇을 판단했고, 무엇이 남았는지).", remember,
-             {"note": S}, ["note"]),
+             {"note": text(300)}, ["note"]),
         Tool("ask_user", "판단에 필요한데 기록에 없는 정보를 사용자에게 묻는다 (선택지 포함). 답하면 이 점검이 다시 시작된다.",
-             ask_user, {"question": S, "options": {"type": "array", "items": S}, "why": S, "law": LAW_LABEL},
+             ask_user, {"question": text(200), "options": {"type": "array", "items": text(40), "maxItems": 5,
+                                                           "description": "선택지 (5개까지, 하나에 40자 이내)"},
+                        "why": text(200, "묻는 이유"), "law": LAW_LABEL},
              ["question", "options", "why"]),
         Tool("get_answers", "사용자가 답한 질문과 답을 본다.", get_answers),
         Tool("schedule_followup", "나중에 다시 확인할 점검을 예약한다 (예: 지급 기한 다음 날 받았는지, 명세서를 올리기로 한 날). "
              "check: contract_check, payday, quit_check, guard_review, report", schedule_followup,
              {"check": {"type": "string", "enum": ["contract_check", "payday", "quit_check", "guard_review", "report"]},
-              "day": {"type": "string", "description": "YYYY-MM-DD (내일부터 60일 안)"}, "note": S,
+              "day": {"type": "string", "description": "YYYY-MM-DD (내일부터 60일 안)"}, "note": text(200, "확인할 이유"),
               "month": {"type": "string", "description": "급여 점검할 달 YYYY-MM (payday일 때만)"}},
              ["check", "day", "note"]),
         Tool("give_advice", "사용자에게 조언한다. 관련 화면이 있으면 next_tab은 check(계약서 점검), pay(급여 점검), "
-             "docs(상담 사전 자료), guard(신고 후 보호) 중 바로 가기할 화면.", give_advice,
-             {"advice": S, "next_tab": {"type": "string", "enum": ["", "check", "pay", "docs", "guard"]}}, ["advice"]),
+             "docs(상담 사전 자료), guard(신고 후 보호) 중 바로 가기할 화면. 화면 아래 메뉴 이름은 홈, 급여, 계약서, 자료, 보호뿐이니 "
+             "화면을 안내할 때는 이 이름만 써요.", give_advice,
+             {"advice": text(ADVICE_MAX, "조언 (끝까지 완결된 문장으로)"), "next_tab": {"type": "string", "enum": ["", "check", "pay", "docs", "guard"]}}, ["advice"]),
         Tool("build_report", "상담 사전 자료 문서를 만든다. 상황 요약, 상담 때 물어볼 점, 근거 조항을 넣는다.", build_report,
-             {"summary": S, "points": {"type": "array", "items": S}, "basis": LAW_LIST},
+             {"summary": text(2000, "상황 요약"), "points": texts(300, 8, "상담 때 물어볼 점"),
+              "basis": {**LAW_LIST, "items": text(100), "maxItems": 8}},
              ["summary", "points", "basis"]),
     ]
     return {x.name: x for x in tools}

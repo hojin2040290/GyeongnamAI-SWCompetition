@@ -132,7 +132,8 @@ def plan_tool(run) -> Tool:
         run.log("계획 수정" if revised else "계획", " → ".join(f"{n}. {x}" for n, x in enumerate(steps, 1)))
         return "계획을 고쳤어요" if revised else "계획을 세웠어요"
     return Tool("make_plan", "할 일 계획을 세우거나 고친다. 다른 도구를 쓰기 전에 먼저 부른다.", make_plan,
-                {"steps": {"type": "array", "items": {"type": "string"}, "description": "할 일을 순서대로"}}, ["steps"])
+                {"steps": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": PLAN_MAX,
+                           "description": f"할 일을 순서대로 ({PLAN_MAX}개까지, 하나에 120자 이내)"}}, ["steps"])
 
 
 def pending(goal: Goal) -> str | None:

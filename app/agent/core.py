@@ -18,7 +18,7 @@ from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
 from app.agent.safety import scrub
 from app.calc import pay as paycalc
-from app.agent.tools import agent_tools, for_ai, make_tools
+from app.agent.tools import agent_tools, for_ai, make_tools, text, texts
 from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
 from app.law.lookup import known_law
@@ -30,8 +30,8 @@ FOLLOWUP_NOTE: ContextVar[str] = ContextVar("followup_note", default="")  # 예�
 
 S = {"type": "string"}
 JUDGE_ONE = {"status": {"type": "string", "enum": ["ok", "warn", "bad"], "description": "정상, 확인 필요, 위반 의심"},
-             "law": {"type": "string", "description": "근거로 쓴 조항"}, "fact": {"type": "string", "description": "근거로 쓴 사실"},
-             "reason": {"type": "string", "description": "판단 이유 한두 문장"}}
+             "law": {"type": "string", "description": "근거로 쓴 조항"}, "fact": text(300, "근거로 쓴 사실"),
+             "reason": text(300, "판단 이유 한두 문장")}
 JUDGMENTS = {"judgments": {"type": "array", "description": "검토 항목마다 판단 하나", "items": {
     "type": "object", "properties": {"i": {"type": "integer", "description": "check_rules 항목 번호"}, **JUDGE_ONE,
                                      "answer_ids": {"type": "array", "items": {"type": "integer"},
@@ -229,7 +229,7 @@ def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
     seek = r.call("judge_seek", data)
     goal = ("사용자가 아르바이트에 지원하기 전이에요. 공고 조건을 check_rules로 받아 항목마다 판단해 finish의 judgments에 담고, "
             "지원할 때 사업장에 물어보면 좋을 질문이 더 있으면 extra_questions에 넣어 주세요.")
-    extra_q = {"extra_questions": {"type": "array", "items": S, "description": "더 물어볼 질문 (없으면 빈 배열)"}}
+    extra_q = {"extra_questions": texts(200, 5, "더 물어볼 질문 (없으면 빈 배열)")}
     items, out = _judge_items(r, goal, ["get_profile", "get_age_on", "get_article", "find_refs"],
                               lambda: seek["items"], {"공고": data}, extra_q)
     questions = seek["questions"] + [scrub(str(q))[:200] for q in (out or {}).get("extra_questions") or []
