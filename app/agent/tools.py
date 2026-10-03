@@ -643,7 +643,30 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
         state["advice"] = True
         return "조언을 남겼어요"
 
+    def get_all_facts() -> dict:
+        """종합 점검: 이 사업장의 모든 기록을 코드가 정리한 사실과 그중 가장 나쁜 결과."""
+        from app.agent import overview  # overview가 이 모듈을 쓰므로 여기서 불러온다
+        tgt = overview.target(session, user_id, job_id)
+        state["overview"] = tgt
+        laws = []
+        check = session.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == "contract")
+                             .order_by(CheckRun.id.desc())).first()
+        for it in sorted(json.loads(check.results_json) if check else [], key=lambda x: x.get("status") == engine.OK):
+            if it.get("law") and it["law"] not in laws:
+                laws.append(it["law"])
+        if any(pt["name"].endswith("급여") and pt["status"] in (engine.WARN, engine.BAD) for pt in tgt["parts"]):
+            laws += [P()["weekly_holiday"]["law"], P()["premium"]["law"]]
+        if any(pt["name"] == "퇴직 후 임금 정산" for pt in tgt["parts"]):
+            laws += [P()["settlement"]["law"], P()["wage_claim"]["law"]]
+        return {"사실": "; ".join(f"{pt['name']}: {pt['text']}" + (f" ({overview.NAME[pt['status']]})" if pt["status"] else "")
+                                 for pt in tgt["parts"]),
+                "코드가 정리한 결과": overview.NAME[tgt["rule_status"]],
+                "관련 조항": list(dict.fromkeys(laws or [P()["written_terms"]["law"]]))[:8],
+                "안내": "숫자와 결과는 코드가 계산한 값이에요. 근거 조항은 get_article로 확인한 것만 쓰세요."}
+
     tools = [
+        Tool("get_all_facts", "종합 점검: 이 사업장의 모든 기록(계약서 점검, 달마다 급여 비교, 근무 기록, 퇴직 정산, 신고 후 보호, "
+             "증거 자료, 답을 기다리는 질문)을 코드가 정리한 사실과 그중 가장 나쁜 결과를 본다.", get_all_facts),
         Tool("get_profile", "오늘 날짜, 사용자의 오늘 만 나이, 사업장 기본 정보(시급, 계약상 근무, 계약서 작성 등)를 본다.",
              get_profile),
         Tool("get_contract", "사용자가 확인한 근로계약서 항목 내용을 본다.", get_contract),

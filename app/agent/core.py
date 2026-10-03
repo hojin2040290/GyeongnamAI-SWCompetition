@@ -23,7 +23,7 @@ from app.calc.timeutil import now_kst, today_kst
 from app.judge import engine
 from app.law.lookup import known_law
 from app.llm import client
-from app.models import AgentLog, CaseNote
+from app.models import AgentLog, CaseNote, Job
 
 MAX_STEPS = 10  # AI 응답이 없을 때 정해 둔 순서의 도구 호출 수 제한
 FOLLOWUP_NOTE: ContextVar[str] = ContextVar("followup_note", default="")  # 예약한 확인을 실행할 때 그 이유
@@ -464,6 +464,55 @@ def run_advice(session: Session, user_id: int, job_id: int, trigger: str = "sche
                   else "종합 조언을 남기지 못했어요")
 
 
+# ---------- 홈의 AI 에이전트 종합 점검 ----------
+OVERVIEW_GOAL = ("홈 화면의 종합 점검이에요. 먼저 get_all_facts로 이 사업장의 모든 기록을 코드가 정리한 사실과 결과를 받고, "
+                 "필요하면 get_saved_checks, calc_work_days, settlement, list_evidence 같은 도구로 자세히 확인한 뒤, "
+                 "모든 정보를 조합해 이 사업장의 종합 결과를 정상(ok), 확인 필요(warn), 위반 의심(bad) 중 하나로 판단해 finish에 "
+                 "담아 주세요. 근거 조항은 get_article로 확인한 조항(get_all_facts의 '관련 조항' 등)을, 사실은 get_all_facts의 "
+                 "'사실'에서 가져오세요. 끝내기 전에 모든 정보를 조합해 이 사용자에게 지금 가장 도움이 될 조언을 give_advice로 "
+                 "남겨 주세요. 판단에 필요한 정보가 기록에 없으면 추측하지 말고 warn으로 두고, 사용자에게 물어볼 것이 있으면 "
+                 "ask_user로 물어보세요 (이미 답을 기다리는 질문은 다시 묻지 않아요).")
+
+
+def overview_needed(session: Session, job_id: int) -> bool:
+    """종합 점검을 새로 해야 하는지: 아직 없거나, AI 판단 대기이거나, 지난 점검 뒤로 기록이 바뀌었을 때."""
+    from app.agent import overview
+    last = overview.latest(session, job_id)
+    job = session.get(Job, job_id)
+    return not last or last.get("status") == engine.PENDING or last.get("basis_key") != case.data_key(session, job)
+
+
+def run_overview(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
+    """사업장 하나의 모든 기록을 종합해 판단하고 조언한다. 숫자와 사실은 코드가 정리하고(get_all_facts), 판단과 조언은 AI가 한다.
+    AI가 없으면 코드가 정리한 사실만 저장하고 판단은 'AI 응답 대기 중'으로 둔다."""
+    from app.agent import overview
+    r = Run(session, user_id, job_id, "overview", trigger)
+    tgt = overview.target(session, user_id, job_id)
+    r.state["basis_key"] = tgt["basis_key"]  # 조언 메모에 어떤 기록을 보고 했는지 남긴다
+
+    def check(_args: dict) -> str | None:
+        if r.state.get("overview") is None:
+            return "먼저 get_all_facts로 이 사업장의 기록을 확인해 주세요"
+        if not r.state.get("advice"):
+            return "끝내기 전에 give_advice로 모든 정보를 조합한 조언을 남겨 주세요"
+        return None
+    check.pending_tool = True
+    out = None
+    if client.available():
+        goal = Goal(OVERVIEW_GOAL, ["get_all_facts", *ADVICE_TOOLS], JUDGE_ONE, list(JUDGE_ONE), check=check,
+                    review=lambda a: r.tools["review_one"](r.state.get("overview") or tgt, a))
+        out = r.agent(goal, {})
+    else:
+        r.ai_tried, r.ai_error = True, AI_WAITING
+    res = apply_one(session, r.state.get("overview") or tgt, out, r.ai_error)
+    # 에이전트가 이번 점검에서 남긴 메모, 질문, 예약까지 반영한 값 (끝난 직후 '기록이 바뀌었어요'가 되지 않게)
+    res["basis_key"] = case.data_key(session, session.get(Job, job_id))
+    log_judgments(r, [{**res, "law": "종합 점검"}])
+    r.tools["save_check"]("overview", res)
+    summary = f"종합 점검: {STATUS_NAME.get(res['status'], res['status'])}"
+    return r.done({"overview": res, "advised": bool(r.state.get("advice"))}, summary)
+
+
 # ---------- 매일 자동 점검 ----------
 def run_daily(session: Session, user_id: int, job_id: int) -> dict:
     """매일 정해진 시각: 오늘 이 사업장에 무엇을 확인하고 알릴지 AI가 정한다. AI가 없으면 정해 둔 조건으로 실행한다."""
@@ -516,7 +565,8 @@ def run_daily(session: Session, user_id: int, job_id: int) -> dict:
 # ---------- 사용자가 에이전트의 질문에 답했을 때 ----------
 RESUME = {"contract_check": "contract_check", "shift_check": "contract_check", "payday": "payday",
           "quit_check": "quit_check", "report": "report", "daily": "daily", "guard_on": "guard_review",
-          "guard_search": "guard_review", "guard_preserve": "guard_review", "guard_review": "guard_review"}
+          "guard_search": "guard_review", "guard_preserve": "guard_review", "guard_review": "guard_review",
+          "overview": "overview"}
 
 
 # ---------- 매일 자동 점검 결과 알림 ----------
@@ -552,6 +602,8 @@ def run_again(session: Session, user_id: int, job_id: int, kind: str, month: str
         return run_report(session, user_id, job_id, trigger)
     if kind == "daily":
         return run_daily(session, user_id, job_id)
+    if kind == "overview":
+        return run_overview(session, user_id, job_id, trigger)
     if kind == "guard_review":
         r = Run(session, user_id, job_id, "guard_review", trigger)
         return r.done({"classify": run_guard_review(session, user_id, job_id, r=r)}, "게시물 판별 다시")

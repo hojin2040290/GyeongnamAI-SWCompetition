@@ -20,7 +20,7 @@ scheduler = BackgroundScheduler(timezone=TIMEZONE)
 
 def daily_check(user_id: int | None = None) -> dict:
     """매일: 사업장마다 에이전트가 오늘 필요한 점검(급여, 퇴직 지급 기한, 공개 게시물)을 골라 실행하고,
-    끝에 기록을 종합해 조언하고, 사업장마다 오늘 결과를 알림으로 보낸다.
+    끝에 기록을 종합해 판단하고 조언하고(홈의 종합 점검), 사업장마다 오늘 결과를 알림으로 보낸다.
     AI 응답이 없으면 정해 둔 조건(월급날, 그만둠, 신고함)으로 점검만 실행한다. DEV_TOOLS와 상관없이 매일 SCHEDULE_HOUR시에 돈다.
     user_id가 있으면 그 사용자의 사업장만 점검하고 법 기준표 갱신은 하지 않는다 (시연용 '지금 실행')."""
     done = {"payday": 0, "quit": 0, "guard": 0, "advice": 0}
@@ -30,7 +30,8 @@ def daily_check(user_id: int | None = None) -> dict:
             ran = core.run_daily(s, job.user_id, job.id)["ran"]
             for kind in ran:
                 done[kind] += 1
-            advised = core.run_advice(s, job.user_id, job.id)["advised"]
+            # 종합 점검(홈): 기록을 모두 종합해 판단하고 조언한다. 지난 점검 뒤로 바뀐 기록이 없으면 AI를 부르지 않는다
+            advised = core.run_overview(s, job.user_id, job.id, "schedule")["advised"] if core.overview_needed(s, job.id) else False
             done["advice"] += advised
             core.daily_notice(s, job.user_id, job.id, ran, advised)  # 점검할 게 없던 날도 결과를 알린다
             done["notified"] = done.get("notified", 0) + 1
@@ -104,6 +105,9 @@ def waiting_work(s: Session, job: Job) -> list[tuple[str, str]]:
     rep = s.exec(select(Report).where(Report.job_id == job.id).order_by(Report.id.desc())).first()
     if rep and not rep.ai_summary:
         work.append(("report", ""))
+    view = next(iter(_latest(s, job.id, "overview")), None)
+    if view and json.loads(view.results_json).get("status") == "pending":
+        work.append(("overview", ""))
     return work
 
 
@@ -115,7 +119,8 @@ def retry_waiting() -> dict:
             "payday": lambda s, j, m: core.run_payday(s, j.user_id, j.id, m, trigger="retry"),
             "quit_check": lambda s, j, m: core.run_quit_check(s, j.user_id, j.id, trigger="retry"),
             "guard_review": lambda s, j, m: core.run_guard_review(s, j.user_id, j.id, trigger="retry"),
-            "report": lambda s, j, m: core.run_report(s, j.user_id, j.id, trigger="retry")}
+            "report": lambda s, j, m: core.run_report(s, j.user_id, j.id, trigger="retry"),
+            "overview": lambda s, j, m: core.run_overview(s, j.user_id, j.id, trigger="retry")}
     done: list[str] = []
     with Session(engine) as s:
         for job in s.exec(select(Job)).all():

@@ -166,6 +166,17 @@
       <div id="punchLive"></div>
       <div id="shiftResult" class="hidden"></div>
 
+      <div class="panel ov-panel" id="ovPanel">
+        <div class="quit-head"><strong>AI 에이전트 종합 점검</strong><span class="tag" id="ovTag"></span></div>
+        <p class="sub" style="margin:4px 0 0">이 일하는 곳의 모든 기록을 모아 에이전트가 판단하고 조언해요.</p>
+        <ul class="ov-parts" id="ovParts"></ul>
+        <div id="ovAi"></div>
+        <div id="caseAdvice"></div>
+        <p class="sub ov-note" id="ovNote"></p>
+        <button class="btn ghost block" style="margin-top:10px" id="ovRun">지금 종합 점검</button>
+        <div id="ovLive"></div>
+      </div>
+
       <div class="job-card">
         <div class="job-card-head">
           <h2 class="cur-job"></h2>
@@ -208,7 +219,6 @@
       <div class="panel case-card" style="margin-top:14px">
         <h3 style="margin:0 0 10px">AI 에이전트 진행 상황</h3>
         <ol class="case-steps" id="caseSteps"></ol>
-        <div id="caseAdvice"></div>
         <div id="caseFollow"></div>
         <details class="more hidden" id="caseMemWrap"><summary>에이전트가 기억하는 것</summary><div id="caseMem"></div></details>
       </div>

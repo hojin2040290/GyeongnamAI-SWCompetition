@@ -23,7 +23,7 @@ EVENT_TOPIC = {
     "payday": "payday", "quit_check": "quit", "open_check": "open_record", "report": "report",
     "guard_on": "guard", "guard_off": "guard",
     "guard_search": "guard_posts", "guard_review": "guard_posts", "guard_preserve": "guard_posts",
-    "advice": "advice", "daily": "daily",
+    "advice": "advice", "daily": "daily", "overview": "overview",  # 종합 점검 알림: 새 종합 점검 알림이 오면 예전 것을 지움
 }
 
 # 종류가 없던 예전 알림: 제목으로 종류를 정한다
