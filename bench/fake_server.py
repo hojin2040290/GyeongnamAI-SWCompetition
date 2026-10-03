@@ -41,7 +41,13 @@ async def chat(req: Request):
         msg["content"] = "근로계약서 내용: " + "근로시간 09:00 " * 400
         data["choices"][0]["finish_reason"] = "length"
     if OPT["working_parser"] and OPT["tool_parser"] != OPT["working_parser"] and msg.get("tool_calls"):
-        msg["content"] = "<tool_call>" + json.dumps(msg.pop("tool_calls")[0]["function"], ensure_ascii=False) + "</tool_call>"
+        fn = msg.pop("tool_calls")[0]["function"]
+        if OPT["working_parser"] == "glm45":  # GLM 형식 (HyperCLOVA X SEED에서 본 모양)
+            args = json.loads(fn["arguments"])
+            msg["content"] = "<tool_call>" + fn["name"] + "".join(
+                f"<arg_key>{k}</arg_key><arg_value>{v}</arg_value>" for k, v in args.items()) + "</tool_call>"
+        else:
+            msg["content"] = "<tool_call>" + json.dumps(fn, ensure_ascii=False) + "</tool_call>"
     kw = OPT["think_unless"]
     if kw and kw not in (payload.get("chat_template_kwargs") or {}):
         msg["content"] = "<think>먼저 생각해 보면 {\"임금\": \"모름\"}</think>" + (msg.get("content") or "")

@@ -33,6 +33,24 @@ NOTE_TOOL = {"type": "function", "function": {
                    "required": ["text"]}}}
 
 
+# 파서가 읽지 못한 답 속 도구 호출 모양 → 그 모양을 읽는 vLLM 파서 (vLLM v0.30.0 소스의 파서별 형식에서 확인)
+PARSER_BY_SHAPE = [
+    (r"<arg_key>", "glm45"),                    # <tool_call>이름<arg_key>k</arg_key><arg_value>v</arg_value></tool_call>
+    (r"<function=", "qwen3_coder"),             # <tool_call><function=이름><parameter=k>v</parameter></function>
+    (r"\[TOOL_CALLS\]", "mistral"),            # [TOOL_CALLS]이름[ARGS]{...}
+    (r"<tool_call>\s*\{", "hermes"),            # <tool_call>{"name": ..., "arguments": {...}}</tool_call>
+    (r"^\s*\[\w+\(", "pythonic"),              # [이름(k=v)]
+]
+
+
+def parser_from_text(text: str) -> str:
+    """답 속 도구 호출 모양으로 맞는 파서를 고른다. 모르는 모양이면 빈 문자열."""
+    for pattern, name in PARSER_BY_SHAPE:
+        if re.search(pattern, text or ""):
+            return name
+    return ""
+
+
 def merge(a: dict, b: dict) -> dict:
     """b를 a 위에 겹친다 (chat_template_kwargs 같은 안쪽 칸도 합친다)."""
     out = copy.deepcopy(a)
@@ -153,6 +171,8 @@ def check_tools(port: int, extra: dict, sampling: dict) -> dict:
         out[mode] = {"ok": ok, "calls": len(r["tool_calls"]), **brief(r),
                      "raw_tool_text": bool(re.search(r"<tool_call>|\"arguments\"|\[TOOL_CALLS\]|\[\w+\(", r["content"]))}
     out["ok"] = out["auto"]["ok"]
+    if not out["ok"]:
+        out["parser_guess"] = parser_from_text(out["auto"]["content_head"])
     return out
 
 
