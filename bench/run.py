@@ -410,7 +410,10 @@ def bench_one(args, spec: dict, outdir: Path, gpu_mib: int) -> dict:
         peak.start()
         fixes: list[str] = []  # 시작 오류를 보고 더한 옵션 (다음 파서에도 쓴다)
         n = 0
-        for i, tp in enumerate(parsers):
+        i = -1
+        while i + 1 < len(parsers):  # 점검에서 맞는 파서를 찾으면 목록 뒤에 더한다
+            i += 1
+            tp = parsers[i]
             last = i == len(parsers) - 1
             for _ in range(4):  # 같은 파서로 옵션을 고쳐 다시 켜기 (오류 종류마다 한 번)
                 cmd = with_flags(serve_cmd(args, spec, pre, tp, template), fixes)
@@ -452,6 +455,12 @@ def bench_one(args, spec: dict, outdir: Path, gpu_mib: int) -> dict:
                 c = run_all(args.port, extra, sampling, template_text, ROOT / "테스트자료" / "02_근로계약서.png")
                 attempt["checks"] = c
                 say(f"[{spec['key']}] 점검: {check_line(c)}")
+                guess = c["tools"].get("parser_guess", "")
+                if not c["tools"]["ok"] and guess and guess not in parsers:
+                    parsers.append(guess)  # 답 속 호출 모양을 읽는 파서
+                    meta["tool_parsers"] = parsers
+                    last = False
+                    say(f"[{spec['key']}] 답 속 도구 호출 모양이 {guess} 파서 형식이라 그 파서를 후보에 더해요")
                 if not c["tools"]["ok"] and not last:
                     say(f"[{spec['key']}] 도구 호출을 읽지 못해 다음 도구 파서로 다시 켜요")
                     continue
@@ -509,6 +518,7 @@ def main() -> int:
     ap.add_argument("--out", default="")
     ap.add_argument("--resume", default="", help="이 결과 폴더에 이어서 (완료된 모델은 건너뜀)")
     ap.add_argument("--ignore-versions", action="store_true", help="공식 문서의 최소 버전보다 낮아도 실행")
+    ap.add_argument("--rerun", default="", help="--resume에서 완료됐어도 다시 할 모델 key (쉼표)")
     args = ap.parse_args()
     os.environ["HF_HOME"] = args.hf_home  # huggingface_hub를 불러오기 전에
     specs = json.loads((ROOT / "bench" / "models.json").read_text(encoding="utf-8"))["models"]
@@ -530,7 +540,8 @@ def main() -> int:
             stopped = stop_app_vllm(args.yes)
         for spec in specs:
             done = outdir / f"{spec['key']}.meta.json"
-            if args.resume and done.exists() and json.loads(done.read_text(encoding="utf-8")).get("status") == "완료":
+            if (args.resume and spec["key"] not in args.rerun.split(",") and done.exists()
+                    and json.loads(done.read_text(encoding="utf-8")).get("status") == "완료"):
                 say(f"[{spec['key']}] 이미 완료 → 건너뜀")
                 continue
             bench_one(args, spec, outdir, gpu_mib)

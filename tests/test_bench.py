@@ -38,3 +38,15 @@ def test_with_flags_replaces_existing_value():
     cmd = ["vllm", "serve", "m", "--max-model-len", "32768"]
     assert run.with_flags(cmd, ["--max-model-len", "20480", "--max-num-seqs", "868"]) == \
         ["vllm", "serve", "m", "--max-model-len", "20480", "--max-num-seqs", "868"]
+
+
+def test_parser_from_tool_text():
+    """파서가 읽지 못한 답 속 도구 호출 모양으로 맞는 파서를 고른다 (GPU 서버에서 본 답 그대로)."""
+    import checks
+    hcx = "<tool_call>save_note <arg_key>text</arg_key> <arg_value>근무 기록 점검</arg_value> </tool_call>"
+    assert checks.parser_from_text(hcx) == "glm45"
+    assert checks.parser_from_text('<tool_call>{"name": "save_note", "arguments": {"text": "a"}}</tool_call>') == "hermes"
+    assert checks.parser_from_text("<tool_call>\n<function=save_note>\n<parameter=text>a</parameter>") == "qwen3_coder"
+    assert checks.parser_from_text('[TOOL_CALLS]save_note[ARGS]{"text": "a"}') == "mistral"
+    # EXAONE 4.5가 쓴 모양: vLLM 0.30.0에 이 모양을 읽는 파서가 없다
+    assert checks.parser_from_text('<tool> {"name": "save_note", "arguments": {"text": "a"}} </tool>') == ""

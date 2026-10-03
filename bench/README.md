@@ -40,7 +40,7 @@
    - 일부만: `--models hcx_seed_32b_think,exaone45_33b` (key는 `models.json`)
    - 중간에 멈추기: `kill <nohup 실행 때 나온 번호>` (끝 정리로 8000번을 다시 켠다)
 4. 결과: `bench/results/<연월일_시분초>/report.md` (모델별 JSON, vLLM 로그, 진행 로그도 같은 폴더). 사전 확인은 `<시각>_preflight` 폴더에 따로 남는다.
-5. 중간에 멈췄으면 이어서 하기 (완료된 모델은 건너뜀, 결과는 단계마다 저장돼 있음):
+5. 중간에 멈췄으면 이어서 하기 (완료된 모델은 건너뜀, 결과는 단계마다 저장돼 있음. 완료된 모델도 다시 하려면 `--rerun key1,key2`):
    ```bash
    cd /home/work/alba/app
    nohup /home/work/alba/venv/bin/python bench/run.py --yes --resume bench/results/<폴더 이름> > bench/nohup.log 2>&1 &
@@ -51,7 +51,7 @@
 1. 버전: GPU 서버의 vLLM 가상환경에 있는 vllm, transformers, mistral_common이 공식 문서의 최소 버전(`requires`)보다 낮으면 설치 명령을 남기고 건너뛴다. 그래도 돌리려면 `--ignore-versions`.
 2. 문서: 모델의 README, generation_config.json, 대화 틀을 결과 폴더 `docs/<key>/`에 남기고, README의 vllm serve 예시(파서), 권장 생성 설정 줄, 대화 틀의 생각 끄기 이름을 비교표에 적는다.
 3. 대화 틀: Gemma 4, Llama 4처럼 vLLM이 주는 도구 호출용 대화 틀이 필요한 모델은 설치된 vLLM 버전의 GitHub 파일을 받아 `--chat-template`로 쓴다.
-4. 켜기: 도구 파서 후보(`tool_parsers`)를 차례로 쓴다. 켜지지 않거나 자동 점검에서 도구 호출을 못 읽으면 다음 후보로 다시 켠다.
+4. 켜기: 도구 파서 후보(`tool_parsers`)를 차례로 쓴다. 켜지지 않으면 vLLM 로그의 오류 문장을 보고 고칠 수 있는 오류(Mamba 칸 부족 → `--max-num-seqs`, KV 캐시 부족 → `--max-model-len`)는 옵션을 고쳐 같은 파서로 다시 켜고, 파서 오류면 다음 후보로, 그 밖의 오류는 멈춘다. 자동 점검에서 도구 호출을 못 읽으면 답 속 호출 모양(GLM `<arg_key>`, Qwen `<function=`, Mistral `[TOOL_CALLS]`, Hermes `<tool_call>{`)으로 맞는 파서를 찾아 후보에 더한다.
 5. 생각 모드: 끄는 옵션(`extra_body`)을 보냈는데도 생각 글이 오면 대화 틀에서 찾은 다른 끄기 옵션(enable_thinking, thinking, skip_reasoning, reasoning_effort 등)을 차례로 시도하고, 꺼진 옵션으로 시험한다. 끝내 못 끄면 비교표에 '못 끔'으로 남긴다.
 6. 생성 설정: 공식 문서의 권장값(`sampling`, 예: EXAONE은 temperature 0.6, presence_penalty 1.5)을 모든 요청에 쓴다. 문서에서 확인하지 못한 모델은 모델 기본값(generation_config.json)을 쓴다. 앱에서 그 모델을 쓰려면 `.env`의 `LLM_SAMPLING`에 같은 값을 넣는다.
 7. 답 모양: 생각 글(`<think>`, `[THINK]`, Gemma thought 채널)이나 GLM 답 상자 표시가 답에 섞여 와도 앱이 지우고 JSON을 읽는다.
