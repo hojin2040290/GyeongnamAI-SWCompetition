@@ -165,6 +165,20 @@ def model_docs(api, hid: str, keep: Path | None) -> dict:
             "template_text": template}
 
 
+def weight_bytes(siblings: list) -> float:
+    """가중치 파일 크기 합. 같은 가중치가 여러 형식으로 있으면 한 형식만 센다.
+    - Mistral: Mistral 형식(consolidated*.safetensors)과 HF 형식(model-*.safetensors)이 함께 있다
+    - safetensors와 예전 .bin/.pt가 함께 있으면 vLLM은 safetensors를 쓴다"""
+    st = [s for s in siblings if s.rfilename.endswith(".safetensors")]
+    if st:
+        cons = [s for s in st if Path(s.rfilename).name.startswith("consolidated")]
+        rest = [s for s in st if s not in cons]
+        st = rest if cons and rest else st
+    else:
+        st = [s for s in siblings if s.rfilename.endswith((".bin", ".pt"))]
+    return sum((s.size or 0) for s in st)
+
+
 def installed(pkg: str) -> str | None:
     from importlib.metadata import PackageNotFoundError, version
     try:
@@ -196,7 +210,7 @@ def preflight(spec: dict, gpu_mib: int, keep: Path | None = None, ignore_version
         except Exception as exc:  # noqa: BLE001 (없음, 동의 필요 등)
             notes.append(f"{hid}: {type(exc).__name__}")
             continue
-        size = sum((s.size or 0) for s in info.siblings or [] if s.rfilename.endswith((".safetensors", ".bin", ".pt")))
+        size = weight_bytes(info.siblings or [])
         docs = model_docs(api, hid, keep)
         util = spec.get("gpu_memory_utilization", 0.85)
         out = {"hf_id": hid, "size_gb": round(size / 1e9, 1), "gated": bool(info.gated),
