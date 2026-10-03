@@ -407,6 +407,11 @@ def bench_one(args, spec: dict, outdir: Path, gpu_mib: int) -> dict:
     except Exception as exc:  # noqa: BLE001 (한 모델이 실패해도 다음 모델로)
         meta["status"] = "실패"
         meta["error"] = f"{type(exc).__name__}: {exc}"[-2000:]
+    except KeyboardInterrupt:
+        meta["status"] = "멈춤"  # 위의 finally에서 벤치마크 vLLM은 이미 껐다. 기록을 남기고 main의 정리로
+        say(f"[{spec['key']}] 멈춤")
+        save()
+        raise
     finally:
         peak.stop = True
         meta["gpu_peak_mib"] = peak.peak
@@ -415,8 +420,14 @@ def bench_one(args, spec: dict, outdir: Path, gpu_mib: int) -> dict:
     return meta
 
 
+def on_term(signum, frame) -> None:
+    """kill로 멈춰도 정리(벤치마크 vLLM 끄기, 8000번 다시 켜기, 비교표)가 돌게 KeyboardInterrupt로 바꾼다."""
+    raise KeyboardInterrupt(f"신호 {signum}로 멈춤")
+
+
 def main() -> int:
     global LOG
+    signal.signal(signal.SIGTERM, on_term)
     ap = argparse.ArgumentParser(description="알바지킴이 모델 벤치마크")
     ap.add_argument("--models", default="all", help="모델 key를 쉼표로 (기본 all)")
     ap.add_argument("--yes", action="store_true", help="8000번 vLLM을 끄는 확인을 묻지 않음 (nohup으로 돌릴 때)")
