@@ -736,7 +736,7 @@ function setPunchUI(working, text){
   btn.classList.toggle('out',working); $('#clockState').textContent=text;
 }
 async function loadHome(){
-  const j=curJob(); applyCurrent(); $('#punchLive').innerHTML=''; $('#quitLive').innerHTML='';
+  const j=curJob(); applyCurrent(); $('#punchLive').innerHTML=''; $('#quitLive').innerHTML=''; $('#quitFormLive').innerHTML='';
   await refreshRecords();
   if(state.shiftFor!==j.id) $('#shiftResult').classList.add('hidden');
   await renderQuit();
@@ -754,7 +754,8 @@ async function loadOverview(){
   if(running) $('#ovLive').innerHTML='';  // 다른 일하는 곳의 진행 칸 (그 점검은 서버에서 그대로 끝난다)
   const v=o.overview;
   $('#ovTag').className='tag '+(v?v.status:'none'); $('#ovTag').textContent=v?LABEL[v.status]:'아직 안 함';
-  $('#ovParts').innerHTML=o.parts.map(p=>`<li><span class="ov-name">${esc(p.name)}</span><span class="ov-text">${esc(p.text)}${p.wait?`${p.text?' ':''}<span class="wait-note">${esc(p.wait)}</span>`:''}</span>${
+  const quit=curJob()?.status==='quit';  // 그만둔 곳: 퇴직 정산 줄은 아래 #quitPanel이 버튼과 함께 보여 준다 (두 번 나오지 않게)
+  $('#ovParts').innerHTML=o.parts.filter(p=>!(quit && p.name==='퇴직 후 임금 정산')).map(p=>`<li><span class="ov-name">${esc(p.name)}</span><span class="ov-text">${esc(p.text)}${p.wait?`${p.text?' ':''}<span class="wait-note">${esc(p.wait)}</span>`:''}</span>${
     p.status?`<span class="tag ${p.status}">${LABEL[p.status]}</span>`:p.todo?'<span class="tag none">아직 안 함</span>':''}</li>`).join('');
   $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
   $('#ovNote').textContent=v?`${fmtDT(v.at)} 점검${o.changed?' · 그 뒤로 기록이 바뀌었어요. 다시 점검해 보세요':''}`:'';
@@ -937,6 +938,8 @@ function renderShift(sh){
     :`<strong>오늘 근무 점검</strong><p class="sub" style="margin:2px 0 0">퇴근 기록에서 확인할 점을 찾지 못했어요.</p>`;
   box.innerHTML=`<div class="panel">${head}${sh.items.map(itemHTML).join('')}${traceHTML(sh.trace, sh.trace_at)}</div>`;
 }
+// 버튼(그만둔 날 저장, 받았어요/못 받았어요)이 곧 점검을 시작하는 동안에는 자동 재점검을 하지 않는다 (두 번 돌지 않게)
+let quitBusy=false;
 async function renderQuit(){
   const j=curJob(); const quit=j.status==='quit';
   $('#quitOpen').classList.toggle('hidden',quit); $('#quitForm').classList.add('hidden'); $('#quitPanel').classList.toggle('hidden',!quit); refreshNav();
@@ -945,8 +948,7 @@ async function renderQuit(){
   if(!st){ $('#quitTag').className='tag warn'; $('#quitTag').textContent='확인 필요'; $('#quitText').textContent='그만둔 날을 입력하면 정산 기한을 계산해 드려요.'; return; }
   const f=s=>{const d=new Date(s+'T00:00:00'); return `${d.getMonth()+1}월 ${d.getDate()}일`;};
   $('#quitTag').className='tag '+st.status; $('#quitTag').textContent=LABEL[st.status]; $('#quitAi').innerHTML=aiJudgeHTML(st);
-  if(!$('#quitLive').innerHTML) lastTrace('#quitLive','quit_check');
-  if(st.status==='pending' && ai && !$('#quitLive .live')) rejudgeOnce(`quit-${j.id}-${st.due}-${j.paid_after_quit}`, quitCheck);
+  if(st.status==='pending' && ai && !quitBusy && !$('#quitLive .live') && !$('#quitFormLive .live')) rejudgeOnce(`quit-${j.id}-${st.due}-${j.paid_after_quit}`, quitCheck);
   $('#quitText').textContent = j.paid_after_quit===true ? `${f(st.quit_date)}에 그만뒀고, 남은 임금을 받았다고 기록했어요.`
     : st.left>=0 ? `${f(st.quit_date)}에 그만뒀어요. 남은 임금 지급 기한은 ${f(st.due)}로, ${st.left}일 남았어요.`
     : `${f(st.quit_date)}에 그만뒀고 지급 기한 ${f(st.due)}이 지났어요. 아직 못 받았다면 상담을 준비하세요.`;
@@ -955,22 +957,26 @@ async function renderQuit(){
 // 판단 대기인 결과가 보이면 (기록이 바뀌었거나 AI가 없던 때 저장됨) AI가 있을 때 한 번 다시 점검한다 (기다려도 바뀌지 않으므로)
 const rejudged=new Set();
 function rejudgeOnce(key, run){ if(rejudged.has(key)) return; rejudged.add(key); autoRun(run); }
-function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitDateMain').min=j.start_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
+function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitDateMain').min=j.start_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav();
+  reveal($('#quitForm')); }  // '그만둔 날 고치기'는 위 종합 점검 카드에 있어 아래 입력 칸까지 옮긴다
 function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen').classList.toggle('hidden',curJob().status==='quit'); refreshNav(); }
 $('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
 $('#quitSave').onclick=async()=>{ const v=$('#quitDateMain').value; if(!v){ toast('그만둔 날을 골라 주세요'); return; }
   const st=curJob().start_date; if(st && v<st){ toast('그만둔 날은 근무 시작일보다 앞일 수 없어요'); return; }
+  quitBusy=true;
   try{ await api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v, check:false}); await loadJobs(); closeQuitForm(); await loadHome();
-    toast('그만둔 날을 저장했어요. 이어서 퇴직 정산을 점검해요'); await quitCheck(); }catch(e){ toast(e.message); } };
-async function quitCheck(){
+    toast('그만둔 날을 저장했어요. 이어서 퇴직 정산을 점검해요'); await quitCheck('#quitFormLive'); }catch(e){ toast(e.message); }finally{ quitBusy=false; } };
+// box: 누른 버튼 바로 아래 진행 칸 (그만둔 날 저장은 아래 입력 칸, 받았어요/못 받았어요는 종합 점검 카드 안)
+async function quitCheck(box='#quitLive'){
   $('#quitTag').className='tag pending'; $('#quitTag').textContent=JUDGING;
   $('#quitAi').innerHTML=`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">${JUDGING}</span></p></div>`;
-  const r=await checkAfterSave('#quitLive',()=>api('POST',`/api/jobs/${state.current}/agent/quit`)); if(!r){ renderQuit().catch(()=>{}); return; }
-  await loadJobs(); await renderQuit(); $('#quitLive').innerHTML=traceHTML(r.settlement?.trace, r.settlement?.trace_at); await loadAsk();
+  const r=await checkAfterSave(box,()=>api('POST',`/api/jobs/${state.current}/agent/quit`)); if(!r){ renderQuit().catch(()=>{}); return; }
+  $(box).innerHTML='';  // 동작 보기는 종합 점검 카드의 것 하나만 (에이전트 동작 기록 탭에는 실행마다 남는다)
+  await loadJobs(); await renderQuit(); await loadAsk(); await loadOverview();  // 퇴직 정산이 바뀌었으니 종합 점검도 새로
 }
-async function setPaid(p){ try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p, check:false}); await loadJobs(); await renderQuit();
+async function setPaid(p){ quitBusy=true; try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p, check:false}); await loadJobs(); await renderQuit();
     await loadAsk();  // 받았는지 묻던 질문은 이 버튼으로 답한 것이라 서버가 닫는다
-    toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); await quitCheck(); }catch(e){ toast(e.message); } }
+    toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); await quitCheck(); }catch(e){ toast(e.message); }finally{ quitBusy=false; } }
 $('#paidYes').onclick=()=>setPaid(true); $('#paidNo').onclick=()=>setPaid(false);
 $('#quitReport').onclick=()=>showTab('docs');
 

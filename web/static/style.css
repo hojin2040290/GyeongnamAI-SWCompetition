@@ -235,6 +235,12 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 .ov-parts .ov-name{font-weight:700;white-space:nowrap}
 .ov-parts .ov-text{flex:1;color:var(--ink-soft,#555);min-width:0;overflow-wrap:anywhere}
 .ov-parts .tag{flex:none}
+.quit-sub{margin-top:4px;padding:10px 0 4px;border-top:1px solid var(--line)}  /* 종합 점검 카드 안의 퇴직 정산 줄 */
+.quit-sub .quit-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.quit-sub .ov-name{font-weight:700;font-size:13.5px}
+.quit-sub .ov-text{margin:4px 0 0;font-size:13.5px;color:var(--ink-soft,#555)}
+.quit-links{display:flex;gap:12px;margin-top:8px}
+.quit-ai{margin-top:6px}
 .ov-note{margin:8px 0 0}
 .quit-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .quit-panel p{margin:6px 0 0}

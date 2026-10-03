@@ -72,13 +72,18 @@ const finish = async (p, box) => { await until(p, b=>!!document.querySelector(b+
   }
 
   // 퇴직 정산: 그만둔 날 저장 → AI 판단 칸
-  await tab(p,'home'); await p.click('#quitOpen'); await p.fill('#quitDateMain', '2026-09-20'); await p.click('#quitSave'); await until(p, ()=>!!document.querySelector('#quitLive .live'), null, 10000);
+  await tab(p,'home'); await p.click('#quitOpen'); await p.fill('#quitDateMain', '2026-09-20'); await p.click('#quitSave'); await until(p, ()=>!!document.querySelector('#quitFormLive .live'), null, 10000);
   ck('[퇴직 정산] 판단하는 동안 판단 중', (await p.textContent('#quitTag')).includes('판단 중'));
-  await finish(p,'#quitLive');
+  await finish(p,'#quitFormLive'); await p.waitForTimeout(1500);
+  const quitRuns = await p.evaluate(async()=>(await (await fetch(`/api/jobs/${state.current}/agent/runs?events=quit_check&limit=10`)).json()).length);
+  ck('[퇴직 정산] 그만둔 날 저장은 점검을 한 번만 (자동 재점검과 겹치지 않음)', quitRuns===1 && !(await p.$('#quitLive .live')), `점검 ${quitRuns}번`);
   ck('[퇴직 정산] AI 에이전트 판단 칸', ((await p.textContent('#quitAi'))||'').includes(PREFIX));
   await p.evaluate(()=>document.querySelector('#quitPanel').scrollIntoView()); await p.screenshot({path:'p12_quit.png'});
   await p.reload(); await p.waitForSelector('#app:not(.hidden)'); await p.waitForTimeout(1000);
-  ck('[퇴직 정산] 다시 열어도 에이전트 동작 보기', (await p.textContent('#quitLive')).includes('에이전트 동작 보기'));
+  ck('[퇴직 정산] 종합 점검 카드 안의 한 줄 (카드가 따로 없음)', !!(await p.$('#ovPanel #quitPanel:not(.hidden)')));
+  ck('[퇴직 정산] 종합 점검 사실 목록에 퇴직 정산 줄이 두 번 나오지 않음', !(await p.textContent('#ovParts')).includes('퇴직 후 임금 정산'));
+  ck('[퇴직 정산] AI 판단과 동작 보기는 종합 점검 것 하나 (퇴직 정산 판단은 펼칠 때만)',
+     !(await p.isVisible('#quitAi')) && !(await p.textContent('#quitLive')).includes('에이전트 동작 보기') && (await p.$$('#ovPanel > #ovAi .ai-judge')).length<=1);
   // 남은 임금 받았어요: 다시 판단하고, 받았다는 기록이 위반 의심으로 바뀌지 않음
   // 받았는지 묻는 퇴직 정산 질문이 열려 있는 상태 (예전 코드가 만든 질문)
   execSync(`python3 -c "import sqlite3; c=sqlite3.connect('${process.env.DB}'); c.execute(\\"insert into agentquestion (user_id,job_id,event,run_id,question,options_json,why,law,answer,status,context_json,created_at) select user_id,id,'quit_check','','테스트 답변입니다 (임금을 받았나요)','[]','테스트 답변입니다 (기한 확인)','','','open','{}',datetime('now') from job where name='QA 가상판단'\\"); c.commit()"`);
