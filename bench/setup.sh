@@ -1,8 +1,8 @@
 #!/bin/bash
-# GPU 서버에서 벤치마크 준비 (한 번만). 저장 폴더(/home/work/llm_alba)에 저장소와 벤치마크용 가상환경을 만든다.
+# GPU 서버에서 벤치마크 준비 (한 번만). 저장 폴더(/home/work/alba)에 저장소와 벤치마크용 가상환경을 만든다.
 # 사용: LAW_OC=법제처키 bash setup.sh   (LAW_OC가 없으면 법 기준표 없이 시험해요)
 set -e
-BASE=/home/work/llm_alba
+BASE=/home/work/alba
 REPO=https://github.com/hojin2040290/GyeongnamAI-SWCompetition.git
 if [ -d "$BASE/app/.git" ]; then
   git -C "$BASE/app" pull --ff-only

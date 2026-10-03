@@ -19,21 +19,21 @@
 ## 실행 (GPU 서버 터미널)
 1. 준비 (한 번만, 몇 분). `LAW_OC`에 법제처 키를 넣으면 법 기준표를 만들어 실제 앱과 같은 조건으로 시험한다.
    ```bash
-   cd /home/work/llm_alba
+   cd /home/work/alba
    curl -sO https://raw.githubusercontent.com/hojin2040290/GyeongnamAI-SWCompetition/main/bench/setup.sh
    LAW_OC=법제처키 bash setup.sh
    ```
    Gemma, Llama처럼 라이선스 동의가 필요한 모델은 Hugging Face에서 동의한 뒤 `export HF_TOKEN=hf_...`를 해 둔다.
 2. 확인만 (받지 않고, GPU를 쓰지 않음, 1~2분): 모델 이름이 있는지, 크기, 도구 파서를 본다.
    ```bash
-   cd /home/work/llm_alba/app
-   /home/work/llm_alba/venv/bin/python bench/run.py --preflight
+   cd /home/work/alba/app
+   /home/work/alba/venv/bin/python bench/run.py --preflight
    ```
    마지막 줄의 `report.md`를 열어 '건너뜀'인 모델과 이유를 본다.
 3. 전부 실행 (몇 시간, 터미널을 닫아도 계속):
    ```bash
-   cd /home/work/llm_alba/app
-   nohup /home/work/llm_alba/venv/bin/python bench/run.py --yes > bench/nohup.log 2>&1 &
+   cd /home/work/alba/app
+   nohup /home/work/alba/venv/bin/python bench/run.py --yes > bench/nohup.log 2>&1 &
    tail -f bench/nohup.log
    ```
    - 시작할 때 앱이 쓰는 8000번 vLLM을 끄고(vllm.pid의 번호로만), 끝나거나 중간에 멈춰도 `start_vllm.sh`로 다시 켠다. 벤치마크 동안 웹 앱의 AI는 멈춘다.
@@ -42,8 +42,8 @@
 4. 결과: `bench/results/<연월일_시분초>/report.md` (모델별 JSON, vLLM 로그, 진행 로그도 같은 폴더). 사전 확인은 `<시각>_preflight` 폴더에 따로 남는다.
 5. 중간에 멈췄으면 이어서 하기 (완료된 모델은 건너뜀, 결과는 단계마다 저장돼 있음):
    ```bash
-   cd /home/work/llm_alba/app
-   nohup /home/work/llm_alba/venv/bin/python bench/run.py --yes --resume bench/results/<폴더 이름> > bench/nohup.log 2>&1 &
+   cd /home/work/alba/app
+   nohup /home/work/alba/venv/bin/python bench/run.py --yes --resume bench/results/<폴더 이름> > bench/nohup.log 2>&1 &
    ```
 
 ## 모델마다 다른 점에 대한 대비
@@ -67,11 +67,11 @@
 - 사진 읽기에 실패하면 그 답 원문 앞뒤가 모델별 JSON과 비교표 '모델별 자세히'에 남는다. 한 모델의 사진 시험만 다시 하려면
   (예: EXAONE, 끝나면 8000번을 다시 켬):
   ```bash
-  cd /home/work/llm_alba/app
-  nohup /home/work/llm_alba/venv/bin/python bench/run.py --yes --models exaone45_33b --skip speed,flows > bench/nohup_vision.log 2>&1 &
+  cd /home/work/alba/app
+  nohup /home/work/alba/venv/bin/python bench/run.py --yes --models exaone45_33b --skip speed,flows > bench/nohup_vision.log 2>&1 &
   ```
   결과는 새 폴더에 따로 생기고, 전체 실행 폴더는 바뀌지 않는다. 전체 실행이 끝난 뒤에 한다 (GPU를 함께 쓰면 둘 다 멈춘다).
 - 생각(thinking) 모드가 있는 모델은 끄고 시험한다. 앱에서 그 모델을 쓰려면 비교표 '모델별 자세히'의 '실제로 쓴 요청 옵션'을 `.env`의 `LLM_EXTRA_BODY`에, 생성 설정을 `LLM_SAMPLING`에 넣는다.
-- 받은 모델은 `/home/work/llm_alba/hf`(저장 폴더)에 남는다. 다 받으면 수백 GB라 끝난 뒤 쓰지 않을 모델은 지워도 된다.
+- 받은 모델은 `/home/work/alba/hf`(저장 폴더)에 남는다. 다 받으면 수백 GB라 끝난 뒤 쓰지 않을 모델은 지워도 된다.
 - 지금 vLLM 버전이 지원하지 않는 모델은 '실패'와 vLLM 로그 끝부분이 비교표에 남는다.
 - GPU 없이 흐름만 확인 (개발자용): `python bench/run.py --serve-cmd "python3 bench/fake_server.py --port {port}" --suite-python python3`. 사진 읽기 실패 모양을 보려면 `fake_server.py`에 `--broken-vision`을 더한다.

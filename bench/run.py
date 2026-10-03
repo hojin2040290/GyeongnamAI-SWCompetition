@@ -1,9 +1,9 @@
 """GPU 서버에서 후보 모델을 차례로 받고, 켜고, 시험하고, 끈다. 마지막에 비교표(report.md)를 만든다.
 
 GPU 서버의 vLLM 가상환경 파이썬으로 실행한다 (huggingface_hub가 들어 있다). 자세한 사용법: bench/README.md
-  /home/work/llm_alba/venv/bin/python bench/run.py --preflight       # 모델 이름, 크기, 파서만 확인 (받지 않음)
-  /home/work/llm_alba/venv/bin/python bench/run.py --yes             # 전부 실행 (8000번 vLLM을 끄고, 끝나면 다시 켬)
-  /home/work/llm_alba/venv/bin/python bench/run.py --models hcx_seed_32b_think,exaone45_33b --yes
+  /home/work/alba/venv/bin/python bench/run.py --preflight       # 모델 이름, 크기, 파서만 확인 (받지 않음)
+  /home/work/alba/venv/bin/python bench/run.py --yes             # 전부 실행 (8000번 vLLM을 끄고, 끝나면 다시 켬)
+  /home/work/alba/venv/bin/python bench/run.py --models hcx_seed_32b_think,exaone45_33b --yes
 
 8000번 vLLM(앱이 쓰는 것)은 시작할 때 확인을 받은 뒤 vllm.pid의 번호로만 끄고, 끝나거나 중간에 멈춰도
 start_vllm.sh로 다시 켠다. 벤치마크용 vLLM은 8100번으로 켜고, 이 스크립트가 켠 프로세스만 끈다.
@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bench"))  # checks.py
-BASE = Path("/home/work/llm_alba")
+BASE = Path("/home/work/alba")
 LOG = None
 
 
