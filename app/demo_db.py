@@ -4,7 +4,9 @@
       python -m app.demo_db --force   → data/test 가 이미 있으면 지우고 다시 만든다
 시험 데이터로 서버 실행: .env에 TEST_DATA=true (평소 데이터 data/app.db, data/uploads는 그대로)
   TEST_DATA=true로 켰는데 data/test에 시험 데이터가 없으면 서버가 켜지면서 이 명령을 실행한다 (app/main.py)
-로그인: test@example.com / test1234 (2009-05-20생, 만 17세)
+로그인: test@example.com, test2@example.com ~ test5@example.com / 모두 test1234 (2009-05-20생, 만 17세)
+  계정 5개는 이메일만 다르고 알바 5개, 근무 기록, 서류 사진이 모두 같다 (여러 사람이 동시에 시험해 볼 수 있게).
+  이미 있는 시험 데이터에 없는 계정만 더하기: python -m app.demo_db --add (있던 계정과 기록은 그대로)
 
 알바마다 서류 사진(계약서, 급여명세서, 입금내역, 사장님 메시지)은 그 알바의 기록과 같은 값으로 그린 것이다.
   1번 알바는 테스트자료 폴더의 원본 사진과 근무기록 CSV, 2~5번은 테스트자료/알바5개 의 사진.
@@ -28,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MATERIAL = ROOT / "테스트자료"
 CASE_DIR = MATERIAL / "알바5개"
 EMAIL, PASSWORD, NAME, BIRTH = "test@example.com", "test1234", "홍길동", "2009-05-20"
+EMAILS = [EMAIL] + [f"test{n}@example.com" for n in range(2, 6)]  # 이메일만 다른 같은 내용의 시험 계정 5개
 
 
 def _day_shifts(days: list[str], start: str, end: str) -> list[tuple[str, str, str]]:
@@ -329,6 +332,24 @@ def build_case(c, uid: int, case: dict) -> int:
     return job_id
 
 
+def existing_emails(db: Path) -> set[str]:
+    import sqlite3
+    try:
+        with sqlite3.connect(db) as c:
+            return {r[0] for r in c.execute("select email from user")}
+    except sqlite3.Error:
+        return set()
+
+
+def build_account(c, email: str) -> None:
+    """시험 계정 하나와 알바 5개 (서버를 띄우지 않고 앱의 API를 부른다, 예약 작업은 돌지 않음)."""
+    _ok(c.post("/api/auth/register", json={"email": email, "password": PASSWORD, "birth_date": BIRTH}), "가입")
+    uid = _ok(c.get("/api/me"), "내 정보")["id"]
+    _ok(c.put("/api/me/prefs", json={"gps_consent": True}), "위치 기록 동의")
+    for case in CASES:
+        build_case(c, uid, case)
+
+
 def show(case: dict) -> None:
     j, r, paid = case["job"], compute(case), paid_of(case)
     print(f"\n[{case['key']}] {j['name']} — {case['title']}")
@@ -357,6 +378,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="시험 데이터(알바 5개와 서류 사진) 만들기")
     ap.add_argument("--dir", default="data/test", help="만들 폴더 (기본 data/test, .env의 TEST_DATA=true가 쓰는 곳)")
     ap.add_argument("--force", action="store_true", help="폴더가 이미 있으면 지우고 다시 만들기")
+    ap.add_argument("--add", action="store_true", help="이미 있는 시험 데이터에 없는 계정만 더 만들기 (있던 기록은 그대로)")
     ap.add_argument("--html", help="(개발자용) 2~5번 알바의 서류를 HTML로 이 폴더에 쓰기")
     args = ap.parse_args()
     if args.html:
@@ -370,7 +392,9 @@ def main() -> None:
     if config.DB_PATH != (target / "app.db").resolve() or target not in config.UPLOAD_DIR.parents:
         sys.exit(f"저장 위치가 시험 폴더가 아니에요 ({config.DB_PATH}). 평소 데이터를 지키려고 멈춰요.")
     check_images()
-    if (target / "app.db").exists() or any(p.is_file() for p in target.rglob("*")):  # 빈 폴더는 config가 막 만든 것
+    if args.add and (target / "app.db").exists():
+        pass  # 있던 시험 데이터에 없는 계정만 더한다
+    elif (target / "app.db").exists() or any(p.is_file() for p in target.rglob("*")):  # 빈 폴더는 config가 막 만든 것
         if not args.force:
             sys.exit(f"{target} 가 이미 있어요. 지우고 다시 만들려면 --force를 붙여 주세요.")
         shutil.rmtree(target)
@@ -384,14 +408,15 @@ def main() -> None:
     laws = copy_law_table(config.DB_PATH)
     print(f"법 기준표: 평소 DB에서 {laws}건 복사" if laws else
           "법 기준표: 평소 DB(data/app.db)에 없어 복사하지 못했어요. 시험 데이터로 켠 채 법 기준표를 만들 수 있어요 (TEST_DATA=true python -m app.law.fetch)")
-    c = TestClient(app)  # 서버를 띄우지 않고 앱의 API를 부른다 (예약 작업은 돌지 않음)
-    _ok(c.post("/api/auth/register", json={"email": EMAIL, "password": PASSWORD, "birth_date": BIRTH}), "가입")
-    uid = _ok(c.get("/api/me"), "내 정보")["id"]
-    _ok(c.put("/api/me/prefs", json={"gps_consent": True}), "위치 기록 동의")
-    print(f"계정: {EMAIL} / {PASSWORD} ({NAME}, {BIRTH}생, 만 17세)")
-    for case in CASES:
-        build_case(c, uid, case)
-        show(case)
+    have = existing_emails(config.DB_PATH)
+    made = [e for e in EMAILS if e not in have]
+    for n, email in enumerate(made):
+        build_account(TestClient(app), email)  # 계정마다 새 클라이언트 (로그인 세션이 섞이지 않게)
+        if n == 0:
+            for case in CASES:
+                show(case)
+    print(f"\n계정 {len(made)}개를 만들었어요: {', '.join(made) or '없음 (모두 이미 있어요)'} / 비밀번호 {PASSWORD}"
+          f" ({NAME}, {BIRTH}생, 만 17세, 알바 {len(CASES)}개씩 같은 내용)")
     print(f"\n만든 폴더: {target}")
     if args.dir == "data/test":
         print("시험 데이터로 실행: .env에 TEST_DATA=true 를 넣고 서버를 켜세요 (로그에 '시험 데이터로 실행 중')")

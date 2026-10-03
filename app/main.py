@@ -49,13 +49,18 @@ def _has_users(db: Path) -> bool:
 def prepare_test_data(log: logging.Logger) -> None:
     """시험 데이터(data/test)가 아직 없으면(계정이 없으면) 만든다. 이미 쓰던 시험 데이터는 건드리지 않는다.
     DB_PATH 등을 따로 정해 다른 곳을 쓰고 있으면 만들지 않는다."""
-    if config.DB_PATH != (config.TEST_DATA_DIR / "app.db").resolve() or _has_users(config.DB_PATH):
+    if config.DB_PATH != (config.TEST_DATA_DIR / "app.db").resolve():
         return
-    log.info("시험 데이터가 없어 만들어요 (python -m app.demo_db와 같음)")
-    out = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", str(config.TEST_DATA_DIR), "--force"], cwd=BASE_DIR,
-                         capture_output=True, text=True, timeout=300)
+    from app.demo_db import EMAILS, existing_emails
+    have = existing_emails(config.DB_PATH) if _has_users(config.DB_PATH) else set()
+    if all(e in have for e in EMAILS):
+        return
+    # 시험 데이터가 없으면 새로, 있으면 없는 시험 계정만 더한다 (쓰던 계정과 기록은 그대로)
+    log.info("시험 계정이 없어 만들어요 (python -m app.demo_db와 같음)")
+    out = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", str(config.TEST_DATA_DIR), "--add" if have else "--force"],
+                         cwd=BASE_DIR, capture_output=True, text=True, timeout=600)
     if out.returncode == 0:
-        log.info("시험 데이터를 만들었어요. 로그인: test@example.com / test1234")
+        log.info("시험 데이터를 만들었어요. 로그인: test@example.com, test2~test5@example.com / test1234")
     else:
         log.error("시험 데이터를 만들지 못했어요: %s", (out.stderr or out.stdout)[-500:])
 
