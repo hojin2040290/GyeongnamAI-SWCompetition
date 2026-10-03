@@ -202,3 +202,48 @@ def test_llm_max_tokens_limits_every_request(monkeypatch):
     monkeypatch.setattr(client, "LLM_MAX_TOKENS", 0)
     client.chat([{"role": "user", "content": "안녕"}])
     assert "max_tokens" not in sent[-1]
+
+
+def test_llm_sampling_overrides_request(monkeypatch):
+    """LLM_SAMPLING(모델 공식 문서의 권장 생성 설정): 앱이 정한 temperature 0 위에 덮어쓴다. null은 그 값을 빼서
+    vLLM이 모델의 generation_config.json 기본값을 쓰게 한다. 생성 설정이 아닌 칸(model, messages)은 바꾸지 않는다."""
+    from app.llm import client
+    sent = []
+    monkeypatch.setattr(client, "LLM_FAKE", False)
+    monkeypatch.setattr(client, "LLM_ENABLED", True)
+    monkeypatch.setattr(client, "LLM_MODEL", "m")
+    monkeypatch.setattr(client.httpx, "post", lambda url, json, headers, timeout: sent.append(json) or type(
+        "R", (), {"raise_for_status": lambda self: None, "json": lambda self: {"choices": [{"message": {"content": "{}"}}]}})())
+    monkeypatch.setattr(client, "LLM_SAMPLING", '{"temperature": 0.6, "top_p": 0.95, "presence_penalty": 1.5, "model": "x"}')
+    client.chat([{"role": "user", "content": "안녕"}])
+    assert sent[-1]["temperature"] == 0.6 and sent[-1]["top_p"] == 0.95 and sent[-1]["presence_penalty"] == 1.5
+    assert sent[-1]["model"] == "m"
+    monkeypatch.setattr(client, "LLM_SAMPLING", '{"temperature": null}')
+    client.chat([{"role": "user", "content": "안녕"}])
+    assert "temperature" not in sent[-1]
+    monkeypatch.setattr(client, "LLM_SAMPLING", "")
+    client.chat([{"role": "user", "content": "안녕"}])
+    assert sent[-1]["temperature"] == 0
+
+
+def test_parse_json_ignores_reasoning_text():
+    """생각 파서가 붙지 않은 모델은 생각 글이 답에 섞여 온다. 생각 글 속 괄호를 JSON으로 읽지 않는다."""
+    assert client.parse_json('<think>예: {"임금": "모름"} 일까?</think>\n{"임금": "10320"}') == {"임금": "10320"}
+    # Qwen 계열: 대화 틀이 <think>를 열어 두면 답에는 닫는 표시만 온다
+    assert client.parse_json('{"x": 1} 이렇게 쓰면 되겠다</think>{"임금": "9288"}') == {"임금": "9288"}
+    assert client.parse_json('[THINK]{"a": 0}[/THINK]{"a": 1}') == {"a": 1}
+    assert client.parse_json('<|channel>thought\n{"a": 0}<channel|>{"a": 2}') == {"a": 2}
+    # GLM: 답을 상자 표시로 감싼다
+    assert client.parse_json('<|begin_of_box|>{"a": 3}<|end_of_box|>') == {"a": 3}
+
+
+def test_chat_removes_reasoning_from_content(monkeypatch):
+    """생각 글이 답(content)에 섞여 와도 앱이 쓰는 글에는 남지 않는다."""
+    from app.llm import client
+    monkeypatch.setattr(client, "LLM_FAKE", False)
+    monkeypatch.setattr(client, "LLM_ENABLED", True)
+    monkeypatch.setattr(client, "LLM_MODEL", "m")
+    monkeypatch.setattr(client.httpx, "post", lambda url, json, headers, timeout: type(
+        "R", (), {"raise_for_status": lambda self: None,
+                  "json": lambda self: {"choices": [{"message": {"content": "<think>고민</think>안녕하세요"}}]}})())
+    assert client.chat([{"role": "user", "content": "안녕"}])["content"] == "안녕하세요"

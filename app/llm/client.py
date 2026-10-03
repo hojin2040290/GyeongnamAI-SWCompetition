@@ -11,7 +11,7 @@ import re
 import httpx
 
 from app.config import (LLM_API_KEY, LLM_BASE_URL, LLM_ENABLED, LLM_EXTRA_BODY, LLM_FAKE, LLM_MAX_TOKENS, LLM_MODEL,
-                        LLM_TIMEOUT, LLM_VISION_MODEL)
+                        LLM_SAMPLING, LLM_TIMEOUT, LLM_VISION_MODEL)
 from app.llm import fake
 
 
@@ -44,8 +44,26 @@ def extra_body() -> dict:
     return v if isinstance(v, dict) else {}
 
 
+# LLM_SAMPLING으로 바꿀 수 있는 생성 설정 (그 밖의 칸은 무시한다)
+SAMPLING_KEYS = ("temperature", "top_p", "top_k", "min_p", "presence_penalty", "frequency_penalty", "repetition_penalty")
+
+
+def sampling() -> dict:
+    """.env의 LLM_SAMPLING (모델 공식 문서의 권장 생성 설정). 잘못된 JSON이면 쓰지 않는다."""
+    try:
+        v = json.loads(LLM_SAMPLING) if LLM_SAMPLING else {}
+    except json.JSONDecodeError:
+        return {}
+    return {k: x for k, x in v.items() if k in SAMPLING_KEYS} if isinstance(v, dict) else {}
+
+
 def _post(payload: dict) -> dict:
     payload = {**extra_body(), **payload}
+    for k, v in sampling().items():
+        if v is None:
+            payload.pop(k, None)  # 모델 기본값(generation_config.json)을 쓴다
+        else:
+            payload[k] = v
     if LLM_MAX_TOKENS and "max_tokens" not in payload:
         payload["max_tokens"] = LLM_MAX_TOKENS
     if LLM_FAKE:  # 시험용 가짜 AI: 같은 응답 모양으로 답한다
@@ -75,13 +93,33 @@ def chat(messages: list[dict], tools: list[dict] | None = None, model: str | Non
         payload["tool_choice"] = {"type": "function", "function": {"name": force}} if force else "auto"
     data = _post(payload)
     try:
-        return data["choices"][0]["message"]
+        msg = data["choices"][0]["message"]
     except (KeyError, IndexError, TypeError) as exc:
         raise LLMError("AI 모델 응답 형식이 달라요") from exc
+    if isinstance(msg, dict) and msg.get("content"):
+        msg = {**msg, "content": strip_reasoning(msg["content"])}  # 생각 글이 섞여 와도 사용자에게 보이지 않게
+    return msg
+
+
+# 생각 파서가 없거나 맞지 않을 때 답에 섞여 오는 생각 글 (Qwen·EXAONE <think>, Mistral [THINK], Gemma 4 thought 채널)
+_REASONING = [(r"<think>", r"</think>"), (r"\[THINK\]", r"\[/THINK\]"), (r"<\|channel>thought", r"<channel\|>")]
+
+
+def strip_reasoning(text: str) -> str:
+    """답에서 생각 글을 뺀다. 여는 표시 없이 닫는 표시만 있으면(대화 틀이 미리 열어 둔 경우) 그 앞을 모두 뺀다."""
+    text = text or ""
+    for opener, closer in _REASONING:
+        text = re.sub(opener + r".*?" + closer, "", text, flags=re.S)
+        m = list(re.finditer(closer, text))
+        if m:
+            text = text[m[-1].end():]
+        text = re.sub(opener + r".*", "", text, flags=re.S)  # 닫지 못하고 끝난 생각 글
+    return re.sub(r"<\|(begin|end)_of_box\|>", "", text).strip()  # GLM 답 상자 표시
 
 
 def parse_json(text: str):
-    """모델 답에서 JSON만 꺼낸다 (```json 감싸기나 앞뒤 설명이 붙어도)."""
+    """모델 답에서 JSON만 꺼낸다 (```json 감싸기, 앞뒤 설명, 생각 글이 붙어도)."""
+    text = strip_reasoning(text)
     text = re.sub(r"^```(?:json)?|```$", "", (text or "").strip(), flags=re.M).strip()
     pairs = sorted((("{", "}"), ("[", "]")), key=lambda p: (text.find(p[0]) == -1, text.find(p[0])))
     for opener, closer in pairs:  # 먼저 나온 괄호부터 (배열 안의 객체만 꺼내지 않도록)

@@ -142,13 +142,18 @@ def install_recorder(client) -> None:
 
 
 # ---------- 1. 속도 ----------
-def speed_test(base_url: str, model: str, extra: dict) -> list[dict]:
+def speed_test(base_url: str, model: str, extra: dict, sampling: dict) -> list[dict]:
     import httpx
     out = []
     for label, prompt, max_tokens in SPEED_PROMPTS:
         for n in range(2):
             payload = {**extra, "model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens,
                        "temperature": 0, "stream": True, "stream_options": {"include_usage": True}}
+            for k, v in sampling.items():  # 앱(client._post)과 같은 규칙으로 공식 권장 생성 설정을 쓴다
+                if v is None:
+                    payload.pop(k, None)
+                else:
+                    payload[k] = v
             t0 = time.time()
             ttft, usage, content, reasoning, err = None, {}, "", "", None
             try:
@@ -361,6 +366,7 @@ def main() -> int:
     ap.add_argument("--base-url", required=True)
     ap.add_argument("--model", default="bench")
     ap.add_argument("--extra-body", default="{}")
+    ap.add_argument("--sampling", default="{}", help="공식 권장 생성 설정 JSON (앱의 LLM_SAMPLING)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--skip", default="", help="건너뛸 시험 (speed,vision,flows 중 쉼표로)")
     args = ap.parse_args()
@@ -369,7 +375,7 @@ def main() -> int:
     env = {"DB_PATH": str(ROOT / data_dir / "app.db"), "UPLOAD_DIR": str(ROOT / data_dir / "uploads"),
            "REPORT_DIR": str(ROOT / data_dir / "reports"), "LLM_ENABLED": "true", "LLM_FAKE": "false",
            "LLM_BASE_URL": args.base_url, "LLM_MODEL": args.model, "LLM_VISION_MODEL": "", "LLM_TIMEOUT": "600",
-           "LLM_EXTRA_BODY": args.extra_body, "LLM_MAX_TOKENS": os.environ.get("LLM_MAX_TOKENS", "4096"),
+           "LLM_EXTRA_BODY": args.extra_body, "LLM_SAMPLING": args.sampling, "LLM_MAX_TOKENS": os.environ.get("LLM_MAX_TOKENS", "4096"),
            "LAW_REFRESH_ON_START": "false", "TEST_DATA": "false",
            "NAVER_CLIENT_ID": "", "NAVER_CLIENT_SECRET": ""}
     os.environ.update(env)
@@ -387,7 +393,8 @@ def main() -> int:
 
     def save(stage: str) -> None:
         """단계마다 지금까지의 결과를 쓴다 (중간에 멈춰도 남게)."""
-        result = {"key": args.key, "base_url": args.base_url, "extra_body": extra, "law_table": law_line,
+        result = {"key": args.key, "base_url": args.base_url, "extra_body": extra, "sampling": client.sampling(),
+                  "sampling_sent": args.sampling, "law_table": law_line,
                   "max_tokens": os.environ.get("LLM_MAX_TOKENS"), "stage": stage,
                   "suite_sec": round(time.time() - started, 1),
                   "summary": summarize(state["speed"], state["vision"], state["flows"]), **state,
@@ -395,7 +402,7 @@ def main() -> int:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     if "speed" not in skip:
-        state["speed"] = speed_test(args.base_url, args.model, extra)
+        state["speed"] = speed_test(args.base_url, args.model, extra, client.sampling())
         save("속도 끝")
     if "vision" not in skip:
         state["vision"] = vision_test(ocr)

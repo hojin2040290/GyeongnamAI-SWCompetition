@@ -53,3 +53,6 @@ IBM Plex Sans KR (Google Fonts, SIL Open Font License)
 |---|---|---|---|
 | huggingface_hub | 벤치마크 후보 모델 확인과 받기 (GPU 서버의 vLLM 가상환경에 이미 있음) | https://github.com/huggingface/huggingface_hub | Apache 2.0 |
 | 후보 모델 9개 (`bench/models.json`) | 같은 시험으로 속도, 도구 호출, 판단, 사진 읽기, 한국어 비교 | Hugging Face 각 모델 페이지 | 모델마다 다름 (벤치마크 결과의 사전 확인에 라이선스를 남김. EXAONE은 비상업용) |
+| vLLM Recipes (모델별 실행 방법) | 후보 모델의 실행 옵션, 도구·생각 파서, 생각 끄기 방법, 최소 버전 (`bench/models.json`의 docs) | https://github.com/vllm-project/recipes | Apache 2.0 |
+| vLLM 도구 호출 문서와 대화 틀 (v0.30.0) | Llama 4, Gemma 4 도구 호출 파서와 대화 틀 파일 (실행할 때 설치된 vLLM 버전의 파일을 받음) | https://github.com/vllm-project/vllm/blob/v0.30.0/docs/features/tool_calling.md | Apache 2.0 |
+| 모델 공식 문서 (EXAONE 4.5, Qwen3-VL, Qwen3.8, GLM) | 권장 생성 설정(temperature 등), 생각 끄기, 실행 옵션 | https://github.com/LG-AI-EXAONE/EXAONE-4.5, https://github.com/QwenLM/Qwen3-VL, https://github.com/QwenLM/Qwen3.8, https://github.com/zai-org/GLM-4.5 | 문서마다 다름 (참고만, 코드 복사 없음) |
