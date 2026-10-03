@@ -74,14 +74,17 @@ def build(outdir: Path) -> str:
           S(r)["agent"]["ask_law"], fmt(S(r)["agent"]["tokens_per_flow"])] for r in done])
     lines += ["", "## 4. 정확도", "",
               "판단: 코드 규칙이 분명히 정상이나 위반 의심으로 본 항목에서 AI 판단이 같음 / 확인 필요로 조심 / 반대. "
-              "사진: 계약서 4장 x 7항목, 명세서 3장 x 5항목이 정답과 맞은 수. 한글 비율은 AI가 쓴 글의 글자 중 한글 비율, "
+              "사진: 계약서 4장 x 7항목, 명세서 3장 x 5항목이 정답과 맞은 수. 사진 읽기 실패는 답을 JSON으로 읽지 못한 장 수, "
+              "길이 제한은 그중 출력 토큰 한도(LLM_MAX_TOKENS)까지 쓰고 끊긴 장 수예요. 한글 비율은 AI가 쓴 글의 글자 중 한글 비율, "
               "한자는 중국어가 섞였을 수 있는 글자 수예요.", ""] + table(
-        ["모델", "AI가 판단한 항목", "판단 대기로 남음", "같음", "조심", "반대", "계약서 사진", "명세서 사진", "사진 평균 시간",
-         "한글 비율", "한자"],
+        ["모델", "AI가 판단한 항목", "판단 대기로 남음", "같음", "조심", "반대", "계약서 사진", "명세서 사진",
+         "사진 읽기 실패", "사진 길이 제한", "사진 평균 시간", "한글 비율", "한자"],
         [[r["label"], frac(S(r)["judgment"]["ai_judged"], S(r)["judgment"]["items"]), S(r)["judgment"]["pending"],
           frac(S(r)["judgment"]["match"], S(r)["judgment"]["clear"]), S(r)["judgment"]["conservative"],
           S(r)["judgment"]["wrong"], frac(S(r)["vision"]["contract_score"], S(r)["vision"]["contract_total"]),
-          frac(S(r)["vision"]["payslip_score"], S(r)["vision"]["payslip_total"]), fmt(S(r)["vision"]["sec_avg"], "초"),
+          frac(S(r)["vision"]["payslip_score"], S(r)["vision"]["payslip_total"]),
+          frac(S(r)["vision"].get("errors", 0), len(r["result"]["vision"])), S(r)["vision"].get("truncated", "-"),
+          fmt(S(r)["vision"]["sec_avg"], "초"),
           fmt(S(r)["korean"]["hangul_ratio"]), S(r)["korean"]["han_chars"]] for r in done])
     lines += ["", "## 5. 도구 호출 형식", "",
               "도구를 준 요청 중 도구 호출 없이 글만 온 수, 글 속에 호출 모양이 들어 있어 파서가 읽지 못한 수, "
@@ -124,6 +127,14 @@ def build(outdir: Path) -> str:
                      for v in res["vision"] if v.get("wrong") or v.get("error")]
             if bad_v:
                 lines += ["", "사진 읽기에서 틀린 항목:", ""] + [f"- {x}" for x in bad_v]
+            raw_v = [v for v in res["vision"] if v.get("error") and (v.get("content_head") or v.get("finish_reason"))][:3]
+            if raw_v:
+                lines += ["", "사진 읽기에 실패한 답 원문 (앞부분 / 끝부분):", ""]
+                for v in raw_v:
+                    one = lambda t: t.replace("\n", " ").replace("`", "'")  # noqa: E731
+                    lines.append(f"- {v['image']} (끝난 이유 {v.get('finish_reason')}, 출력 토큰 {v.get('completion_tokens')}): "
+                                 f"`{one(v.get('content_head', ''))[:300]}`"
+                                 + (f" … `{one(v['content_tail'])[-200:]}`" if v.get("content_tail") else ""))
         elif r.get("suite_tail"):
             lines += ["", "```", r["suite_tail"][-800:], "```"]
         lines.append("")

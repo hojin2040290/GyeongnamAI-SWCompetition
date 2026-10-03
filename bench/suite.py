@@ -117,6 +117,11 @@ def record(payload: dict, data, err: str | None, sec: float) -> None:
                  # 도구를 줬는데 도구 호출 대신 글 속에 호출 모양이 들어 있으면 파서가 읽지 못한 것
                  raw_tool_text=bool(payload.get("tools") and not calls and re.search(r"<tool_call>|\"arguments\"|\[\w+\(", content)),
                  reasoning_chars=len(msg.get("reasoning_content") or msg.get("reasoning") or ""))
+        # 사진 읽기와 길이 제한에 걸린 답은 원문 앞뒤를 남긴다 (JSON을 못 읽은 이유를 보려고)
+        if e["image"] or finish == "length":
+            e["content_chars"] = len(content)
+            e["content_head"] = content[:600]
+            e["content_tail"] = content[-300:] if len(content) > 900 else ""
     REC["requests"].append(e)
 
 
@@ -181,6 +186,15 @@ def norm(s) -> str:
     return re.sub(r"[\s,]", "", str(s or ""))
 
 
+def raw_answer(name: str) -> dict:
+    """그 사진에 보낸 마지막 요청의 끝난 이유와 답 원문 (사진 읽기가 실패했을 때 원인 확인용)."""
+    r = next((x for x in reversed(REC["requests"]) if x["flow"] == f"vision:{name}"), None)
+    if not r:
+        return {}
+    return {"finish_reason": r.get("finish_reason"), "completion_tokens": r.get("completion_tokens"),
+            "content_head": r.get("content_head", ""), "content_tail": r.get("content_tail", "")}
+
+
 def vision_test(ocr) -> list[dict]:
     out = []
     for name, expect in CONTRACTS.items():
@@ -193,7 +207,7 @@ def vision_test(ocr) -> list[dict]:
                         "total": len(ok), "wrong": [k for k, v in ok.items() if not v], "got": got})
         except Exception as exc:  # noqa: BLE001
             out.append({"image": name, "kind": "contract", "sec": round(time.time() - t0, 2), "score": 0,
-                        "total": len(expect), "error": f"{type(exc).__name__}: {exc}"[:300]})
+                        "total": len(expect), "error": f"{type(exc).__name__}: {exc}"[:300], **raw_answer(name)})
     for name, expect in PAYSLIPS.items():
         REC["current"] = f"vision:{name}"
         t0 = time.time()
@@ -204,7 +218,7 @@ def vision_test(ocr) -> list[dict]:
                         "total": len(ok), "wrong": [k for k, v in ok.items() if not v], "got": got})
         except Exception as exc:  # noqa: BLE001
             out.append({"image": name, "kind": "payslip", "sec": round(time.time() - t0, 2), "score": 0,
-                        "total": len(expect), "error": f"{type(exc).__name__}: {exc}"[:300]})
+                        "total": len(expect), "error": f"{type(exc).__name__}: {exc}"[:300], **raw_answer(name)})
     return out
 
 
@@ -335,6 +349,7 @@ def summarize(speed: list, vision: list, flows: list) -> dict:
                    "payslip_score": sum(v["score"] for v in vision if v["kind"] == "payslip"),
                    "payslip_total": sum(v["total"] for v in vision if v["kind"] == "payslip"),
                    "errors": sum(1 for v in vision if v.get("error")),
+                   "truncated": sum(1 for v in vision if v.get("finish_reason") == "length"),
                    "sec_avg": round(statistics.mean(v["sec"] for v in vision), 1) if vision else None},
         "korean": text_stats(texts),
     }

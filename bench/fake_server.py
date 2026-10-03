@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
 from app.llm import fake  # noqa: E402
 
 app = FastAPI()
+BROKEN_VISION = False  # --broken-vision: 사진 요청에 JSON이 아닌 글을 한도까지 되풀이해 답한다 (EXAONE에서 본 모양)
 
 
 @app.get("/v1/models")
@@ -28,6 +29,9 @@ def models():
 async def chat(req: Request):
     payload = await req.json()
     data = fake.respond(payload)
+    if BROKEN_VISION and any(isinstance(m.get("content"), list) for m in payload.get("messages", [])):
+        data["choices"][0]["message"]["content"] = "근로계약서 내용: " + "근로시간 09:00 " * 400
+        data["choices"][0]["finish_reason"] = "length"
     text = (data["choices"][0]["message"].get("content") or "")
     data.setdefault("usage", {"prompt_tokens": len(json.dumps(payload, ensure_ascii=False)) // 3,
                               "completion_tokens": max(1, len(text) // 2)})
@@ -46,4 +50,7 @@ if __name__ == "__main__":
     import uvicorn
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8100)
-    uvicorn.run(app, host="127.0.0.1", port=ap.parse_args().port, log_level="warning")
+    ap.add_argument("--broken-vision", action="store_true", help="사진 읽기 실패를 흉내 낸다")
+    a = ap.parse_args()
+    BROKEN_VISION = a.broken_vision
+    uvicorn.run(app, host="127.0.0.1", port=a.port, log_level="warning")
