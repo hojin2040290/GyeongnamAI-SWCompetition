@@ -163,3 +163,15 @@ def test_daily_runs_overview_only_when_records_changed(env, monkeypatch):
     scheduler.daily_check(uid)
     m = len([p for p in agent.payloads if any(t["function"]["name"] == "get_all_facts" for t in p.get("tools", []))])
     assert n > 0 and m == n
+
+
+def test_contract_waiting_count_is_separate_for_spinner(env, monkeypatch):
+    """AI 판단을 기다리는 계약서 항목 수는 wait 칸으로 따로 둔다 (화면이 도는 표시와 함께 보여 주게). AI에게는 함께 넘긴다."""
+    a, j = env
+    monkeypatch.setattr(client, "LLM_FAKE", False)
+    monkeypatch.setattr(client, "LLM_ENABLED", False)
+    a.post(f"/api/jobs/{j}/check")
+    part = next(p for p in a.get(f"/api/jobs/{j}/overview").json()["parts"] if p["name"] == "계약서 점검")
+    assert part["wait"].startswith("AI 에이전트 판단 대기") and "판단 대기" not in part["text"]
+    with Session(engine) as s:
+        assert part["wait"] in overview.target(s, s.get(Job, j).user_id, j)["text"]

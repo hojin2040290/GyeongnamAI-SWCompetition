@@ -20,9 +20,10 @@ def _latest(s: Session, job_id: int, kind: str) -> list[CheckRun]:
     return s.exec(select(CheckRun).where(CheckRun.job_id == job_id, CheckRun.kind == kind).order_by(CheckRun.id.desc())).all()
 
 
-def _part(name: str, status: str | None, text: str, tab: str = "", todo: bool = False) -> dict:
-    """정리한 사실 한 줄. status가 None이면 결과가 없는 정보(기록 수 등). todo: 아직 하지 않은 점검 (화면에 회색)."""
-    return {"name": name, "status": status, "text": text, "tab": tab, "todo": todo}
+def _part(name: str, status: str | None, text: str, tab: str = "", todo: bool = False, wait: str = "") -> dict:
+    """정리한 사실 한 줄. status가 None이면 결과가 없는 정보(기록 수 등). todo: 아직 하지 않은 점검 (화면에 회색).
+    wait: AI 판단을 기다리는 부분 (화면은 도는 표시와 함께 보여 준다)."""
+    return {"name": name, "status": status, "text": text, "tab": tab, "todo": todo, "wait": wait}
 
 
 def _contract(s: Session, job_id: int) -> dict:
@@ -35,8 +36,9 @@ def _contract(s: Session, job_id: int) -> dict:
     seen = [it.get("rule_status") or engine.WARN if it.get("status") == engine.PENDING else it.get("status", engine.WARN)
             for it in items]
     worst = max(seen, key=lambda x: RANK.get(x, 1), default=engine.OK)
-    text = ", ".join(f"{NAME[k]} {n}건" for k, n in counts.items() if n) or "점검할 항목이 없어요"
-    return _part("계약서 점검", worst, text, "check")
+    text = ", ".join(f"{NAME[k]} {n}건" for k, n in counts.items() if n and k != engine.PENDING)
+    wait = f"{NAME[engine.PENDING]} {counts[engine.PENDING]}건" if counts[engine.PENDING] else ""
+    return _part("계약서 점검", worst, text or ("" if wait else "점검할 항목이 없어요"), "check", wait=wait)
 
 
 def _pays(s: Session, job_id: int) -> list[dict]:
@@ -98,6 +100,10 @@ def parts(s: Session, user_id: int, job_id: int) -> list[dict]:
     return out
 
 
+def _text(p: dict) -> str:
+    return ", ".join(x for x in (p["text"], p.get("wait", "")) if x)
+
+
 def rule_status(items: list[dict]) -> str:
     """코드가 정리한 사실 중 가장 나쁜 결과. 결과가 있는 사실이 하나도 없으면 확인 필요."""
     found = [p["status"] for p in items if p.get("status")]
@@ -111,7 +117,7 @@ def target(s: Session, user_id: int, job_id: int) -> dict:
     """AI 판단을 붙일 대상 (검증 장치 judgment_problems가 rule_status와 사실을 본다)."""
     items = parts(s, user_id, job_id)
     return {"law": "", "parts": items, "rule_status": rule_status(items), "status": engine.PENDING,
-            "basis": [f"{p['name']}: {p['text']}" for p in items], "text": "; ".join(f"{p['name']} {p['text']}" for p in items),
+            "basis": [f"{p['name']}: {_text(p)}" for p in items], "text": "; ".join(f"{p['name']} {_text(p)}" for p in items),
             "basis_key": case.data_key(s, s.get(Job, job_id)), "at": now_kst().isoformat()}
 
 

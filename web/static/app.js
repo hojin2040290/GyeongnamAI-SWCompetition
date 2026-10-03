@@ -736,7 +736,7 @@ async function loadOverview(){
   const o=await api('GET',`/api/jobs/${jobId}/overview`); if(jobId!==state.current || $('#ovLive .live')) return;
   const v=o.overview;
   $('#ovTag').className='tag '+(v?v.status:'none'); $('#ovTag').textContent=v?LABEL[v.status]:'아직 안 함';
-  $('#ovParts').innerHTML=o.parts.map(p=>`<li><span class="ov-name">${esc(p.name)}</span><span class="ov-text">${esc(p.text)}</span>${
+  $('#ovParts').innerHTML=o.parts.map(p=>`<li><span class="ov-name">${esc(p.name)}</span><span class="ov-text">${esc(p.text)}${p.wait?`${p.text?' ':''}<span class="wait-note">${esc(p.wait)}</span>`:''}</span>${
     p.status?`<span class="tag ${p.status}">${LABEL[p.status]}</span>`:p.todo?'<span class="tag none">아직 안 함</span>':''}</li>`).join('');
   $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
   $('#ovNote').textContent=v?`${fmtDT(v.at)} 점검${o.changed?' · 그 뒤로 기록이 바뀌었어요. 다시 점검해 보세요':''}`:'';

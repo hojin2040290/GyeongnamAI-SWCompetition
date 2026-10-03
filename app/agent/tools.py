@@ -658,7 +658,7 @@ def agent_tools(session: Session, user_id: int, job_id: int | None, state: dict)
             laws += [P()["weekly_holiday"]["law"], P()["premium"]["law"]]
         if any(pt["name"] == "퇴직 후 임금 정산" for pt in tgt["parts"]):
             laws += [P()["settlement"]["law"], P()["wage_claim"]["law"]]
-        return {"사실": "; ".join(f"{pt['name']}: {pt['text']}" + (f" ({overview.NAME[pt['status']]})" if pt["status"] else "")
+        return {"사실": "; ".join(f"{pt['name']}: {overview._text(pt)}" + (f" ({overview.NAME[pt['status']]})" if pt["status"] else "")
                                  for pt in tgt["parts"]),
                 "코드가 정리한 결과": overview.NAME[tgt["rule_status"]],
                 "관련 조항": list(dict.fromkeys(laws or [P()["written_terms"]["law"]]))[:8],
