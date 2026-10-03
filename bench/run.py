@@ -228,6 +228,10 @@ def version_problems(spec: dict) -> list[str]:
         if have is None or Version(have) < Version(need):
             out.append(f"{pkg} {have or '없음'} < 필요 {need} "
                        f"(설치: uv pip install --python {BASE}/venv/bin/python \"{pkg}>={need}\")")
+    for pkg, limit in (spec.get("requires_below") or {}).items():  # 이 버전부터는 vLLM 모델 코드와 맞지 않음
+        have = installed(pkg)
+        if have is not None and Version(have) >= Version(limit):
+            out.append(f"{pkg} {have} >= {limit}: {spec.get('requires_below_note', '이 버전부터 맞지 않아요')}")
     return out
 
 

@@ -48,7 +48,7 @@
 
 ## 모델마다 다른 점에 대한 대비
 `models.json`에 모델마다 공식 문서(vLLM 레시피, 모델 회사 GitHub)에서 확인한 값과 그 주소(`docs`)를 적었다. 실행할 때는 다음 순서로 확인하고 고친다.
-1. 버전: GPU 서버의 vLLM 가상환경에 있는 vllm, transformers, mistral_common이 공식 문서의 최소 버전(`requires`)보다 낮으면 설치 명령을 남기고 건너뛴다. 그래도 돌리려면 `--ignore-versions`.
+1. 버전: GPU 서버의 vLLM 가상환경에 있는 vllm, transformers, mistral_common이 공식 문서의 최소 버전(`requires`)보다 낮거나, 맞지 않는 것으로 확인된 버전(`requires_below`, 예: Mistral은 transformers 5.17.0부터 vLLM 0.30.0에서 켜지지 않음) 이상이면 이유를 남기고 건너뛴다. 그래도 돌리려면 `--ignore-versions`.
 2. 문서: 모델의 README, generation_config.json, 대화 틀을 결과 폴더 `docs/<key>/`에 남기고, README의 vllm serve 예시(파서), 권장 생성 설정 줄, 대화 틀의 생각 끄기 이름을 비교표에 적는다.
 3. 대화 틀: Gemma 4, Llama 4처럼 vLLM이 주는 도구 호출용 대화 틀이 필요한 모델은 설치된 vLLM 버전의 GitHub 파일을 받아 `--chat-template`로 쓴다.
 4. 켜기: 도구 파서 후보(`tool_parsers`)를 차례로 쓴다. 켜지지 않으면 vLLM 로그의 오류 문장을 보고 고칠 수 있는 오류(Mamba 칸 부족 → `--max-num-seqs`, KV 캐시 부족 → `--max-model-len`)는 옵션을 고쳐 같은 파서로 다시 켜고, 파서 오류면 다음 후보로, 그 밖의 오류는 멈춘다. 자동 점검에서 도구 호출을 못 읽으면 답 속 호출 모양(GLM `<arg_key>`, Qwen `<function=`, Mistral `[TOOL_CALLS]`, Hermes `<tool_call>{`)으로 맞는 파서를 찾아 후보에 더한다.

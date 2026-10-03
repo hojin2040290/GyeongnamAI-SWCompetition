@@ -58,3 +58,15 @@ def test_pin_differences(monkeypatch):
     monkeypatch.setattr(run, "installed", lambda pkg: have.get(pkg))
     diffs = run.pin_differences({"transformers": "5.16.1", "torch": "2.13.0+cu130", "mistral-common": "1.11.6"})
     assert len(diffs) == 1 and diffs[0].startswith("transformers 5.18.0") and 'transformers==5.16.1' in diffs[0]
+
+
+def test_requires_below_skips_incompatible(monkeypatch):
+    """vLLM 0.30.0 + transformers 5.17.0 이상에서는 Mistral(Pixtral)이 켜지지 않아 건너뛴다 (GPU 서버에서 확인)."""
+    import json
+    spec = next(m for m in json.loads((Path(run.ROOT) / "bench" / "models.json").read_text(encoding="utf-8"))["models"]
+                if m["key"] == "mistral_small4_fp8")
+    monkeypatch.setattr(run, "installed", lambda pkg: {"vllm": "0.30.0", "transformers": "5.18.0", "mistral_common": "1.12.0"}.get(pkg))
+    probs = run.version_problems(spec)
+    assert len(probs) == 1 and probs[0].startswith("transformers 5.18.0 >= 5.17.0")
+    monkeypatch.setattr(run, "installed", lambda pkg: {"vllm": "0.30.0", "transformers": "5.16.1", "mistral_common": "1.11.6"}.get(pkg))
+    assert run.version_problems(spec) == []
