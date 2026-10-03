@@ -592,19 +592,31 @@ async function checkAfterSave(box, run){
   try{ return await agent(box, run); }
   catch(e){ toast(`저장은 됐어요. 점검은 끝내지 못했어요: ${e.message}`); return null; }
 }
+// 화면이 알아서 연 점검(홈을 열 때 종합 점검, AI가 생긴 뒤 다시 점검)은 화면을 옮기지 않는다
+let autoDepth=0;
+function autoRun(fn){ autoDepth++; try{ return fn(); }finally{ autoDepth--; } }
+// 사용자가 직접 화면을 움직이면(손가락, 휠, 키) 그 실행이 끝날 때까지 진행 칸을 따라가지 않는다
+const HAND=['wheel','touchstart','keydown','mousedown'];
 async function agent(box, run){
-  const el=$(box); let last=0, stop=false;
-  try{ last=(await api('GET','/api/agent/last')).id; }catch(e){}
+  const el=$(box); let last=0, stop=false, follow=!autoDepth;
+  const hands=e=>{ if(e.type!=='keydown' || /Arrow|Page|Home|End|^ $/.test(e.key)) follow=false; };
+  if(follow) HAND.forEach(t=>addEventListener(t,hands,{passive:true}));
   el.innerHTML='<div class="live"><p class="wait-note live-head">에이전트가 일하는 중이에요</p><div class="live-steps"></div></div>';
-  reveal(el.querySelector('.live'));  // 누른 버튼 아래 진행 칸이 가려져 있으면 보이는 곳까지 옮긴다 (끝날 때까지 이 화면에 머문다)
+  const mine=el.querySelector('.live'), ours=()=>el.contains(mine);  // 다른 일하는 곳으로 바꿔 칸이 비워졌으면 이 실행의 칸이 아니다
+  mine.dataset.job=state.current;
+  if(follow) reveal(mine);  // 누른 버튼 아래 진행 칸이 가려져 있으면 보이는 곳까지 옮긴다 (끝날 때까지 이 화면에 머문다)
+  try{ last=(await api('GET','/api/agent/last')).id; }catch(e){}
   (async()=>{ while(!stop){
     try{ const rows=await api('GET',`/api/agent/live?after=${last}`);
-      if(rows.length && !stop){ last=rows[rows.length-1].id;
-        el.querySelector('.live-steps')?.insertAdjacentHTML('beforeend',rows.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail.slice(0,120))}</div>`).join(''));
-        reveal(el.querySelector('.live')); } }catch(e){}  // 단계가 늘어 칸이 커지면 다시 보이게 (맨 아래에 있던 칸도)
+      const steps=ours()?mine.querySelector('.live-steps'):null;
+      if(rows.length && !stop && steps){ last=rows[rows.length-1].id;
+        steps.insertAdjacentHTML('beforeend',rows.map(t=>`<div class="log"><b>${esc(t.step)}</b> ${esc(t.detail.slice(0,120))}</div>`).join(''));
+        steps.scrollTop=steps.scrollHeight;  // 칸 높이는 그대로, 칸 안에서 최근 단계가 보이게
+        steps.classList.toggle('cut',steps.scrollTop>0);  // 위로 밀린 단계가 있으면 윗줄을 흐리게 (잘린 글자가 보이지 않게)
+        if(follow) reveal(mine); } }catch(e){}
     await new Promise(r=>setTimeout(r,700)); } })();
   longDepth++;
-  try{ return await run(); }catch(e){ el.innerHTML=''; throw e; }finally{ stop=true; longDepth--; }
+  try{ return await run(); }catch(e){ if(ours()) el.innerHTML=''; throw e; }finally{ stop=true; longDepth--; HAND.forEach(t=>removeEventListener(t,hands)); }
 }
 function stepHTML(t){ return `<div class="log${/^AI (판단|끝냄)/.test(t.step)?' log-ai':''}"><b>${esc(t.step)}</b> ${esc(t.detail)}</div>`; }
 function traceHTML(trace, at){
@@ -733,7 +745,9 @@ async function loadHome(){
 // 아직 없거나 AI 판단 대기면 AI가 있을 때 한 번 바로 점검한다. 그 뒤로는 버튼과 매일 자동 점검으로 새로 한다
 async function loadOverview(){
   const jobId=state.current;
-  const o=await api('GET',`/api/jobs/${jobId}/overview`); if(jobId!==state.current || $('#ovLive .live')) return;
+  const o=await api('GET',`/api/jobs/${jobId}/overview`); if(jobId!==state.current) return;
+  const running=$('#ovLive .live'); if(running && +running.dataset.job===jobId) return;
+  if(running) $('#ovLive').innerHTML='';  // 다른 일하는 곳의 진행 칸 (그 점검은 서버에서 그대로 끝난다)
   const v=o.overview;
   $('#ovTag').className='tag '+(v?v.status:'none'); $('#ovTag').textContent=v?LABEL[v.status]:'아직 안 함';
   $('#ovParts').innerHTML=o.parts.map(p=>`<li><span class="ov-name">${esc(p.name)}</span><span class="ov-text">${esc(p.text)}${p.wait?`${p.text?' ':''}<span class="wait-note">${esc(p.wait)}</span>`:''}</span>${
@@ -744,11 +758,13 @@ async function loadOverview(){
   if(o.need) rejudgeOnce(`overview-${jobId}-${v?.at||'new'}`, runOverview);
 }
 async function runOverview(){
+  const jobId=state.current;
   $('#ovTag').className='tag pending'; $('#ovTag').textContent=JUDGING;
   $('#ovAi').innerHTML=`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">${JUDGING}</span></p></div>`;
-  try{ const r=await agent('#ovLive',()=>api('POST',`/api/jobs/${state.current}/agent/overview`));
+  try{ const r=await agent('#ovLive',()=>api('POST',`/api/jobs/${jobId}/agent/overview`));
+    if(jobId!==state.current) return;  // 그사이 다른 일하는 곳으로 바꿨으면 그곳 카드를 덮지 않는다
     $('#ovLive').innerHTML=traceHTML(r.trace, r.trace_at);
-  }catch(e){ toast(e.message); }
+  }catch(e){ if(jobId!==state.current) return; toast(e.message); }
   await loadOverview(); await loadAsk(); await loadCase(); await loadAlerts();
 }
 $('#ovRun').onclick=runOverview;
@@ -934,7 +950,7 @@ async function renderQuit(){
 }
 // 판단 대기인 결과가 보이면 (기록이 바뀌었거나 AI가 없던 때 저장됨) AI가 있을 때 한 번 다시 점검한다 (기다려도 바뀌지 않으므로)
 const rejudged=new Set();
-function rejudgeOnce(key, run){ if(rejudged.has(key)) return; rejudged.add(key); run(); }
+function rejudgeOnce(key, run){ if(rejudged.has(key)) return; rejudged.add(key); autoRun(run); }
 function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date||''; $('#quitDateMain').min=j.start_date||''; $('#quitForm').classList.remove('hidden'); $('#quitOpen').classList.add('hidden'); refreshNav(); }
 function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen').classList.toggle('hidden',curJob().status==='quit'); refreshNav(); }
 $('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
@@ -1056,7 +1072,7 @@ async function loadCheck(){
   $('#lawStatus').textContent=ls.built?`법 기준표: 법제처 현행 법령 ${Object.keys(ls.laws).length}개, 조문 ${Object.values(ls.laws).reduce((a,b)=>a+b,0)}개, 참고 판례·해석 ${ls.refs}건.${mw}`
     :'법 기준표 미구축: 법제처 API 키를 등록하고 조문을 불러오면 결과마다 조문 원문이 붙어요.';
   await loadLog();
-  if(stale) recheck(jobId);
+  if(stale) autoRun(()=>recheck(jobId));
 }
 // AI가 없던 때 저장된 'AI 응답 대기 중' 결과: 지금 AI가 있으면 화면을 열 때 한 번 다시 점검한다 (기다려도 바뀌지 않으므로)
 const rechecked=new Set();
