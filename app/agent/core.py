@@ -443,7 +443,7 @@ def run_guard_preserve(session: Session, user_id: int, job_id: int, url: str, ti
     return r.done({**res, "classify": judged}, "주소, 확인 시각" + (", 화면 캡처" if res["captured"] else "") + " 보존")
 
 
-# ---------- 매일 종합 조언 ----------
+# ---------- 종합 조언 (예전 매일 점검용. 지금 매일 점검은 run_overview로 종합 판단과 조언을 함께 한다) ----------
 ADVICE_TOOLS = ["get_profile", "get_contract", "get_saved_checks", "calc_work_days", "settlement", "list_evidence",
                 "list_posts", "get_answers", "counsel_for_age", "get_article", "find_refs"]
 
@@ -589,10 +589,10 @@ def daily_notice(session: Session, user_id: int, job_id: int, ran: list[str], ad
     if advised and adv:
         lines.append(f"에이전트 조언: {adv.text}")
     elif not client.available():
-        lines.append(f"종합 조언은 {AI_WAITING}이에요.")
+        lines.append(f"종합 점검은 {AI_WAITING}이에요.")
     else:
-        lines.append("지난 조언 뒤로 달라진 기록이 없어 새 조언은 없어요.")
-    lines.append("자세한 결과는 홈의 AI 에이전트 진행 상황에서 볼 수 있어요.")
+        lines.append("지난 종합 점검 뒤로 달라진 기록이 없어 새 조언은 없어요.")
+    lines.append("자세한 결과는 홈의 AI 에이전트 종합 점검에서 볼 수 있어요.")
     return t["notify"](f"오늘 자동 점검 ({today.month}월 {today.day}일)", " ".join(lines))
 
 

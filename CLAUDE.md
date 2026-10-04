@@ -24,16 +24,23 @@ app/
   agent/core.py      상황별 목표와 도구, AI 응답이 없을 때의 정해 둔 순서
   agent/tools.py     에이전트가 호출하는 도구 (user_id는 코드가 고정)
   agent/argcheck.py  AI가 낸 도구 입력 검사
-  agent/safety.py    프롬프트 인젝션 대비 (특수 토큰 제거, AI 글의 링크와 전화번호 검사)
+  agent/safety.py    프롬프트 인젝션 대비 (특수 토큰 제거, AI 글의 링크, 전화번호, 한자, 서버 내부 이름 검사)
+  agent/rewrite.py   돌려보낼 수 없는 AI 글을 LLM이 한 번 더 고쳐 쓰기 (내부 이름이 섞였을 때)
+  agent/legacy.py    예전에 저장된 AI 글 정리 (다시 맡기기 작업이 함께 함)
+  agent/overview.py  홈의 AI 에이전트 종합 점검: 사업장의 모든 기록을 코드가 한 줄씩 정리
   agent/case.py      진행 상황, 메모, 질문과 답, 예약한 확인
   judge/engine.py    법 기준 대조와 검증 장치
   llm/client.py      모델 호출 (주소와 모델명은 .env에서 읽기)
   llm/fake.py        가짜 AI (실제 모델 설정이 없으면 기본으로 답함, 시험용)
+  llm/probe.py       vLLM이 도구 호출을 받는지 확인 (python -m app.llm.probe)
   law/               법제처 API 조회, 법 기준표 구축
   calc/              시간, 임금, 만 나이 계산
   input_rules.py     입력 칸마다 쓸 수 있는 글자 (화면, 서버, 사진 읽기 공용)
   long_task.py       오래 걸리는 AI 요청을 뒤에서 실행 (cloudflared 100초 대비, 화면은 /api/tasks로 결과를 물음)
-  guard.py, report.py, scheduler.py, storage.py, evidence_check.py, login_guard.py
+  notices.py         알림 보내기 (종류별로 최신 것만)
+  ocr.py             계약서, 급여명세서 사진 읽기 (AI)
+  demo_db.py         시험 데이터 (test@example.com, test2~test5@example.com / test1234)
+  auth.py, guard.py, report.py, scheduler.py, storage.py, evidence_check.py, login_guard.py
   db.py, models.py   SQLite 연결과 테이블
 web/templates, web/static   화면
 data/law_params.json 법 기준값과 출처
@@ -43,6 +50,8 @@ tests/               계산 함수와 판단 흐름 테스트 (tests/fake_agent.
   ui/                화면 회귀 시험 (Playwright, run_all.sh)
 docs/sources.md      출처와 AI 활용 기록 (대회 별지2 작성용)
 docs/실행가이드.md    실행 명령과 인자, .env 설정값, 자주 겪은 문제
+deploy/              GPU 서버의 vLLM 켜기와 끄기 (start_vllm.sh, stop_vllm.sh)
+bench/               모델 후보 비교 실험 (Qwen3.8-27B 선정 근거)
 ```
 
 ## 에이전트 구조
