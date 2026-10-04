@@ -40,6 +40,7 @@ app/
   notices.py         알림 보내기 (종류별로 최신 것만)
   ocr.py             계약서, 급여명세서 사진 읽기 (AI)
   demo_db.py         시험 데이터 (test@example.com, test2~test5@example.com / test1234)
+  beta.py            베타 테스트 체험판 (BETA_GUIDE=true일 때만): 상황별 계정 beta1~9·owner1~3, 미션 판정, 테스트 자료
   auth.py, guard.py, report.py, scheduler.py, storage.py, evidence_check.py, login_guard.py
   db.py, models.py   SQLite 연결과 테이블
 web/templates, web/static   화면

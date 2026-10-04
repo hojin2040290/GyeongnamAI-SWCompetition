@@ -23,6 +23,7 @@ from app.long_task import LongTaskMiddleware
 from sqlmodel import Session, select
 from app.models import LawArticle, User
 from app.routers.api import router as api_router
+from app.beta import router as beta_router
 
 
 def code_version() -> str:
@@ -84,6 +85,24 @@ def refresh_laws_on_start(log: logging.Logger) -> None:
     log.info("법 기준표: 조문 %d개", n) if n else log.warning("법 기준표가 비어 있어요 (조문 0개)")
 
 
+def prepare_beta_accounts(log: logging.Logger) -> None:
+    """BETA_GUIDE=true면 상황별 베타 계정(beta1~9, owner1~3)이 모자랄 때 만든다 (있던 계정과 기록은 그대로)."""
+    import os
+    if not config.BETA_GUIDE or os.environ.get("BETA_BUILDING"):
+        return
+    from app.beta import missing_accounts
+    todo = missing_accounts(config.DB_PATH)
+    if not todo:
+        log.info("베타 테스트 체험판으로 실행 중이에요 (BETA_GUIDE=true). 베타 계정은 이미 있어요")
+        return
+    log.info("베타 계정 %d개를 만들어요 (python -m app.beta와 같음)", len(todo))
+    out = subprocess.run([sys.executable, "-m", "app.beta"], cwd=BASE_DIR, capture_output=True, text=True, timeout=600)
+    if out.returncode == 0:
+        log.info("베타 계정을 만들었어요: beta1~9@example.com, owner1~3@example.com / test1234")
+    else:
+        log.error("베타 계정을 만들지 못했어요: %s", (out.stderr or out.stdout)[-500:])
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log = logging.getLogger("uvicorn.error")
@@ -96,6 +115,7 @@ async def lifespan(app: FastAPI):
         log.warning("가짜 AI(시험용)가 답해요. AI가 쓰는 글은 모두 '테스트 답변입니다 (...)'예요. "
                     "실제 모델을 쓰려면 .env에 LLM_ENABLED=true와 LLM_MODEL을 넣으세요")
     init_db()
+    prepare_beta_accounts(log)
     refresh_laws_on_start(log)
     with Session(engine) as s:
         notices.tidy(s)  # 예전 알림 정리 (같은 종류는 최근 것만, 오래전에 읽은 알림은 지움)
@@ -112,6 +132,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "web" / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "web" / "templates")
 app.include_router(api_router)
+app.include_router(beta_router)
 
 
 FIELD_NAMES = {"wage": "시급", "payday": "월급날", "probation_months": "수습 개월", "amount": "받은 금액",

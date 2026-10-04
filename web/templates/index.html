@@ -15,6 +15,8 @@
 <section class="onboard hidden" id="onboard" aria-label="처음 설정">
   <div class="wrap">
 
+    <!-- 베타 테스트 체험판 (BETA_GUIDE=true일 때만 보임): 맨 처음 화면의 스마트폰 안내 -->
+    <div class="beta-top hidden" id="betaTop"><b>베타 테스트 체험판</b>스마트폰으로 접속해 주세요. 받은 아이디(beta…@example.com)로 로그인하면 해 볼 미션이 나와요.</div>
     <div id="ob0" class="hidden">
       <div class="brand-lg">알바지킴이</div>
       <h1>지금 어떤 상황인가요</h1>
@@ -453,6 +455,44 @@
   </article>
 </template>
 
+<!-- 베타 테스트 체험판 (BETA_GUIDE=true일 때만 보임) -->
+<div class="beta-layer hidden" id="betaIntro" role="dialog" aria-modal="true" aria-labelledby="betaIntroTitle">
+  <div class="beta-card">
+    <p class="beta-eyebrow">베타 테스트 체험판</p>
+    <h2 id="betaIntroTitle">알바지킴이에 오신 걸 환영해요</h2>
+    <p class="beta-phone">스마트폰으로 써 주세요. 화면이 휴대폰에 맞춰져 있어요.</p>
+    <p>알바지킴이는 근로계약서, 근무 기록, 급여를 AI 에이전트가 스스로 점검하고, 문제가 있으면 상담 준비까지 돕는 앱이에요.</p>
+    <div class="beta-story"><b id="betaIntroPersona"></b><span id="betaIntroStory"></span></div>
+    <p>아래 미션 3개를 해 보세요. 자료를 올릴 때는 실제 자료 대신 가상 자료를 보여 드려요.</p>
+    <ol class="beta-list" id="betaIntroList"></ol>
+    <button class="btn block" id="betaIntroGo">미션 시작하기</button>
+  </div>
+</div>
+<button class="beta-chip hidden" id="betaChip" type="button"></button>
+<div class="beta-layer beta-sheet hidden" id="betaSheet" role="dialog" aria-modal="true" aria-labelledby="betaSheetTitle">
+  <div class="beta-card">
+    <div class="beta-head"><h2 id="betaSheetTitle">베타 미션</h2><button class="beta-x" id="betaSheetX" type="button" aria-label="닫기">×</button></div>
+    <p class="beta-sub" id="betaSheetStory"></p>
+    <ul class="beta-missions" id="betaMissions"></ul>
+    <button class="btn block hidden" id="betaSheetForm" type="button">설문하러 가기</button>
+  </div>
+</div>
+<div class="beta-layer hidden" id="betaDone" role="dialog" aria-modal="true" aria-labelledby="betaDoneTitle">
+  <div class="beta-card">
+    <div class="beta-head"><h2 id="betaDoneTitle">미션 3개를 모두 했어요</h2><button class="beta-x" id="betaDoneX" type="button" aria-label="닫기">×</button></div>
+    <p>체험해 주셔서 고마워요. 다른 기능을 더 써 보셔도 되고, 지금 설문에 답하셔도 돼요. 설문은 아래 '미션' 버튼에서 언제든 열 수 있어요.</p>
+    <button class="btn ghost block" id="betaKeep" type="button">계속 체험해보고 싶어요</button>
+    <button class="btn block" id="betaForm" type="button" style="margin-top:8px">설문할래요</button>
+  </div>
+</div>
+<div class="beta-layer beta-sheet hidden" id="betaFiles" role="dialog" aria-modal="true" aria-labelledby="betaFilesTitle">
+  <div class="beta-card">
+    <div class="beta-head"><h2 id="betaFilesTitle">테스트 자료 올리기</h2><button class="beta-x" id="betaFilesX" type="button" aria-label="닫기">×</button></div>
+    <p class="beta-sub">실제 자료 대신 이 가상 자료를 올려 주세요.</p>
+    <div class="beta-files" id="betaFileList"></div>
+    <button class="link" id="betaOwnFile" type="button">내 기기에서 직접 고르기</button>
+  </div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="/static/app.js?v={{ ver }}"></script>
 </body>

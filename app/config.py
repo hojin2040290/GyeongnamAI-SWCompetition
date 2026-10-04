@@ -106,6 +106,11 @@ OPEN_RECORD_ALERT_HOURS = int(os.getenv("OPEN_RECORD_ALERT_HOURS", "16"))  # 퇴
 AI_RETRY_MIN = int(os.getenv("AI_RETRY_MIN", "10"))
 AI_RETRY_PER_DAY = int(os.getenv("AI_RETRY_PER_DAY", "3"))
 
+# 베타 테스트 체험판 (true일 때만): 상황별 베타 계정, 첫 화면 안내, 미션 카드, 업로드할 때 테스트 자료 고르기, 미션을 마치면 설문 안내.
+# false면 이 기능은 아무것도 보이지 않고 계정도 만들지 않는다 (지금 화면 그대로)
+BETA_GUIDE = os.getenv("BETA_GUIDE", "false").strip().lower() == "true"
+BETA_FORM_URL = os.getenv("BETA_FORM_URL", "https://forms.gle/ed7572w7YeVWUfWC7").strip()
+
 # 시연용 기능 (true일 때만 /api/dev/daily-check가 열림. 외부에 여는 서버에서는 false로 둔다)
 DEV_TOOLS = os.getenv("DEV_TOOLS", "false").lower() == "true"
 
