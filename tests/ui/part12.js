@@ -83,7 +83,7 @@ const finish = async (p, box) => { await until(p, b=>!!document.querySelector(b+
   ck('[퇴직 정산] 종합 점검 카드 안의 한 줄 (카드가 따로 없음)', !!(await p.$('#ovPanel #quitPanel:not(.hidden)')));
   ck('[퇴직 정산] 종합 점검 사실 목록에 퇴직 정산 줄이 두 번 나오지 않음', !(await p.textContent('#ovParts')).includes('퇴직 후 임금 정산'));
   ck('[퇴직 정산] AI 판단과 동작 보기는 종합 점검 것 하나 (퇴직 정산 판단은 펼칠 때만)',
-     !(await p.isVisible('#quitAi')) && !(await p.textContent('#quitLive')).includes('에이전트 동작 보기') && (await p.$$('#ovPanel > #ovAi .ai-judge')).length<=1);
+     !(await p.isVisible('#quitAi')) && !(await p.textContent('#quitLive')).includes('에이전트 동작 보기') && (await p.$$('#ovPanel #ovAi .ai-judge')).length<=1);
   // 남은 임금 받았어요: 다시 판단하고, 받았다는 기록이 위반 의심으로 바뀌지 않음
   // 받았는지 묻는 퇴직 정산 질문이 열려 있는 상태 (예전 코드가 만든 질문)
   execSync(`python3 -c "import sqlite3; c=sqlite3.connect('${process.env.DB}'); c.execute(\\"insert into agentquestion (user_id,job_id,event,run_id,question,options_json,why,law,answer,status,context_json,created_at) select user_id,id,'quit_check','','테스트 답변입니다 (임금을 받았나요)','[]','테스트 답변입니다 (기한 확인)','','','open','{}',datetime('now') from job where name='QA 가상판단'\\"); c.commit()"`);

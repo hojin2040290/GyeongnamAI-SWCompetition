@@ -756,10 +756,11 @@ async function loadOverview(){
   const running=$('#ovLive .live'); if(running && +running.dataset.job===jobId) return;
   if(running) $('#ovLive').innerHTML='';  // 다른 일하는 곳의 진행 칸 (그 점검은 서버에서 그대로 끝난다)
   const v=o.overview;
-  $('#ovTag').className='tag '+(v?v.status:'none'); $('#ovTag').textContent=v?LABEL[v.status]:'아직 안 함';
-  const quit=curJob()?.status==='quit';  // 그만둔 곳: 퇴직 정산 줄은 아래 #quitPanel이 버튼과 함께 보여 준다 (두 번 나오지 않게)
-  $('#ovParts').innerHTML=o.parts.filter(p=>!(quit && p.name==='퇴직 후 임금 정산')).map(p=>`<li><span class="ov-name">${esc(p.name)}</span><span class="ov-text">${esc(p.text)}${p.wait?`${p.text?' ':''}<span class="wait-note">${esc(p.wait)}</span>`:''}</span>${
-    p.status?`<span class="tag ${p.status}">${LABEL[p.status]}</span>`:p.todo?'<span class="tag none">아직 안 함</span>':''}</li>`).join('');
+  ovStatus(v?v.status:'none', v?LABEL[v.status]:'아직 안 함');
+  ovSummary(o.parts);
+  const quit=curJob()?.status==='quit';  // 그만둔 곳: 퇴직 정산 줄은 위 #quitPanel이 버튼과 함께 보여 준다 (두 번 나오지 않게)
+  $('#ovParts').innerHTML=o.parts.filter(p=>!(quit && p.name==='퇴직 후 임금 정산')).map(ovRowHTML).join('');
+  $('#ovAiWrap').open=!v || v.status==='pending';  // 판단이 없거나 기다리는 중이면 펼쳐 둔다 (대기 표시가 가려지지 않게)
   $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
   $('#ovNote').textContent=v?`${fmtDT(v.at)} 점검${o.changed?' · 그 뒤로 기록이 바뀌었어요. 다시 점검해 보세요':''}`:'';
   if(!$('#ovLive').innerHTML) lastTrace('#ovLive','overview');
@@ -767,7 +768,7 @@ async function loadOverview(){
 }
 async function runOverview(){
   const jobId=state.current;
-  $('#ovTag').className='tag pending'; $('#ovTag').textContent=JUDGING;
+  ovStatus('pending', JUDGING);
   $('#ovAi').innerHTML=`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">${JUDGING}</span></p></div>`;
   try{ const r=await agent('#ovLive',()=>api('POST',`/api/jobs/${jobId}/agent/overview`));
     if(jobId!==state.current) return;  // 그사이 다른 일하는 곳으로 바꿨으면 그곳 카드를 덮지 않는다
@@ -776,6 +777,30 @@ async function runOverview(){
   await loadOverview(); await loadAsk(); await loadCase(); await loadAlerts();
 }
 $('#ovRun').onclick=runOverview;
+// 종합 점검 머리줄: 결과 색의 점과 결과 이름 (판단 중이면 도는 표시)
+function ovStatus(status, text){ $('#ovHead').className='ov-head '+status; $('#ovTag').className='tag '+status; $('#ovTag').textContent=text; }
+// 한 줄 결론과 남은 항목: 코드가 항목의 결과를 센다 (AI 판단 글은 아래 'AI 에이전트 판단 보기'에)
+function ovSummary(parts){
+  const of=s=>parts.filter(p=>p.status===s), bad=of('bad'), warn=[...of('warn'),...of('pending')], todo=parts.filter(p=>p.todo);
+  const n=warn.length+todo.length;
+  $('#ovHeadline').textContent=bad.length?`위반이 의심되는 것이 ${bad.length}개 있어요`
+    :n?`확인할 것이 ${n}개 있어요`:'지금은 확인할 것이 없어요';
+  const names=list=>list.map(p=>p.name).join(', ');
+  $('#ovSummary').textContent=[bad.length&&`위반 의심: ${names(bad)}`, warn.length&&`확인 필요: ${names(warn)}`,
+    todo.length&&`아직 안 한 점검: ${names(todo)}`].filter(Boolean).join(' · ');
+}
+// 기록 한 줄: 이름(과 짧은 설명), 오른쪽에 결과나 값. 누르면 그 기록이 있는 화면으로
+function ovRowHTML(p){
+  const wait=p.wait?`<span class="wait-note">${esc(p.wait)}</span>`:'';
+  const right=p.status?`<span class="tag ${p.status}">${LABEL[p.status]}</span>`:p.todo?'<span class="ov-val muted">아직 안 함</span>':`<span class="ov-val">${esc(p.text)}</span>`;
+  const sub=(p.status&&p.text)||wait?`<span class="ov-text">${p.status?esc(p.text):''}${p.status&&p.text&&wait?' ':''}${wait}</span>`:'';
+  const go=p.tab||(p.name==='근무 기록'?'records':p.name==='답을 기다리는 질문'?'ask':p.name==='퇴근 안 누른 기록'?'records':'');
+  return `<li><button type="button" class="ov-row" ${go?`data-go="${go}"`:'disabled'}><span class="ov-main"><span class="ov-name">${esc(p.name)}</span>${sub}</span>${right}${go?'<svg class="ov-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>':''}</button></li>`;
+}
+$('#ovParts').addEventListener('click',e=>{ const b=e.target.closest('[data-go]'); if(!b) return; const g=b.dataset.go;
+  if(g==='records') $('.job-card').scrollIntoView({behavior:'smooth',block:'start'});
+  else if(g==='ask') $('#askCard').scrollIntoView({behavior:'smooth',block:'start'});
+  else showTab(g); });
 // 에이전트의 질문: 답하면 질문했던 점검을 에이전트가 다시 판단한다
 const RESUME_TAB={contract_check:'check',payday:'pay',report:'docs',guard_review:'guard'};
 async function loadAsk(){
@@ -900,8 +925,13 @@ async function refreshRecords(updateState=true){
   } else box.classList.add('hidden');
   renderRecords(r.records);
 }
+const REC_SHOW=5;  // 홈에는 최근 근무 기록 5개만 보이고, 나머지는 '모두 보기'로 펼친다 (기록은 모두 그대로)
 function renderRecords(recs){
   $('#recordsEmpty').classList.toggle('hidden',recs.length>0); $('#recordsPanel').classList.toggle('hidden',!recs.length);
+  const more=$('#recMore'); more.classList.toggle('hidden',recs.length<=REC_SHOW);
+  if(state.recFor!==state.current){ state.recFor=state.current; state.recAll=false; }
+  more.textContent=state.recAll?'접기':`근무 기록 모두 보기 (${recs.length}건)`;
+  $('#records').classList.toggle('show-all',!!state.recAll);
   $('#records').innerHTML=recs.map(x=>{
     // 출퇴근은 증거라 초까지. 밤을 넘겨 퇴근하면 퇴근 날짜도 적는다
     const outDay=x.clock_out&&x.clock_out.slice(0,10)!==x.clock_in.slice(0,10)?fmtDay(x.clock_out,{wd:false})+' ':'';
@@ -914,6 +944,8 @@ function renderRecords(recs){
       <div class="sub num rec-time">${when}</div>${note}</div>${side}</li>`;
   }).join('');
 }
+$('#recMore').onclick=()=>{ state.recAll=!state.recAll; $('#records').classList.toggle('show-all',state.recAll);
+  $('#recMore').textContent=state.recAll?'접기':`근무 기록 모두 보기 (${$$('#records > li').length}건)`; };
 // 실수 표시: 기록은 지우지 않고 표시만 한다
 async function voidRecord(id){
   const reason=prompt('실수로 누른 기록으로 표시할까요? 시각은 그대로 남고 급여 계산과 점검에서만 빠져요.\n이유를 적어 주세요 (예: 일 안 하는 날 잘못 누름)','실수로 누름');

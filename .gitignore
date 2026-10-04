@@ -234,3 +234,6 @@ tests/ui/package-lock.json
 data/test*/
 data/bench_*/
 bench/results/
+
+# 기기 화면 캡처용 글꼴 (tests/ui/fetch_fonts.sh가 받음)
+tests/ui/.fonts/
