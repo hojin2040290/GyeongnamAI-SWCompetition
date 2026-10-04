@@ -121,7 +121,7 @@ async function api(method, url, body, isForm){
 function show(id){
   if(id==='ob2') setTimeout(betaJobFillSync,0);  // 베타 체험판: 등록 화면 위에 계약서 사진으로 채우기 (꺼져 있으면 아무것도 안 함)
   ['ob0','ob1','obLogin','obSeek','ob2','obMe'].forEach(x=>$('#'+x).classList.toggle('hidden', x!==id));
-  state.curOb=id; if(id==='ob0') startScreen(); if(id==='ob1') prepBasic(); window.scrollTo(0,0); refreshNav();
+  state.curOb=id; betaTopSync(); if(id==='ob0') startScreen(); if(id==='ob1') prepBasic(); window.scrollTo(0,0); refreshNav();
 }
 function openOverlay(id){ $('#onboard').classList.remove('hidden'); show(id); }
 function closeOverlay(){ $('#onboard').classList.add('hidden'); state.curOb=null; refreshNav(); }
@@ -1234,8 +1234,10 @@ $('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>a
 const beta={on:false, st:null, doneShown:false, timer:null, input:null, bypass:false};
 async function betaConfig(){
   try{ const r=await fetch('/api/beta/config'); beta.on=r.ok && !!(await r.json()).on; }catch(e){ beta.on=false; }
-  $('#betaTop').classList.toggle('hidden', !beta.on);
+  betaTopSync();
 }
+// 맨 위 '로그인하면 미션이 나와요' 안내는 로그인하기 전에만 (로그인한 뒤에는 미션 버튼과 첫 안내 창이 대신한다)
+function betaTopSync(){ $('#betaTop').classList.toggle('hidden', !beta.on || !!state.me); }
 function betaSoon(){ if(!beta.on) return; clearTimeout(beta.timer); beta.timer=setTimeout(betaRefresh, 700); }
 async function betaRefresh(){
   if(!beta.on || !state.me) return;
@@ -1252,7 +1254,7 @@ function betaRender(){
   chip.textContent = st.all_done ? '미션 완료 · 설문하기' : `미션 ${st.done_count}/${st.missions.length}`;
   $('#betaSheetStory').textContent=`${st.title}: ${st.story}`;
   $('#betaMissions').innerHTML=st.missions.map((m,i)=>`<li class="${m.done?'done':''}"><span class="beta-check">${m.done?'✓':i+1}</span>
-    <div><b>${esc(m.title)}</b><p>${esc(m.how)}</p>${m.done?'':`<button class="link" type="button" data-beta-go="${esc(m.go)}">바로 가기</button>`}</div></li>`).join('');
+    <div><b>${esc(m.title)}</b><p>${esc(m.how)}</p>${m.done?'':`<button class="link" type="button" data-beta-go="${esc(m.go)}"${m.month?` data-beta-month="${esc(m.month)}"`:''}>바로 가기</button>`}</div></li>`).join('');
   $('#betaSheetForm').classList.toggle('hidden', !st.all_done);
   if(!st.intro_seen && !visible('#betaIntro')) betaIntro();
   if(st.all_done && !st.closed && !beta.doneShown){ beta.doneShown=true; betaOpen('#betaDone'); }
@@ -1266,16 +1268,17 @@ $('#betaIntroGo').onclick=()=>{ betaClose('#betaIntro'); betaMark('intro'); };
 $('#betaChip').onclick=()=>betaOpen('#betaSheet');
 $('#betaSheetX').onclick=()=>betaClose('#betaSheet');
 // 미션의 바로 가기: 그 기능이 있는 화면으로
-function betaGo(v){
+function betaGo(v, month){
   if(v==='seek'){
     if(state.inApp) $('#seekEntry').click(); else { state.mode='seek'; seekReset(); openOverlay('obSeek'); }
     return;
   }
-  if(!state.inApp){ toast('먼저 일할 곳을 등록해 주세요. 시작 화면에서 지금 상황을 고르면 돼요'); openOverlay('ob0'); return; }
+  if(!state.inApp){ toast('먼저 일할 곳을 등록해 주세요. 시작 화면에서 지금 상황을 고르고 다음을 눌러요'); openOverlay('ob0'); return; }
   if(visible('#onboard')) closeOverlay();
+  if(month) $('#payMonth').value=month;  // 급여 미션: 시험 데이터의 근무 기록이 있는 달로 (급여 탭은 비어 있을 때만 이번 달로 채운다)
   showTab(v);
 }
-$('#betaMissions').addEventListener('click',e=>{ const b=e.target.closest('[data-beta-go]'); if(!b) return; betaClose('#betaSheet'); betaGo(b.dataset.betaGo); });
+$('#betaMissions').addEventListener('click',e=>{ const b=e.target.closest('[data-beta-go]'); if(!b) return; betaClose('#betaSheet'); betaGo(b.dataset.betaGo, b.dataset.betaMonth); });
 // 미션을 다 하면: 계속 체험하거나 설문. 닫아도 아래 '미션 완료 · 설문하기' 버튼으로 남는다
 function betaForm(){ if(beta.st?.form_url) window.open(beta.st.form_url, '_blank', 'noopener'); }
 function betaDoneClose(){ betaClose('#betaDone'); betaMark('closed'); }
