@@ -186,13 +186,13 @@ class AgentTask(SQLModel, table=True):
     done_at: Optional[datetime] = None
 
 
-class BetaState(SQLModel, table=True):
-    """베타 테스트 계정의 상황(persona)과 미션 진행 (BETA_GUIDE=true일 때만 쓴다)."""
+class GuideState(SQLModel, table=True):
+    """처음 쓰는 사람 체험 안내 (새로 가입한 계정만): 가입할 때 고른 상황과 미션 진행 (app/guide.py)."""
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    persona: str  # none(알바 안 해 봄), working(하는 중), quit(해 본 적 있음)
-    started_at: datetime  # 이 시각 뒤에 한 일만 미션으로 센다 (미리 넣은 기록은 세지 않음)
-    marks: str = "[]"  # 화면에서만 알 수 있는 일 (intro 안내 봄, trace 동작 보기 엶, closed 완료 창 닫음)
+    mode: str  # seek(구하는 중), work(일하는 중), quit(그만둠)
+    started_at: datetime  # 이 시각 뒤에 한 일만 미션으로 센다
+    marks: str = "[]"  # 화면에서만 알 수 있는 일 (intro 첫 안내 봄, closed 완료 창 닫음, off 안내 끔)
 
 
 class LoginAttempt(SQLModel, table=True):

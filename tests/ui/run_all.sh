@@ -29,6 +29,7 @@ PLAN=(
   "part13 true  3 -            -"
   "part14 true  3 -            -"
   "part15 true  3 -            -"
+  "part16 true  1 FIRST_GUIDE=true -"
 )
 
 run() {  # 결과는 $D/summary.txt에 남기고, 다 끝난 뒤 PLAN 순서대로 출력한다
@@ -40,7 +41,8 @@ run() {  # 결과는 $D/summary.txt에 남기고, 다 끝난 뒤 PLAN 순서대�
     DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=false LLM_FAKE_DELAY=0 \
       PYTHONPATH=. "$PY" "$UI/stale_check.py" > /dev/null 2>&1
   fi
-  env $srv LAW_REFRESH_ON_START=false DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=$fake LLM_ENABLED=false \
+  # 처음 쓰는 사람 체험 안내는 part16에서만 켠다 (안내 창이 다른 파트의 클릭을 가리지 않게. 뒤에 오는 $srv가 이긴다)
+  env FIRST_GUIDE=false $srv LAW_REFRESH_ON_START=false DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=$fake LLM_ENABLED=false \
     LLM_FAKE_DELAY=$delay "$PY" -m uvicorn app.main:app --port "$port" > "$D/server.log" 2>&1 &
   local pid=$!  # 띄운 서버의 프로세스 번호 (끝나면 이 번호로만 끈다)
   for _ in $(seq 1 50); do curl -s -o /dev/null "$BASE/api/version" && break; sleep 0.2; done

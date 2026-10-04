@@ -446,37 +446,39 @@ details.run .log:first-of-type{margin-top:6px}
 .log-tags{display:inline-flex;flex-wrap:wrap;gap:4px;vertical-align:middle}
 .chip.tool{font-size:11.5px;font-weight:600;padding:0 7px;background:#fff;color:var(--blue);border:1px solid #c9d6f5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}  /* AI가 고른 도구 */
 
-/* 베타 테스트 체험판 (BETA_GUIDE=true일 때만 보임): 첫 안내, 미션 버튼과 목록, 완료 창, 테스트 자료 고르기 */
-.beta-top{background:var(--blue-soft);color:var(--blue);border-radius:12px;padding:10px 14px;font-size:13.5px;line-height:1.5;margin:0 auto 14px;max-width:480px;box-sizing:border-box}
-.beta-top b{display:block;font-size:14px}
-.beta-layer{position:fixed;inset:0;z-index:40;background:rgba(24,34,58,.45);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
-.beta-layer.beta-sheet{align-items:flex-end;padding:0}
-.beta-card{background:var(--paper);border-radius:18px;padding:20px;max-width:440px;width:100%;max-height:88vh;overflow:auto;box-sizing:border-box}
-.beta-sheet .beta-card{border-radius:18px 18px 0 0;max-width:480px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
-.beta-card h2{font-size:19px;margin:0 0 8px}
-.beta-card p{font-size:14.5px;line-height:1.6;margin:0 0 10px}
-.beta-card .beta-eyebrow{font-size:12.5px;font-weight:700;color:var(--blue);margin:0 0 4px}
-.beta-card .beta-phone{background:#fff4dc;color:#6b4a00;border-radius:10px;padding:10px 12px;font-weight:600}
-.beta-story{background:var(--bg);border-radius:12px;padding:12px;margin:0 0 10px;font-size:14px;line-height:1.55}
-.beta-story b{display:block;margin-bottom:2px}
-.beta-list{margin:0 0 14px;padding-left:20px;font-size:14.5px;line-height:1.7}
-.beta-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.beta-head h2{margin:0}
-.beta-x{border:0;background:none;font-size:26px;line-height:1;color:var(--ink-soft);cursor:pointer;padding:4px 8px}
-.beta-card .beta-sub{color:var(--ink-soft);font-size:13.5px;margin-top:6px}
-.beta-missions{list-style:none;margin:0 0 12px;padding:0}
-.beta-missions li{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
-.beta-missions li:first-child{border-top:0}
-.beta-missions li p{font-size:13px;color:var(--ink-soft);margin:2px 0 4px}
-.beta-check{flex:none;width:26px;height:26px;border-radius:50%;background:var(--blue-soft);color:var(--blue);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
-.beta-missions li.done .beta-check{background:var(--blue);color:#fff}
-.beta-missions li.done b{color:var(--ink-soft)}
-.beta-chip{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom,0px));z-index:25;border:0;border-radius:999px;background:var(--blue);color:#fff;font-size:14px;font-weight:700;padding:10px 16px;box-shadow:0 4px 14px rgba(24,34,58,.25);cursor:pointer}
-.beta-chip.done{background:var(--ink)}
-.beta-files{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 10px}
-.beta-file{border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px}
-.beta-file img{width:100%;height:140px;object-fit:contain;background:var(--bg);border-radius:8px}
-.beta-card .beta-file p{font-size:13px;margin:0;flex:1}
-.beta-fill{background:var(--blue-soft);border-radius:14px;padding:12px;margin-bottom:12px}
-.beta-fill .beta-fill-title{font-size:13.5px;font-weight:700;color:var(--blue);margin:0 0 8px}
-.beta-fill img{width:100%;max-height:260px;object-fit:contain;background:var(--paper);border-radius:10px;margin-bottom:8px}
+/* 처음 쓰는 사람 체험 안내 (새로 가입한 계정만): 첫 안내, 미션 버튼과 목록, 완료 창, 업로드할 때 내 파일 / 예시 자료.
+   홈과 같은 기준: 흰 카드, 검정 주 버튼, 회색 보조 버튼, 테두리 없이 여백으로 */
+.guide-layer{position:fixed;inset:0;z-index:40;background:rgba(17,24,39,.45);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+.guide-layer.guide-sheet{align-items:flex-end;padding:0}
+.guide-card{background:var(--paper);border-radius:24px;padding:24px;max-width:440px;width:100%;max-height:88vh;overflow:auto;box-sizing:border-box}
+.guide-sheet .guide-card{border-radius:24px 24px 0 0;max-width:480px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.guide-card h2{font-size:21px;letter-spacing:-.02em;margin:0 0 8px}
+.guide-card p{font-size:14.5px;line-height:1.6;color:#4b5563;margin:0 0 12px}
+.guide-card p b{color:var(--ink)}
+.guide-eyebrow{font-size:13px;font-weight:600;color:var(--ink-soft) !important;margin:0 0 4px !important}
+.guide-list{margin:0 0 18px;padding:0;list-style:none;counter-reset:g;display:flex;flex-direction:column;gap:8px}
+.guide-list li{counter-increment:g;display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600}
+.guide-list li::before{content:counter(g);width:24px;height:24px;border-radius:50%;background:var(--fill);color:var(--ink);font-size:12.5px;display:flex;align-items:center;justify-content:center;flex:none}
+.guide-skip{display:flex;margin:10px auto 0;background:none}
+.guide-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.guide-head h2{margin:0}
+.guide-x{border:0;background:var(--fill);width:32px;height:32px;border-radius:50%;font-size:20px;line-height:1;color:var(--ink-soft);cursor:pointer;flex:none}
+.guide-card .guide-sub{color:var(--ink-soft);font-size:13.5px;margin:4px 0 8px}
+.guide-missions{list-style:none;margin:0 0 14px;padding:0}
+.guide-missions li{display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
+.guide-missions li:first-child{border-top:0}
+.guide-num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--fill);color:var(--ink);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.guide-missions li.done .guide-num{background:var(--ink);color:#fff}
+.guide-missions li.done b{color:var(--ink-soft)}
+.guide-m{flex:1;min-width:0}
+.guide-m b{font-size:15px}
+.guide-card .guide-m p{font-size:13px;color:var(--ink-soft);margin:3px 0 8px}
+.guide-chip{position:fixed;right:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:25;border:0;border-radius:999px;background:var(--ink);color:#fff;
+  font-size:14px;font-weight:600;padding:11px 18px;box-shadow:0 6px 20px rgba(17,24,39,.18);cursor:pointer}
+.guide-files{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:4px 0 4px}
+.guide-file{background:var(--bg);border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.guide-file img{width:100%;height:140px;object-fit:contain;background:var(--paper);border-radius:10px}
+.guide-card .guide-file p{font-size:13px;margin:0;flex:1;color:var(--ink)}
+.guide-fill{background:var(--paper);border-radius:20px;padding:16px;margin-bottom:12px}
+.guide-fill .guide-fill-title{font-size:13px;font-weight:600;color:var(--ink-soft);margin:0 0 10px}
+.guide-fill img{width:100%;max-height:260px;object-fit:contain;background:var(--bg);border-radius:12px;margin-bottom:10px}

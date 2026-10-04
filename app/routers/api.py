@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, func, select
 
-from app import config, guard, input_rules, login_guard, notices, storage
+from app import config, guard, guide, input_rules, login_guard, notices, storage
 from app.agent import core
 from app.agent.tools import keywords_of, make_tools, saved_settlement, usable_pay
 from app.auth import check_password, current_user, hash_password
@@ -60,6 +60,8 @@ def register(data: RegisterIn, request: Request, s: Session = Depends(get_sessio
              mode=data.mode, created_at=now_kst())
     s.add(u)
     s.commit()
+    if config.FIRST_GUIDE:  # 처음 쓰는 사람 체험 안내 (고른 상황별 미션)
+        guide.start(s, u)
     request.session["uid"] = u.id
     return user_out(u)
 
@@ -119,6 +121,7 @@ def update_me(data: MeIn, u: User = Depends(current_user), s: Session = Depends(
         u.mode = data.mode
     s.add(u)
     s.commit()
+    guide.set_mode(s, u)  # 처음 화면에서 상황을 다시 골랐으면 체험 미션도 그 상황으로
     return user_out(u)
 
 
