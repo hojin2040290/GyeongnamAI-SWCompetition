@@ -13,6 +13,8 @@
 ( P=$(mdfind -onlyin ~ 'kMDItemFSName == "GyeongnamAI-SWCompetition" && kMDItemContentType == "public.folder"' | head -1); [ -d "$P" ] || P=$(find ~ -maxdepth 4 -type d -name GyeongnamAI-SWCompetition 2>/dev/null | head -1); cd "$P" || exit 1; TEST_DATA=true .venv/bin/uvicorn app.main:app --port 8080 & UV=$!; trap "kill $UV 2>/dev/null; exit" INT TERM; trap "kill $UV 2>/dev/null" EXIT; sleep 2; ~/tools/cloudflared tunnel --protocol http2 --url http://127.0.0.1:8080 )
 ```
 
+Windows(PowerShell)에서는 프로젝트 폴더에서 `$env:TEST_DATA="true"; .venv\Scripts\python.exe -m uvicorn app.main:app --port 8080`로 켭니다 (또는 `.env`에 `TEST_DATA=true`).
+
 - 시험 데이터(`data/test`)가 없으면 서버가 켜지면서 만듭니다. 따로 만드는 명령은 필요 없습니다.
 - 로그에 `저장 위치: 기록 …/data/test/app.db`와 `시험 데이터로 실행 중이에요`가 보이면 시험 데이터입니다.
 - 로그인: `test@example.com`, `test2@example.com` ~ `test5@example.com` / 모두 `test1234` (홍길동, 2009-05-20생, 만 17세, 다섯 계정 내용 같음)
@@ -25,6 +27,7 @@
 ```bash
 cd ~/Documents/GyeongnamAI-SWCompetition && .venv/bin/python -m app.demo_db --force
 ```
+Windows: 프로젝트 폴더에서 `.venv\Scripts\python.exe -m app.demo_db --force`
 
 `data/test`만 지우고 다시 만들며, 알바마다 만든 내용, 코드가 계산한 금액, 기대 결과를 터미널에 출력합니다.
 
@@ -49,7 +52,7 @@ cd ~/Documents/GyeongnamAI-SWCompetition && .venv/bin/python -m app.demo_db --fo
 
 ### 무엇을 눌러 보나
 1. 계약서 탭: 계약서 점검 → 항목마다 결과와 'AI 에이전트 판단'이 아래 정답과 맞는지
-2. 계약서 탭: 계약서 사진 읽기 → 읽은 값이 계약서 사진과 같은지
+2. 계약서 탭: 계약서 사진 읽기 → 읽은 값이 계약서 사진과 같은지. `.env`에 `DEMO_MODE=true`를 넣으면 업로드를 누를 때 이 폴더의 사진을 바로 고를 수 있습니다 (급여 탭 명세서, 자료 탭도 같음)
 3. 급여 탭: 달을 고르고 지금 점검 → 계산 금액과 판단이 아래 정답과 맞는지
 4. 홈: 퇴직 정산 (1번, 5번) → 기한과 판단, '받았어요/못 받았어요' 뒤 결과
 5. 자료 탭: 올린 사진이 원본 그대로 열리는지, 상담 사전 자료 만들기
