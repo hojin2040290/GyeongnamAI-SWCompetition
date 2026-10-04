@@ -345,6 +345,7 @@ def build_account(c, email: str) -> None:
     """시험 계정 하나와 알바 5개 (서버를 띄우지 않고 앱의 API를 부른다, 예약 작업은 돌지 않음)."""
     _ok(c.post("/api/auth/register", json={"email": email, "password": PASSWORD, "birth_date": BIRTH}), "가입")
     uid = _ok(c.get("/api/me"), "내 정보")["id"]
+    _ok(c.post("/api/guide/mark", json={"key": "off"}), "체험 안내 끄기")  # 시험(시연) 계정에는 처음 쓰는 사람 안내를 띄우지 않는다
     _ok(c.put("/api/me/prefs", json={"gps_consent": True}), "위치 기록 동의")
     for case in CASES:
         build_case(c, uid, case)

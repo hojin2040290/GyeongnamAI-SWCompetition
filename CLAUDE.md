@@ -40,7 +40,7 @@ app/
   notices.py         알림 보내기 (종류별로 최신 것만)
   ocr.py             계약서, 급여명세서 사진 읽기 (AI)
   demo_db.py         시험 데이터 (test@example.com, test2~test5@example.com / test1234)
-  beta.py            베타 테스트 체험판 (BETA_GUIDE=true일 때만): 상황별 계정 beta1~9·owner1~3, 미션 판정, 테스트 자료
+  guide.py           처음 쓰는 사람 체험 안내 (새로 가입한 계정만, FIRST_GUIDE): 고른 상황별 미션 3개 판정, 예시 자료, 설문(SURVEY_URL)
   auth.py, guard.py, report.py, scheduler.py, storage.py, evidence_check.py, login_guard.py
   db.py, models.py   SQLite 연결과 테이블
 web/templates, web/static   화면
@@ -173,6 +173,7 @@ bench/               모델 후보 비교 실험 (Qwen3.8-27B 선정 근거)
 - 실제 사례: 날짜 표시 함수를 바꾸면서 JSON에 글로 저장된 날짜를 생각하지 않아, 그만둔 사업장의 상담 사전 자료와 예약 작업(다시 맡기기)이 멈췄다. 저장과 점검을 나누면서 예전 화면 확인 스크립트가 맞지 않게 됐다.
 - 여러 곳이 쓰는 함수(fmt_date, 계산 함수, 도구, 공용 JS 함수)를 바꾸면 grep으로 부르는 곳을 모두 찾고, 넘어오는 값의 모양(날짜, 글, None, 예전 형식)을 하나씩 확인한다.
 - 시험은 빠르게 한다 (모든 경우를 거르지 못하므로 오래 돌리기보다 바뀐 곳을 정확히 본다). 병합 전에 `pytest`(약 30초, 회귀 시험 tests/test_regression.py 포함)는 항상 돌리고, 화면 시험은 바꾼 화면에 해당하는 부분만 돌린다 (`bash tests/ui/run_all.sh part12 part13`). 전체 화면 시험(인자 없이 `bash tests/ui/run_all.sh`)은 너무 비효율적이라 어떤 작업에서도 돌리지 않는다 (사용자 결정). 공용 JS나 CSS를 바꿨으면 그것을 쓰는 화면의 파트만 골라 돌린다. 화면을 바꾸지 않은 작업은 화면 시험 없이 `pytest`만 돌린다. 돌린 것이 하나라도 실패하면 병합하지 않는다.
+- 화면 시험은 체험 안내를 끈 채(FIRST_GUIDE=false) 돌고, 체험 안내는 part16에서만 켠다. 새 계정의 첫 화면을 바꾸면 part16도 돌린다.
 - 화면 시험이 실패하면 스크립트 탓으로 넘기지 말고 먼저 기능이 깨졌는지 확인한다. 기능을 일부러 바꿔 스크립트가 맞지 않게 됐으면 스크립트도 같은 커밋에서 고친다.
 - 새 기능을 만들면 회귀 시험(tests/test_regression.py의 상태와 호출, tests/ui의 화면 스크립트)에도 넣는다. 한 번 고친 문제는 시험으로 남겨 다시 생기지 않게 한다.
 - 화면에 바로 안 보이는 길도 확인한다: 예약 작업(매일 점검, 다시 맡기기, 후속 확인, 알림 정리), AI가 없다가 생긴 경우, 그만둔 사업장, 신고 후 보호, 지운 사업장, 예전 코드로 만든 DB. 서버 로그의 Traceback도 본다.

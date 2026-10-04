@@ -114,14 +114,14 @@ async function api(method, url, body, isForm){
     const err = new Error(msg); err.status = r.status; throw err;
   }
   const out = await r.json();
-  if (method!=='GET' && !url.startsWith('/api/beta/')) betaSoon();  // 베타 체험판: 무언가 하면 미션 진행을 다시 본다
+  if (method!=='GET' && !url.startsWith('/api/guide/')) guideSoon();  // 체험 안내: 무언가 하면 미션 진행을 다시 본다
   return out;
 }
 
 function show(id){
-  if(id==='ob2') setTimeout(betaJobFillSync,0);  // 베타 체험판: 등록 화면 위에 계약서 사진으로 채우기 (꺼져 있으면 아무것도 안 함)
+  if(id==='ob2') setTimeout(guideJobFillSync,0);  // 체험 안내: 등록 화면 위에 예시 계약서로 채우기 (안내가 없으면 아무것도 안 함)
   ['ob0','ob1','obLogin','obSeek','ob2','obMe'].forEach(x=>$('#'+x).classList.toggle('hidden', x!==id));
-  state.curOb=id; betaTopSync(); if(id==='ob0') startScreen(); if(id==='ob1') prepBasic(); window.scrollTo(0,0); refreshNav();
+  state.curOb=id; if(id==='ob0') startScreen(); if(id==='ob1') prepBasic(); window.scrollTo(0,0); refreshNav();
 }
 function openOverlay(id){ $('#onboard').classList.remove('hidden'); show(id); }
 function closeOverlay(){ $('#onboard').classList.add('hidden'); state.curOb=null; refreshNav(); }
@@ -231,9 +231,9 @@ document.addEventListener('change',e=>{ const el=e.target; if(!el.matches?.('inp
   if(n<min||n>max){ toast(`${el.dataset.num}은(는) ${min.toLocaleString()}원부터 ${max.toLocaleString()}원까지 적을 수 있어요`); el.value=''; return; }
   if(String(n)!==el.value){ toast(`${el.value} → ${n.toLocaleString()}원으로 적었어요`); el.value=String(n); } });
 async function boot(){
-  await loadRules(); bindJobChars(seek.node); await betaConfig();
+  await loadRules(); bindJobChars(seek.node);
   try {
-    state.me = await api('GET','/api/me'); betaRefresh();
+    state.me = await api('GET','/api/me'); guideRefresh();
     await loadJobs();
     if (!state.jobs.length) openOverlay('ob0');
     else startApp();
@@ -283,7 +283,7 @@ $('#regBtn').onclick = async () => {
   try {
     state.me = state.me ? await api('PUT','/api/me',{email,birth_date,mode:state.mode||'work'})
       : await api('POST','/api/auth/register',{email,password,birth_date,mode:state.mode||'work'});
-    afterMode();
+    afterMode(); guideRefresh();  // 새로 가입했으면 체험 안내가 시작된다 (상황을 다시 골랐으면 미션도 바뀐다)
   } catch(e) { $('#regErr').textContent=e.message; }
 };
 $('#logBtn').onclick = async () => {
@@ -292,7 +292,7 @@ $('#logBtn').onclick = async () => {
   const bad=emailProblem($('#logEmail').value); if(bad){ $('#logErr').textContent=bad; $('#logEmail').focus(); return; }
   try {
     state.me = await api('POST','/api/auth/login',{email:$('#logEmail').value.trim(),password:$('#logPw').value});
-    await loadJobs(); betaRefresh();
+    await loadJobs(); guideRefresh();
     if (!state.jobs.length) show('ob0'); else { closeOverlay(); startApp(); }
   } catch(e) { $('#logErr').textContent=e.message; }
 };
@@ -774,7 +774,8 @@ async function runOverview(){
     if(jobId!==state.current) return;  // 그사이 다른 일하는 곳으로 바꿨으면 그곳 카드를 덮지 않는다
     $('#ovLive').innerHTML=traceHTML(r.trace, r.trace_at);
   }catch(e){ if(jobId!==state.current) return; toast(e.message); }
-  await loadOverview(); await loadAsk(); await loadCase(); await loadAlerts();
+  // 다시 불러오기: 그사이 로그아웃했거나 화면을 떠났으면 조용히 그만둔다 (자동 점검은 잡아 주는 곳이 없어 오류로 샌다)
+  try{ await loadOverview(); await loadAsk(); await loadCase(); await loadAlerts(); }catch(e){ if(e.status!==401) toast(e.message); }
 }
 $('#ovRun').onclick=runOverview;
 // 종합 점검 머리줄: 결과 색의 점과 결과 이름 (판단 중이면 도는 표시)
@@ -1261,114 +1262,111 @@ $('#postAdd').onclick=async()=>{ const urls=[...new Set($('#postUrl').value.spli
     if(r){ await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace, r.trace_at); } } };
 $('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/search`)); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace, r.trace_at); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
 
-// ---------- 베타 테스트 체험판 (서버의 BETA_GUIDE=true일 때만. 꺼져 있으면 아무것도 보이지 않고 아무것도 가로채지 않는다) ----------
-// 상황별 미션 카드, 첫 안내(스마트폰 권장), 업로드할 때 테스트 자료 고르기, 미션을 마치면 설문 안내
-const beta={on:false, st:null, doneShown:false, timer:null, input:null, bypass:false};
-async function betaConfig(){
-  try{ const r=await fetch('/api/beta/config'); beta.on=r.ok && !!(await r.json()).on; }catch(e){ beta.on=false; }
-  betaTopSync();
+// ---------- 처음 쓰는 사람 체험 안내 (새로 가입한 계정만, app/guide.py) ----------
+// 가입할 때 고른 상황의 미션 3개, 업로드할 때 '내 기기에서 고르기'와 예시 자료, 다 하면 설문. 안내가 없는 계정은 아무것도 가로채지 않는다
+const guide={st:null, doneShown:false, timer:null, input:null, bypass:false};
+function guideSoon(){ if(!guide.st?.on) return; clearTimeout(guide.timer); guide.timer=setTimeout(guideRefresh, 700); }
+async function guideRefresh(){
+  if(!state.me) return;
+  try{ guide.st=await api('GET','/api/guide/state'); }catch(e){ return; }
+  guideRender();
 }
-// 맨 위 '로그인하면 미션이 나와요' 안내는 로그인하기 전에만 (로그인한 뒤에는 미션 버튼과 첫 안내 창이 대신한다)
-function betaTopSync(){ $('#betaTop').classList.toggle('hidden', !beta.on || !!state.me); }
-function betaSoon(){ if(!beta.on) return; clearTimeout(beta.timer); beta.timer=setTimeout(betaRefresh, 700); }
-async function betaRefresh(){
-  if(!beta.on || !state.me) return;
-  try{ beta.st=await api('GET','/api/beta/state'); }catch(e){ return; }
-  betaRender();
-}
-function betaOpen(id){ $(id).classList.remove('hidden'); }
-function betaClose(id){ $(id).classList.add('hidden'); }
-async function betaMark(key){ try{ beta.st=await api('POST','/api/beta/mark',{key}); betaRender(); }catch(e){} }
-function betaRender(){
-  const st=beta.st, chip=$('#betaChip');
-  if(!st || !st.on || !st.persona){ chip.classList.add('hidden'); return; }
+function guideOpen(id){ $(id).classList.remove('hidden'); }
+function guideClose(id){ $(id).classList.add('hidden'); }
+async function guideMark(key){ try{ guide.st=await api('POST','/api/guide/mark',{key}); guideRender(); }catch(e){ toast(e.message); } }
+function guideRender(){
+  const st=guide.st, chip=$('#guideChip');
+  $('#surveyBtn').classList.toggle('hidden', !st?.survey_url);  // 설문은 일하는 곳 선택 창에 늘 있다
+  guideJobFillSync();  // 가입 직후에는 등록 화면이 먼저 열리고 안내 상태가 뒤에 온다
+  // 안내가 없거나, 다 하고 완료 창을 닫았으면 버튼을 숨긴다 (설문은 메뉴에)
+  if(!st?.on || (st.all_done && st.closed)){ chip.classList.add('hidden'); if(!st?.on) ['#guideIntro','#guideSheet','#guideDone'].forEach(guideClose); return; }
   chip.classList.remove('hidden'); chip.classList.toggle('done', st.all_done);
-  chip.textContent = st.all_done ? '미션 완료 · 설문하기' : `미션 ${st.done_count}/${st.missions.length}`;
-  $('#betaSheetStory').textContent=`${st.title}: ${st.story}`;
-  $('#betaMissions').innerHTML=st.missions.map((m,i)=>`<li class="${m.done?'done':''}"><span class="beta-check">${m.done?'✓':i+1}</span>
-    <div><b>${esc(m.title)}</b><p>${esc(m.how)}</p>${m.done?'':`<button class="link" type="button" data-beta-go="${esc(m.go)}"${m.month?` data-beta-month="${esc(m.month)}"`:''}>바로 가기</button>`}</div></li>`).join('');
-  $('#betaSheetForm').classList.toggle('hidden', !st.all_done);
-  if(!st.intro_seen && !visible('#betaIntro')) betaIntro();
-  if(st.all_done && !st.closed && !beta.doneShown){ beta.doneShown=true; betaOpen('#betaDone'); }
+  chip.textContent = st.all_done ? '체험 완료 · 설문하기' : `체험 미션 ${st.done_count}/${st.missions.length}`;
+  $('#guideSheetSub').textContent=`${st.title}: 하나씩 해 보면 핵심 기능을 다 써 볼 수 있어요.`;
+  $('#guideMissions').innerHTML=st.missions.map((m,i)=>`<li class="${m.done?'done':''}"><span class="guide-num">${m.done?'✓':i+1}</span>
+    <div class="guide-m"><b>${esc(m.title)}</b><p>${esc(m.how)}</p>${m.done?'':`<button class="btn ghost small" type="button" data-guide-go="${esc(m.go)}">바로 가기</button>`}</div></li>`).join('');
+  $('#guideSheetSurvey').classList.toggle('hidden', !st.all_done || !st.survey_url);
+  if(!st.intro_seen && !visible('#guideIntro')) guideIntro();
+  if(st.all_done && !st.closed && !guide.doneShown){ guide.doneShown=true; $('#guideDoneSurvey').classList.toggle('hidden', !st.survey_url); guideOpen('#guideDone'); }
 }
-function betaIntro(){
-  const st=beta.st; $('#betaIntroPersona').textContent=st.title; $('#betaIntroStory').textContent=st.story;
-  $('#betaIntroList').innerHTML=st.missions.map(m=>`<li>${esc(m.title)}</li>`).join('');
-  betaOpen('#betaIntro');
+function guideIntro(){
+  const st=guide.st; $('#guideIntroMode').textContent=st.title;
+  $('#guideIntroList').innerHTML=st.missions.map(m=>`<li>${esc(m.title)}</li>`).join('');
+  guideOpen('#guideIntro');
 }
-$('#betaIntroGo').onclick=()=>{ betaClose('#betaIntro'); betaMark('intro'); };
-$('#betaChip').onclick=()=>betaOpen('#betaSheet');
-$('#betaSheetX').onclick=()=>betaClose('#betaSheet');
+$('#guideIntroGo').onclick=()=>{ guideClose('#guideIntro'); guideMark('intro'); };
+$('#guideIntroSkip').onclick=()=>{ guideClose('#guideIntro'); guideMark('off'); toast('체험 안내를 껐어요. 바로 써 보세요'); };
+$('#guideChip').onclick=()=>{ if(guide.st?.all_done) guideOpen('#guideDone'); else guideOpen('#guideSheet'); };
+$('#guideSheetX').onclick=()=>guideClose('#guideSheet');
+$('#guideOff').onclick=()=>{ if(!confirm('체험 안내를 끌까요? 다시 켤 수는 없어요. 기능은 모두 그대로 쓸 수 있어요.')) return;
+  guideClose('#guideSheet'); guideMark('off'); };
 // 미션의 바로 가기: 그 기능이 있는 화면으로
-function betaGo(v, month){
-  if(v==='seek'){
-    if(state.inApp) $('#seekEntry').click(); else { state.mode='seek'; seekReset(); openOverlay('obSeek'); }
-    return;
+function guideGo(v){
+  if(v==='seek'){ if(state.inApp) $('#seekEntry').click(); else { state.mode='seek'; seekReset(); openOverlay('obSeek'); } return; }
+  if(v==='job'){
+    if(visible('#ob2')) return;  // 이미 등록 화면
+    if(state.inApp){ $('#addPlace').click(); return; }
+    if(visible('#seekResult')){ toast("아래 '이곳에서 일하게 됐어요, 등록하기'를 눌러 주세요"); $('#seekToWork').scrollIntoView({block:'center'}); return; }
+    toast('지금 상황을 고르고 다음을 눌러 일하는 곳을 등록해 주세요'); openOverlay('ob0'); return;
   }
-  if(!state.inApp){ toast('먼저 일할 곳을 등록해 주세요. 시작 화면에서 지금 상황을 고르고 다음을 눌러요'); openOverlay('ob0'); return; }
+  if(!state.inApp){ toast('먼저 일하는 곳을 등록해 주세요. 지금 상황을 고르고 다음을 누르면 돼요'); openOverlay('ob0'); return; }
   if(visible('#onboard')) closeOverlay();
-  if(month) $('#payMonth').value=month;  // 급여 미션: 시험 데이터의 근무 기록이 있는 달로 (급여 탭은 비어 있을 때만 이번 달로 채운다)
   showTab(v);
 }
-$('#betaMissions').addEventListener('click',e=>{ const b=e.target.closest('[data-beta-go]'); if(!b) return; betaClose('#betaSheet'); betaGo(b.dataset.betaGo, b.dataset.betaMonth); });
-// 미션을 다 하면: 계속 체험하거나 설문. 닫아도 아래 '미션 완료 · 설문하기' 버튼으로 남는다
-function betaForm(){ if(beta.st?.form_url) window.open(beta.st.form_url, '_blank', 'noopener'); }
-function betaDoneClose(){ betaClose('#betaDone'); betaMark('closed'); }
-$('#betaDoneX').onclick=betaDoneClose;
-$('#betaKeep').onclick=betaDoneClose;
-$('#betaForm').onclick=()=>{ betaForm(); betaDoneClose(); };
-$('#betaSheetForm').onclick=()=>{ betaForm(); betaClose('#betaSheet'); };
-// 업로드를 누르면 그 상황의 테스트 자료를 보여 주고, '올릴게요'를 누르면 그 파일을 원래 업로드 칸에 넣어 그대로 올린다
+$('#guideMissions').addEventListener('click',e=>{ const b=e.target.closest('[data-guide-go]'); if(!b) return; guideClose('#guideSheet'); guideGo(b.dataset.guideGo); });
+function guideSurvey(){ const u=guide.st?.survey_url; if(u) window.open(u, '_blank', 'noopener'); }
+function guideDoneClose(){ guideClose('#guideDone'); if(!guide.st?.closed) guideMark('closed'); }
+$('#guideDoneX').onclick=guideDoneClose;
+$('#guideKeep').onclick=guideDoneClose;
+$('#guideDoneSurvey').onclick=()=>{ guideSurvey(); guideDoneClose(); };
+$('#guideSheetSurvey').onclick=()=>{ guideSurvey(); guideClose('#guideSheet'); };
+$('#surveyBtn').onclick=()=>{ closePicker(); guideSurvey(); };
+// 체험하는 동안 업로드를 누르면: 내 기기에서 고르기 + 그 칸에 맞는 예시 자료. '올릴게요'를 누르면 그 파일을 원래 업로드 칸에 넣어 그대로 올린다
 document.addEventListener('click',e=>{
-  if(beta.bypass || !beta.st || !beta.st.files) return;
+  if(guide.bypass || !guide.st?.on || !guide.st.files) return;
   const input=e.target.closest('input[type=file]') || e.target.closest('label')?.querySelector('input[type=file]');
-  if(!input || !(beta.st.files[input.id]||[]).length) return;
-  e.preventDefault(); e.stopPropagation(); betaFiles(input);
+  if(!input || !(guide.st.files[input.id]||[]).length) return;
+  e.preventDefault(); e.stopPropagation(); guideFiles(input);
 }, true);
-function betaFiles(input){
-  beta.input=input;
-  $('#betaFileList').innerHTML=beta.st.files[input.id].map((f,i)=>`<div class="beta-file"><img src="${esc(f.url)}" alt="${esc(f.label)}">
-    <p>${esc(f.label)}</p><button class="btn block" type="button" data-beta-file="${i}">올릴게요</button></div>`).join('');
-  betaOpen('#betaFiles');
+function guideFiles(input){
+  guide.input=input;
+  $('#guideFileList').innerHTML=guide.st.files[input.id].map((f,i)=>`<div class="guide-file"><img src="${esc(f.url)}" alt="${esc(f.label)}">
+    <p>${esc(f.label)}</p><button class="btn ghost small" type="button" data-guide-file="${i}">이 자료 올리기</button></div>`).join('');
+  guideOpen('#guideFiles');
 }
-$('#betaFileList').addEventListener('click',async e=>{
-  const b=e.target.closest('[data-beta-file]'); if(!b || !beta.input) return;
-  const f=beta.st.files[beta.input.id][+b.dataset.betaFile];
+$('#guideFileList').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-guide-file]'); if(!b || !guide.input) return;
+  const f=guide.st.files[guide.input.id][+b.dataset.guideFile];
   b.disabled=true; b.textContent='가져오는 중';
   try{
     const r=await fetch(f.url); if(!r.ok) throw new Error('자료를 가져오지 못했어요. 다시 눌러 주세요');
     const blob=await r.blob();
     const dt=new DataTransfer(); dt.items.add(new File([blob], f.name.split('/').pop(), {type:blob.type||'image/png'}));
-    beta.input.files=dt.files; betaClose('#betaFiles');
-    beta.input.dispatchEvent(new Event('change',{bubbles:true}));
-    if(f.fill && beta.input.id==='seekFile'){ betaFillNode(seek.node, seek, f.fill); toast('공고 사진의 조건으로 칸을 채웠어요. 확인하고 점검해 보세요'); }
-  }catch(err){ toast(err.message); b.disabled=false; b.textContent='올릴게요'; }
+    guide.input.files=dt.files; guideClose('#guideFiles');
+    guide.input.dispatchEvent(new Event('change',{bubbles:true}));
+    if(f.fill && guide.input.id==='seekFile'){ guideFillNode(seek.node, seek, f.fill); toast('예시 공고의 조건으로 칸을 채웠어요. 확인하고 점검해 보세요'); }
+  }catch(err){ toast(err.message); b.disabled=false; b.textContent='이 자료 올리기'; }
 });
-$('#betaFilesX').onclick=()=>betaClose('#betaFiles');
-// 사진에 적힌 조건으로 입력칸 채우기 (공고 입력칸, 일하는 곳 카드 공용: 이름, 업종, 하는 일, 시급, 시작일, 근무 요일과 시간, 수습)
-function betaFillNode(n, holder, d){
+$('#guideFilesX').onclick=()=>guideClose('#guideFiles');
+$('#guideOwnFile').onclick=()=>{ const inp=guide.input; guideClose('#guideFiles'); if(!inp) return; guide.bypass=true; inp.click(); setTimeout(()=>{ guide.bypass=false; },0); };
+// 예시 자료에 적힌 조건으로 입력칸 채우기 (공고 입력칸, 일하는 곳 카드 공용: 이름, 업종, 하는 일, 시급, 시작일, 근무 요일과 시간, 수습)
+function guideFillNode(n, holder, d){
   const set=(sel,v)=>{ const el=n.querySelector(sel); if(el && v!=null){ el.value=v; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); } };
   set('.f-name',d.name); set('.f-type',d.industry); set('.f-work',d.work_desc); set('.f-wage',d.wage); set('.f-start',d.start_date);
   holder.schedule=JSON.parse(JSON.stringify(d.schedule||{}));
   if(DAY_KEYS.some(k=>holder.schedule[k])){ n.querySelector('.sched-sum').textContent=schedSummary(holder.schedule); n.querySelector('.sched-go').textContent='수정'; }
   if(d.probation) setSeg(n,'probation',d.probation);
 }
-// 일하는 곳 등록 화면: 알바를 안 해 본 사람에게 계약서 사진을 보여 주고 그 내용으로 채우기 (첫 카드가 비어 있을 때만)
-function betaJobFillSync(){
-  const box=$('#betaJobFill'), jf=beta.st?.job_fill, first=state.cards[0];
+// 일하는 곳 등록 화면: 체험하는 동안 첫 카드가 비어 있으면 예시 계약서와 '이 예시로 채우기'
+function guideJobFillSync(){
+  const box=$('#guideJobFill'), jf=guide.st?.on && Object.keys(guide.st.files||{}).length ? guide.st.job_fill : null, first=state.cards[0];
   const empty=first && !first.node.querySelector('.f-name').value.trim();
   if(!jf || !empty || !visible('#ob2')){ box.classList.add('hidden'); return; }
-  box.innerHTML=`<p class="beta-fill-title">테스트 자료: ${esc(jf.label)}</p><img src="${esc(jf.url)}" alt="${esc(jf.label)}">
-    <button class="btn block" type="button" id="betaJobFillGo">이 계약서 내용으로 채울게요</button>`;
+  box.innerHTML=`<p class="guide-fill-title">예시 자료: ${esc(jf.label)}</p><img src="${esc(jf.url)}" alt="${esc(jf.label)}">
+    <button class="btn ghost block" type="button" id="guideJobFillGo">이 예시로 채우기</button>`;
   box.classList.remove('hidden');
-  $('#betaJobFillGo').onclick=()=>{ const c=state.cards[0]||addCard(); betaFillNode(c.node, c, jf.fill); box.classList.add('hidden');
-    toast('계약서 내용으로 채웠어요. 나머지를 확인하고 시작하기를 눌러 주세요'); };
+  $('#guideJobFillGo').onclick=()=>{ const c=state.cards[0]||addCard(); guideFillNode(c.node, c, jf.fill); box.classList.add('hidden');
+    toast('예시 계약서 내용으로 채웠어요. 나머지를 확인하고 시작하기를 눌러 주세요'); };
 }
-$('#betaOwnFile').onclick=()=>{ const inp=beta.input; betaClose('#betaFiles'); if(!inp) return; beta.bypass=true; inp.click(); setTimeout(()=>{ beta.bypass=false; },0); };
-// '에이전트 동작 보기'를 펼치면 그 미션을 했다고 남긴다
-document.addEventListener('toggle',e=>{
-  const st=beta.st; if(!st?.persona || !e.target.matches?.('details.trace') || !e.target.open) return;
-  const m=st.missions.find(x=>x.key==='trace'); if(m && !m.done) betaMark('trace');
-}, true);
 
 boot();
