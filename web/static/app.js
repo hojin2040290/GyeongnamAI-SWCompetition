@@ -113,7 +113,9 @@ async function api(method, url, body, isForm){
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : msg; } catch(e) {}
     const err = new Error(msg); err.status = r.status; throw err;
   }
-  return r.json();
+  const out = await r.json();
+  if (method!=='GET' && !url.startsWith('/api/beta/')) betaSoon();  // 베타 체험판: 무언가 하면 미션 진행을 다시 본다
+  return out;
 }
 
 function show(id){
@@ -228,9 +230,9 @@ document.addEventListener('change',e=>{ const el=e.target; if(!el.matches?.('inp
   if(n<min||n>max){ toast(`${el.dataset.num}은(는) ${min.toLocaleString()}원부터 ${max.toLocaleString()}원까지 적을 수 있어요`); el.value=''; return; }
   if(String(n)!==el.value){ toast(`${el.value} → ${n.toLocaleString()}원으로 적었어요`); el.value=String(n); } });
 async function boot(){
-  await loadRules(); bindJobChars(seek.node);
+  await loadRules(); bindJobChars(seek.node); await betaConfig();
   try {
-    state.me = await api('GET','/api/me');
+    state.me = await api('GET','/api/me'); betaRefresh();
     await loadJobs();
     if (!state.jobs.length) openOverlay('ob0');
     else startApp();
@@ -289,7 +291,7 @@ $('#logBtn').onclick = async () => {
   const bad=emailProblem($('#logEmail').value); if(bad){ $('#logErr').textContent=bad; $('#logEmail').focus(); return; }
   try {
     state.me = await api('POST','/api/auth/login',{email:$('#logEmail').value.trim(),password:$('#logPw').value});
-    await loadJobs();
+    await loadJobs(); betaRefresh();
     if (!state.jobs.length) show('ob0'); else { closeOverlay(); startApp(); }
   } catch(e) { $('#logErr').textContent=e.message; }
 };
@@ -1225,5 +1227,92 @@ $('#postAdd').onclick=async()=>{ const urls=[...new Set($('#postUrl').value.spli
     const r=await checkAfterSave('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/agent/review`));  // 보존한 뒤 AI 판별
     if(r){ await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace, r.trace_at); } } };
 $('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/search`)); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace, r.trace_at); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
+
+// ---------- 베타 테스트 체험판 (서버의 BETA_GUIDE=true일 때만. 꺼져 있으면 아무것도 보이지 않고 아무것도 가로채지 않는다) ----------
+// 상황별 미션 카드, 첫 안내(스마트폰 권장), 업로드할 때 테스트 자료 고르기, 미션을 마치면 설문 안내
+const beta={on:false, st:null, doneShown:false, timer:null, input:null, bypass:false};
+async function betaConfig(){
+  try{ const r=await fetch('/api/beta/config'); beta.on=r.ok && !!(await r.json()).on; }catch(e){ beta.on=false; }
+  $('#betaTop').classList.toggle('hidden', !beta.on);
+}
+function betaSoon(){ if(!beta.on) return; clearTimeout(beta.timer); beta.timer=setTimeout(betaRefresh, 700); }
+async function betaRefresh(){
+  if(!beta.on || !state.me) return;
+  try{ beta.st=await api('GET','/api/beta/state'); }catch(e){ return; }
+  betaRender();
+}
+function betaOpen(id){ $(id).classList.remove('hidden'); }
+function betaClose(id){ $(id).classList.add('hidden'); }
+async function betaMark(key){ try{ beta.st=await api('POST','/api/beta/mark',{key}); betaRender(); }catch(e){} }
+function betaRender(){
+  const st=beta.st, chip=$('#betaChip');
+  if(!st || !st.on || !st.persona){ chip.classList.add('hidden'); return; }
+  chip.classList.remove('hidden'); chip.classList.toggle('done', st.all_done);
+  chip.textContent = st.all_done ? '미션 완료 · 설문하기' : `미션 ${st.done_count}/${st.missions.length}`;
+  $('#betaSheetStory').textContent=`${st.title}: ${st.story}`;
+  $('#betaMissions').innerHTML=st.missions.map((m,i)=>`<li class="${m.done?'done':''}"><span class="beta-check">${m.done?'✓':i+1}</span>
+    <div><b>${esc(m.title)}</b><p>${esc(m.how)}</p>${m.done?'':`<button class="link" type="button" data-beta-go="${esc(m.go)}">바로 가기</button>`}</div></li>`).join('');
+  $('#betaSheetForm').classList.toggle('hidden', !st.all_done);
+  if(!st.intro_seen && !visible('#betaIntro')) betaIntro();
+  if(st.all_done && !st.closed && !beta.doneShown){ beta.doneShown=true; betaOpen('#betaDone'); }
+}
+function betaIntro(){
+  const st=beta.st; $('#betaIntroPersona').textContent=st.title; $('#betaIntroStory').textContent=st.story;
+  $('#betaIntroList').innerHTML=st.missions.map(m=>`<li>${esc(m.title)}</li>`).join('');
+  betaOpen('#betaIntro');
+}
+$('#betaIntroGo').onclick=()=>{ betaClose('#betaIntro'); betaMark('intro'); };
+$('#betaChip').onclick=()=>betaOpen('#betaSheet');
+$('#betaSheetX').onclick=()=>betaClose('#betaSheet');
+// 미션의 바로 가기: 그 기능이 있는 화면으로
+function betaGo(v){
+  if(v==='seek'){
+    if(state.inApp) $('#seekEntry').click(); else { state.mode='seek'; seekReset(); openOverlay('obSeek'); }
+    return;
+  }
+  if(!state.inApp){ toast('먼저 일할 곳을 등록해 주세요. 시작 화면에서 지금 상황을 고르면 돼요'); openOverlay('ob0'); return; }
+  if(visible('#onboard')) closeOverlay();
+  showTab(v);
+}
+$('#betaMissions').addEventListener('click',e=>{ const b=e.target.closest('[data-beta-go]'); if(!b) return; betaClose('#betaSheet'); betaGo(b.dataset.betaGo); });
+// 미션을 다 하면: 계속 체험하거나 설문. 닫아도 아래 '미션 완료 · 설문하기' 버튼으로 남는다
+function betaForm(){ if(beta.st?.form_url) window.open(beta.st.form_url, '_blank', 'noopener'); }
+function betaDoneClose(){ betaClose('#betaDone'); betaMark('closed'); }
+$('#betaDoneX').onclick=betaDoneClose;
+$('#betaKeep').onclick=betaDoneClose;
+$('#betaForm').onclick=()=>{ betaForm(); betaDoneClose(); };
+$('#betaSheetForm').onclick=()=>{ betaForm(); betaClose('#betaSheet'); };
+// 업로드를 누르면 그 상황의 테스트 자료를 보여 주고, '올릴게요'를 누르면 그 파일을 원래 업로드 칸에 넣어 그대로 올린다
+document.addEventListener('click',e=>{
+  if(beta.bypass || !beta.st || !beta.st.files) return;
+  const input=e.target.closest('input[type=file]') || e.target.closest('label')?.querySelector('input[type=file]');
+  if(!input || !(beta.st.files[input.id]||[]).length) return;
+  e.preventDefault(); e.stopPropagation(); betaFiles(input);
+}, true);
+function betaFiles(input){
+  beta.input=input;
+  $('#betaFileList').innerHTML=beta.st.files[input.id].map((f,i)=>`<div class="beta-file"><img src="${esc(f.url)}" alt="${esc(f.label)}">
+    <p>${esc(f.label)}</p><button class="btn block" type="button" data-beta-file="${i}">올릴게요</button></div>`).join('');
+  betaOpen('#betaFiles');
+}
+$('#betaFileList').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-beta-file]'); if(!b || !beta.input) return;
+  const f=beta.st.files[beta.input.id][+b.dataset.betaFile];
+  b.disabled=true; b.textContent='가져오는 중';
+  try{
+    const r=await fetch(f.url); if(!r.ok) throw new Error('자료를 가져오지 못했어요. 다시 눌러 주세요');
+    const blob=await r.blob();
+    const dt=new DataTransfer(); dt.items.add(new File([blob], f.name.split('/').pop(), {type:blob.type||'image/png'}));
+    beta.input.files=dt.files; betaClose('#betaFiles');
+    beta.input.dispatchEvent(new Event('change',{bubbles:true}));
+  }catch(err){ toast(err.message); b.disabled=false; b.textContent='올릴게요'; }
+});
+$('#betaFilesX').onclick=()=>betaClose('#betaFiles');
+$('#betaOwnFile').onclick=()=>{ const inp=beta.input; betaClose('#betaFiles'); if(!inp) return; beta.bypass=true; inp.click(); setTimeout(()=>{ beta.bypass=false; },0); };
+// '에이전트 동작 보기'를 펼치면 그 미션을 했다고 남긴다
+document.addEventListener('toggle',e=>{
+  const st=beta.st; if(!st?.persona || !e.target.matches?.('details.trace') || !e.target.open) return;
+  const m=st.missions.find(x=>x.key==='trace'); if(m && !m.done) betaMark('trace');
+}, true);
 
 boot();

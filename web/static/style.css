@@ -413,3 +413,35 @@ details.run .log:first-of-type{margin-top:6px}
 .log.log-ai b{color:var(--blue)}
 .log-tags{display:inline-flex;flex-wrap:wrap;gap:4px;vertical-align:middle}
 .chip.tool{font-size:11.5px;font-weight:600;padding:0 7px;background:#fff;color:var(--blue);border:1px solid #c9d6f5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}  /* AI가 고른 도구 */
+
+/* 베타 테스트 체험판 (BETA_GUIDE=true일 때만 보임): 첫 안내, 미션 버튼과 목록, 완료 창, 테스트 자료 고르기 */
+.beta-top{background:var(--blue-soft);color:var(--blue);border-radius:12px;padding:10px 14px;font-size:13.5px;line-height:1.5;margin:0 auto 14px;max-width:480px;box-sizing:border-box}
+.beta-top b{display:block;font-size:14px}
+.beta-layer{position:fixed;inset:0;z-index:40;background:rgba(24,34,58,.45);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
+.beta-layer.beta-sheet{align-items:flex-end;padding:0}
+.beta-card{background:var(--paper);border-radius:18px;padding:20px;max-width:440px;width:100%;max-height:88vh;overflow:auto;box-sizing:border-box}
+.beta-sheet .beta-card{border-radius:18px 18px 0 0;max-width:480px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.beta-card h2{font-size:19px;margin:0 0 8px}
+.beta-card p{font-size:14.5px;line-height:1.6;margin:0 0 10px}
+.beta-card .beta-eyebrow{font-size:12.5px;font-weight:700;color:var(--blue);margin:0 0 4px}
+.beta-card .beta-phone{background:#fff4dc;color:#6b4a00;border-radius:10px;padding:10px 12px;font-weight:600}
+.beta-story{background:var(--bg);border-radius:12px;padding:12px;margin:0 0 10px;font-size:14px;line-height:1.55}
+.beta-story b{display:block;margin-bottom:2px}
+.beta-list{margin:0 0 14px;padding-left:20px;font-size:14.5px;line-height:1.7}
+.beta-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.beta-head h2{margin:0}
+.beta-x{border:0;background:none;font-size:26px;line-height:1;color:var(--ink-soft);cursor:pointer;padding:4px 8px}
+.beta-card .beta-sub{color:var(--ink-soft);font-size:13.5px;margin-top:6px}
+.beta-missions{list-style:none;margin:0 0 12px;padding:0}
+.beta-missions li{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.beta-missions li:first-child{border-top:0}
+.beta-missions li p{font-size:13px;color:var(--ink-soft);margin:2px 0 4px}
+.beta-check{flex:none;width:26px;height:26px;border-radius:50%;background:var(--blue-soft);color:var(--blue);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.beta-missions li.done .beta-check{background:var(--blue);color:#fff}
+.beta-missions li.done b{color:var(--ink-soft)}
+.beta-chip{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom,0px));z-index:25;border:0;border-radius:999px;background:var(--blue);color:#fff;font-size:14px;font-weight:700;padding:10px 16px;box-shadow:0 4px 14px rgba(24,34,58,.25);cursor:pointer}
+.beta-chip.done{background:var(--ink)}
+.beta-files{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 10px}
+.beta-file{border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.beta-file img{width:100%;height:140px;object-fit:contain;background:var(--bg);border-radius:8px}
+.beta-card .beta-file p{font-size:13px;margin:0;flex:1}
