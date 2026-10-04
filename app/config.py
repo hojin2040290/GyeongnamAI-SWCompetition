@@ -55,7 +55,7 @@ REPORT_DIR = _data_path("REPORT_DIR", _BASE / "reports")
 LAW_PARAMS_PATH = BASE_DIR / "data" / "law_params.json"
 TIMEZONE = "Asia/Seoul"
 
-# AI 모델 (아직 연결하지 않음. true로 바꾸면 llm/client.py가 vLLM을 호출)
+# AI 모델 (vLLM, OpenAI 호환 API). LLM_ENABLED=true와 LLM_MODEL이 있으면 llm/client.py가 호출한다
 LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "")
@@ -109,6 +109,8 @@ AI_RETRY_PER_DAY = int(os.getenv("AI_RETRY_PER_DAY", "3"))
 # 처음 쓰는 사람 체험 안내 (app/guide.py): 새로 가입한 계정에 상황별 미션 3개와 예시 자료 고르기. 기본은 켬.
 # 화면 회귀 시험(tests/ui)은 false로 돌린다 (안내 창이 다른 시험의 클릭을 가리지 않게, 체험 안내는 part16에서 따로 확인)
 FIRST_GUIDE = os.getenv("FIRST_GUIDE", "true").strip().lower() == "true"
+# 데모 모드: 모든 계정의 업로드 칸에 데모 자료(테스트자료의 가상 사진 15장)를 '내 기기에서 고르기'와 함께 보여 준다 (실제 업로드, 사진 읽기 시연용)
+DEMO_MODE = os.getenv("DEMO_MODE", "false").strip().lower() == "true"
 # 설문 주소: 체험 안내를 마치면, 그리고 일하는 곳 선택 창에서 늘 보여 준다 (비우면 설문 안내가 없다. 예전 이름 BETA_FORM_URL도 읽는다)
 SURVEY_URL = os.getenv("SURVEY_URL", os.getenv("BETA_FORM_URL", "https://forms.gle/ed7572w7YeVWUfWC7")).strip()
 

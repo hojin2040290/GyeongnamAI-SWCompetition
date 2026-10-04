@@ -1321,15 +1321,16 @@ $('#guideKeep').onclick=guideDoneClose;
 $('#guideDoneSurvey').onclick=()=>{ guideSurvey(); guideDoneClose(); };
 $('#guideSheetSurvey').onclick=()=>{ guideSurvey(); guideClose('#guideSheet'); };
 $('#surveyBtn').onclick=()=>{ closePicker(); guideSurvey(); };
-// 체험하는 동안 업로드를 누르면: 내 기기에서 고르기 + 그 칸에 맞는 예시 자료. '올릴게요'를 누르면 그 파일을 원래 업로드 칸에 넣어 그대로 올린다
+// 체험하는 동안(또는 데모 모드) 업로드를 누르면: 내 기기에서 고르기 + 예시 자료. '이 자료 올리기'를 누르면 그 파일을 원래 업로드 칸에 넣어 그대로 올린다
 document.addEventListener('click',e=>{
-  if(guide.bypass || !guide.st?.on || !guide.st.files) return;
+  if(guide.bypass || !guide.st?.files) return;  // 체험 안내가 끝났거나 꺼져 있고 데모 모드도 아니면 서버가 files를 비워 보낸다
   const input=e.target.closest('input[type=file]') || e.target.closest('label')?.querySelector('input[type=file]');
   if(!input || !(guide.st.files[input.id]||[]).length) return;
   e.preventDefault(); e.stopPropagation(); guideFiles(input);
 }, true);
 function guideFiles(input){
   guide.input=input;
+  $('#guideFilesSub').textContent=guide.st.demo?'또는 데모 자료 (가상의 가게예요. 이 칸에 맞는 자료부터)':'또는 예시 자료로 해 보기 (가상의 가게예요)';
   $('#guideFileList').innerHTML=guide.st.files[input.id].map((f,i)=>`<div class="guide-file"><img src="${esc(f.url)}" alt="${esc(f.label)}">
     <p>${esc(f.label)}</p><button class="btn ghost small" type="button" data-guide-file="${i}">이 자료 올리기</button></div>`).join('');
   guideOpen('#guideFiles');
@@ -1357,9 +1358,9 @@ function guideFillNode(n, holder, d){
   if(DAY_KEYS.some(k=>holder.schedule[k])){ n.querySelector('.sched-sum').textContent=schedSummary(holder.schedule); n.querySelector('.sched-go').textContent='수정'; }
   if(d.probation) setSeg(n,'probation',d.probation);
 }
-// 일하는 곳 등록 화면: 체험하는 동안 첫 카드가 비어 있으면 예시 계약서와 '이 예시로 채우기'
+// 일하는 곳 등록 화면: 체험하는 동안(또는 데모 모드) 첫 카드가 비어 있으면 예시 계약서와 '이 예시로 채우기'
 function guideJobFillSync(){
-  const box=$('#guideJobFill'), jf=guide.st?.on && Object.keys(guide.st.files||{}).length ? guide.st.job_fill : null, first=state.cards[0];
+  const box=$('#guideJobFill'), jf=(guide.st?.on || guide.st?.demo) && Object.keys(guide.st.files||{}).length ? guide.st.job_fill : null, first=state.cards[0];
   const empty=first && !first.node.querySelector('.f-name').value.trim();
   if(!jf || !empty || !visible('#ob2')){ box.classList.add('hidden'); return; }
   box.innerHTML=`<p class="guide-fill-title">예시 자료: ${esc(jf.label)}</p><img src="${esc(jf.url)}" alt="${esc(jf.label)}">
