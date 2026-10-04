@@ -37,6 +37,13 @@ ACCOUNTS = ([(f"beta{n}@example.com", "none") for n in (1, 2, 3)]
             + [(f"beta{n}@example.com", "quit") for n in (7, 8, 9)]
             + [("owner1@example.com", "none"), ("owner2@example.com", "working"), ("owner3@example.com", "quit")])
 
+# 가상카페(시험 데이터 사례 3)의 조건: 채용공고 사진과 계약서 사진을 고르면 이 값으로 입력칸을 채운다 (베타 체험판만)
+CAFE = {"name": "가상카페 시험점", "industry": "음식점, 카페", "work_desc": "음료 제조, 계산", "wage": 11000,
+        "start_date": "2026-08-04", "probation": "no",
+        "schedule": {d: {"start": "15:00", "end": "18:30", "brk": "없음"} for d in ("화", "목")}}
+POSTING = ("베타/채용공고_가상카페.png", "가상카페 채용공고 (시급 11,000원, 화·목 15:00~18:30)")
+FILLS = {"베타/채용공고_가상카페.png": CAFE, "알바5개/3_근로계약서.png": CAFE}
+
 # 상황마다: 이야기, 미션(판정 열쇠, 할 일, 방법, 바로 가기 화면), 업로드할 때 보여 줄 테스트 자료(입력칸 id → 파일)
 PERSONAS: dict[str, dict] = {
     "none": {
@@ -50,7 +57,9 @@ PERSONAS: dict[str, dict] = {
             {"key": "trace", "title": "'에이전트 동작 보기'를 열어 AI가 판단한 과정 보기", "go": "check",
              "how": "점검 결과 아래의 '에이전트 동작 보기'를 눌러 펼쳐요"},
         ],
+        "job_fill": ("알바5개/3_근로계약서.png", "가상카페 근로계약서"),
         "files": {
+            "seekFile": [POSTING],
             "contractFile": [("알바5개/3_근로계약서.png", "가상카페 근로계약서 (조건을 잘 지킨 계약서)"),
                              ("02_근로계약서.png", "행복편의점 근로계약서 (문제가 있는 계약서)")],
             "evFile": [("02_근로계약서.png", "행복편의점 근로계약서")],
@@ -68,6 +77,7 @@ PERSONAS: dict[str, dict] = {
              "how": "자료 탭의 '자료 올리기'를 누르면 테스트용 입금 내역이 나와요"},
         ],
         "files": {
+            "seekFile": [POSTING],
             "payFile": [("알바5개/2_급여명세서.png", "가상분식 8월 급여명세서"), ("알바5개/2_입금내역.png", "가상분식 입금 내역")],
             "evFile": [("알바5개/2_입금내역.png", "가상분식 입금 내역"), ("알바5개/2_급여명세서.png", "가상분식 8월 급여명세서")],
             "contractFile": [("알바5개/2_근로계약서.png", "가상분식 근로계약서")],
@@ -86,13 +96,15 @@ PERSONAS: dict[str, dict] = {
              "how": "자료 탭에서 사장님 메시지 캡처를 올린 뒤 상담 사전 자료 만들기를 눌러요"},
         ],
         "files": {
+            "seekFile": [POSTING],
             "evFile": [("알바5개/5_사업주_메시지_캡처.png", "가상치킨 사장님 메시지 캡처"), ("알바5개/5_근로계약서.png", "가상치킨 근로계약서")],
             "contractFile": [("알바5개/5_근로계약서.png", "가상치킨 근로계약서")],
         },
         "case": "5",
     },
 }
-ALLOWED_FILES = {name for p in PERSONAS.values() for files in p["files"].values() for name, _ in files}
+ALLOWED_FILES = ({name for p in PERSONAS.values() for files in p["files"].values() for name, _ in files}
+                 | {p["job_fill"][0] for p in PERSONAS.values() if p.get("job_fill")})
 
 router = APIRouter(prefix="/api/beta")
 
@@ -135,8 +147,16 @@ def mission_done(s: Session, user: User, st: BetaState, key: str) -> bool:
 
 
 def _files(persona: dict) -> dict:
-    return {inp: [{"name": name, "label": label, "url": f"/api/beta/files/{name}"} for name, label in files]
-            for inp, files in persona["files"].items()}
+    return {inp: [{"name": name, "label": label, "url": f"/api/beta/files/{name}", "fill": FILLS.get(name)}
+                  for name, label in files] for inp, files in persona["files"].items()}
+
+
+def _job_fill(persona: dict) -> dict | None:
+    """일하는 곳 등록 화면 위에 보여 줄 계약서 사진과 채울 값 (알바를 안 해 본 사람)."""
+    if not persona.get("job_fill"):
+        return None
+    name, label = persona["job_fill"]
+    return {"url": f"/api/beta/files/{name}", "label": label, "fill": FILLS[name]}
 
 
 def state_of(s: Session, user: User) -> dict:
@@ -150,7 +170,7 @@ def state_of(s: Session, user: User) -> dict:
     marks = _marks(st)
     return {"on": True, "persona": st.persona, "title": p["title"], "story": p["story"], "missions": missions,
             "done_count": sum(m["done"] for m in missions), "all_done": all(m["done"] for m in missions),
-            "intro_seen": "intro" in marks, "closed": "closed" in marks, "files": _files(p),
+            "intro_seen": "intro" in marks, "closed": "closed" in marks, "files": _files(p), "job_fill": _job_fill(p),
             "form_url": config.BETA_FORM_URL}
 
 

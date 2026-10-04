@@ -119,6 +119,7 @@ async function api(method, url, body, isForm){
 }
 
 function show(id){
+  if(id==='ob2') setTimeout(betaJobFillSync,0);  // 베타 체험판: 등록 화면 위에 계약서 사진으로 채우기 (꺼져 있으면 아무것도 안 함)
   ['ob0','ob1','obLogin','obSeek','ob2','obMe'].forEach(x=>$('#'+x).classList.toggle('hidden', x!==id));
   state.curOb=id; if(id==='ob0') startScreen(); if(id==='ob1') prepBasic(); window.scrollTo(0,0); refreshNav();
 }
@@ -1305,9 +1306,29 @@ $('#betaFileList').addEventListener('click',async e=>{
     const dt=new DataTransfer(); dt.items.add(new File([blob], f.name.split('/').pop(), {type:blob.type||'image/png'}));
     beta.input.files=dt.files; betaClose('#betaFiles');
     beta.input.dispatchEvent(new Event('change',{bubbles:true}));
+    if(f.fill && beta.input.id==='seekFile'){ betaFillNode(seek.node, seek, f.fill); toast('공고 사진의 조건으로 칸을 채웠어요. 확인하고 점검해 보세요'); }
   }catch(err){ toast(err.message); b.disabled=false; b.textContent='올릴게요'; }
 });
 $('#betaFilesX').onclick=()=>betaClose('#betaFiles');
+// 사진에 적힌 조건으로 입력칸 채우기 (공고 입력칸, 일하는 곳 카드 공용: 이름, 업종, 하는 일, 시급, 시작일, 근무 요일과 시간, 수습)
+function betaFillNode(n, holder, d){
+  const set=(sel,v)=>{ const el=n.querySelector(sel); if(el && v!=null){ el.value=v; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); } };
+  set('.f-name',d.name); set('.f-type',d.industry); set('.f-work',d.work_desc); set('.f-wage',d.wage); set('.f-start',d.start_date);
+  holder.schedule=JSON.parse(JSON.stringify(d.schedule||{}));
+  if(DAY_KEYS.some(k=>holder.schedule[k])){ n.querySelector('.sched-sum').textContent=schedSummary(holder.schedule); n.querySelector('.sched-go').textContent='수정'; }
+  if(d.probation) setSeg(n,'probation',d.probation);
+}
+// 일하는 곳 등록 화면: 알바를 안 해 본 사람에게 계약서 사진을 보여 주고 그 내용으로 채우기 (첫 카드가 비어 있을 때만)
+function betaJobFillSync(){
+  const box=$('#betaJobFill'), jf=beta.st?.job_fill, first=state.cards[0];
+  const empty=first && !first.node.querySelector('.f-name').value.trim();
+  if(!jf || !empty || !visible('#ob2')){ box.classList.add('hidden'); return; }
+  box.innerHTML=`<p class="beta-fill-title">테스트 자료: ${esc(jf.label)}</p><img src="${esc(jf.url)}" alt="${esc(jf.label)}">
+    <button class="btn block" type="button" id="betaJobFillGo">이 계약서 내용으로 채울게요</button>`;
+  box.classList.remove('hidden');
+  $('#betaJobFillGo').onclick=()=>{ const c=state.cards[0]||addCard(); betaFillNode(c.node, c, jf.fill); box.classList.add('hidden');
+    toast('계약서 내용으로 채웠어요. 나머지를 확인하고 시작하기를 눌러 주세요'); };
+}
 $('#betaOwnFile').onclick=()=>{ const inp=beta.input; betaClose('#betaFiles'); if(!inp) return; beta.bypass=true; inp.click(); setTimeout(()=>{ beta.bypass=false; },0); };
 // '에이전트 동작 보기'를 펼치면 그 미션을 했다고 남긴다
 document.addEventListener('toggle',e=>{
