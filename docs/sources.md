@@ -26,7 +26,7 @@
 | APScheduler (4 미만) | 매일 자동 점검, AI 대기 작업 재시도 | MIT |
 | httpx | 법제처, 네이버, vLLM 호출 | BSD-3-Clause |
 | pytest | 테스트 | MIT |
-| Playwright (선택) | 게시물 화면 캡처 보존, 개발 중 휴대폰 너비 화면 캡처 확인, 화면 회귀 시험(tests/ui, Node.js 판) | Apache-2.0 |
+| Playwright (선택) | 게시물 화면 캡처 보존, 화면 회귀 시험(tests/ui, Node.js 판), 아이폰·갤럭시 크기 화면 캡처(tests/ui/device_shots.js) | Apache-2.0 |
 
 설치한 버전은 `pip freeze`로 확인해 제출 전에 이 표에 옮긴다.
 
@@ -36,12 +36,15 @@
 | cloudflared (Cloudflare Tunnel) | 시연 때 내 컴퓨터의 서버를 https 주소로 외부에 열기 | https://github.com/cloudflare/cloudflared | Apache-2.0 |
 
 ## 글꼴
-IBM Plex Sans KR (Google Fonts, SIL Open Font License)
+IBM Plex Sans KR (Google Fonts, SIL Open Font License). 화면 캡처 도구(tests/ui/fetch_fonts.sh)도 같은 글꼴을 받아 쓴다 (저장소에는 올리지 않음)
+
+## 테스트 자료
+`테스트자료/`의 계약서, 명세서, 입금 내역, 메시지 캡처, 채용공고 그림은 가상 인물과 가게로 직접 만든 것이다 (알바 사례 사진은 `tests/ui/make_case_images.js`로 시험 데이터의 계산 값과 같게 그림. `예시/채용공고_가상카페.png`는 가상카페 사례 조건으로 같은 방식의 HTML을 캡처해 만듦, 스크립트는 저장소에 없음). 실존 인물이나 가게가 아니다.
 
 ## AI 활용
 | 도구 | 사용한 곳 | 직접 수정한 부분 |
 |---|---|---|
-| Claude (claude.ai, Claude Code) | 초기 코드 구조, 화면 초안, 테스트 작성, 에이전트 반복 구조(계획, 검증 결과로 다시 판단, 질문, 후속 일정, 메모와 조언), 입력 검사와 프롬프트 인젝션 대비, 가짜 AI(시험용), 증거 저장 위치 점검, 실행 가이드 작성 | 개발하면서 기록 (직접 정한 요구사항과 고친 부분을 적는다) |
+| Claude (claude.ai, Claude Code) | 초기 코드 구조, 화면 초안, 테스트 작성, 에이전트 반복 구조(계획, 검증 결과로 다시 판단, 질문, 후속 일정, 메모와 조언), 입력 검사와 프롬프트 인젝션 대비, 가짜 AI(시험용), 증거 저장 위치 점검, 실행 가이드 작성, 홈 화면 미니멀 디자인 시안 3종(Claude 디자인 캔버스)과 적용, 처음 쓰는 사람 체험 안내, 데모 모드, 기기 크기 캡처 도구 | 개발하면서 기록 (직접 정한 요구사항과 고친 부분을 적는다) |
 
 ## 제출 전에 채울 것
 - [ ] 쓴 AI 모델 이름, 크기, 라이선스 (vLLM에 띄운 모델)
