@@ -49,6 +49,7 @@ data/app.db, data/uploads, data/reports  기록, 원본 파일, 상담 사전 �
 tests/               계산 함수와 판단 흐름 테스트 (tests/fake_agent.py: 테스트용 가짜 AI)
   test_regression.py 회귀 시험 (여러 상태 × 모든 API와 예약 작업)
   ui/                화면 회귀 시험 (Playwright, run_all.sh)
+                     device_shots.js: 아이폰·갤럭시 크기 캡처 (fetch_fonts.sh로 받은 실제 글꼴)
 docs/sources.md      출처와 AI 활용 기록 (대회 별지2 작성용)
 docs/실행가이드.md    실행 명령과 인자, .env 설정값, 자주 겪은 문제
 deploy/              GPU 서버의 vLLM 켜기와 끄기 (start_vllm.sh, stop_vllm.sh)
@@ -155,6 +156,8 @@ bench/               모델 후보 비교 실험 (Qwen3.8-27B 선정 근거)
 - `.input`처럼 여러 화면이 쓰는 규칙을 바꾸면 그 규칙을 쓰는 모든 화면을 캡처한다. `<details>` 안의 입력칸은 box-sizing을 물려받지 않는다.
 - 색은 뜻에 맞게: 초록은 문제 없음, 노랑은 확인 필요(AI 판단 대기 포함), 빨강은 위반·보복 의심이나 적게 받음, 파랑은 좋고 나쁨이 없는 상태(신고함, 기록 수, 상담 자료), 회색은 아직 안 함. '했다'는 이유만으로 초록을 쓰지 않는다 (신고했어요가 초록이면 좋은 일처럼 보인다).
 - 요소만 찍는 캡처는 잘못 잘릴 수 있어 화면 전체(viewport)로 찍고, 캡처를 직접 열어 본다.
+- 스타일 캡처는 아이폰·갤럭시 크기와 실제 앱 글꼴로 찍는다: `bash tests/ui/fetch_fonts.sh`(한 번) 뒤 `node tests/ui/device_shots.js`. 서버의 Chromium은 Google 글꼴을 못 받아 우분투 기본 글꼴로 투박하게 찍히므로, 그 캡처로 디자인을 판단하지 않는다.
+- 디자인 기준(미니멀): 옅은 회색 바탕에 흰 카드, 테두리와 그림자 없이 여백으로 나눈다. 주 버튼은 검정, 보조 버튼은 회색 면. 상태는 색 점 + 글자(바탕색 알약 쓰지 않음). 카드마다 설명 줄을 붙이지 않는다.
 
 날짜와 시각
 - 증거(출퇴근, 올린 자료, 보존한 게시물, 실수 표시)와 상담 사전 자료의 시각은 연월일, 요일, 초까지 적고 한국 시간임을 밝힌다. 서버는 `app/calc/timeutil.py`의 fmt_dt, fmt_date, fmt_month, 화면은 app.js의 fmtDT, fmtDay, fmtTime, fmtMonth만 쓴다. 날짜 글자를 위치로 잘라 쓰지 않는다.

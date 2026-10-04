@@ -1,16 +1,18 @@
 
 :root{
-  --ink:#18223a;
-  --ink-soft:#4a5570;
-  --line:#d5dbe6;
-  --bg:#e9edf3;
+  /* 미니멀: 옅은 회색 바탕에 흰 카드, 주 버튼은 검정, 색은 상태를 뜻할 때만 (초록 문제 없음, 노랑 확인 필요, 빨강 위반 의심, 파랑 AI·상태 알림) */
+  --ink:#111827;
+  --ink-soft:#6b7280;
+  --line:#eceef1;
+  --bg:#f4f5f7;
   --paper:#ffffff;
-  --blue:#2346c4;
-  --blue-soft:#e3e9fb;
+  --blue:#2f5bea;
+  --blue-soft:#eef2fd;
+  --fill:#f1f2f4;   /* 보조 버튼, 선택 칸 바탕 */
   --ok:#23704f;   --ok-bg:#e2f2ea;
   --warn:#9a6a05; --warn-bg:#fbf0d6;
   --bad:#b3302f;  --bad-bg:#f9e1e0;
-  --radius-lg:18px; --radius-sm:8px;
+  --radius-lg:20px; --radius-sm:8px;
   font-family:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   color:var(--ink);
   box-sizing:border-box;
@@ -19,54 +21,56 @@
 }
 *,*::before,*::after{box-sizing:inherit}
 html,body{margin:0;background:var(--bg)}
-body{font-size:15px;line-height:1.6}
+body{font-size:15px;line-height:1.6;letter-spacing:-.01em}
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 
 .app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg);padding-bottom:84px}
 
 /* 상단 */
-.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 18px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 20px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .brand{font-weight:700;font-size:18px;letter-spacing:-.01em}
 
-main{padding:0 18px}
+main{padding:0 16px}
 .view{display:none}
 .view.active{display:block}
 h2{font-size:21px;margin:10px 0 4px;letter-spacing:-.01em}
 .lead{color:var(--ink-soft);margin:0 0 16px;font-size:14px}
 h3{font-size:16px;margin:24px 0 10px}
 
-.panel{background:var(--paper);border-radius:var(--radius-lg);padding:18px;margin-bottom:14px}
+.panel{background:var(--paper);border-radius:var(--radius-lg);padding:20px;margin-bottom:12px}
 
-/* 출퇴근 카드: 이 화면의 중심 */
-.clock{background:var(--ink);color:#fff;border-radius:var(--radius-lg);padding:22px 20px 20px;margin-bottom:14px;position:relative;overflow:hidden}
-.clock::after{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:repeating-linear-gradient(90deg,#fff 0 10px,transparent 10px 20px);opacity:.18}
-.clock .date{font-size:14px;opacity:.75}
-.clock .time{font-size:52px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.1;margin:4px 0 2px}
-.clock .note{font-size:12.5px;opacity:.7;margin:0 0 16px}
-.clock .state{font-size:14px;margin-bottom:12px}
-.punch{width:100%;border:0;border-radius:10px;padding:16px;font-size:18px;font-weight:700;cursor:pointer;background:#fff;color:var(--ink)}
-.punch.out{background:#ffd76a}
-.gps{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;font-size:13.5px;opacity:.9}
+/* 출퇴근 카드: 이 화면의 중심 (날짜와 시각 | 마지막 기록, 출근 버튼, 위치 기록) */
+.clock{background:var(--paper);border-radius:var(--radius-lg);padding:20px;margin-bottom:12px}
+.clock-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:18px}
+.clock .date{font-size:13px;color:var(--ink-soft)}
+.clock .time{font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.04em;line-height:1.1}
+.clock .state{font-size:12.5px;color:var(--ink-soft);text-align:right;max-width:52%;line-height:1.45;padding-bottom:4px}
+.punch{width:100%;border:0;border-radius:14px;padding:15px;font-size:17px;font-weight:600;cursor:pointer;background:var(--ink);color:#fff}
+.punch.out{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}  /* 근무 중: 퇴근하기 */
+.punch:disabled{background:var(--fill);color:var(--ink-soft);box-shadow:none;cursor:default}
+.gps{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;font-size:13.5px;color:var(--ink-soft)}
 
 /* 스위치 */
 .switch{position:relative;width:46px;height:26px;flex:none}
 .switch input{opacity:0;width:0;height:0;position:absolute}
-.switch span{position:absolute;inset:0;border-radius:999px;background:#8791a8;transition:background .2s}
+.switch span{position:absolute;inset:0;border-radius:999px;background:#d1d5db;transition:background .2s}
 .switch span::before{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
-.switch input:checked + span{background:#3fb37f}
+.switch input:checked + span{background:var(--ink)}
 .switch input:checked + span::before{transform:translateX(20px)}
 .switch input:focus-visible + span{outline:3px solid #9fb4ff;outline-offset:2px}
 
-/* 상태 표시 */
-.tag{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 10px;border-radius:999px;white-space:nowrap}
-.tag.ok{color:var(--ok);background:var(--ok-bg)}
-.tag.warn{color:var(--warn);background:var(--warn-bg)}
-.tag.bad{color:var(--bad);background:var(--bad-bg)}
+/* 상태 표시: 바탕색 알약 대신 색 점 + 글자 */
+.tag{display:inline-flex;align-items:center;font-size:13px;font-weight:600;white-space:nowrap}
+.tag.ok,.tag.warn,.tag.bad,.tag.none{gap:6px}
+.tag.ok::before,.tag.warn::before,.tag.bad::before,.tag.none::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.tag.ok{color:var(--ok)}
+.tag.warn{color:var(--warn)}
+.tag.bad{color:var(--bad)}
 
 /* 목록 */
 .list{list-style:none;margin:0;padding:0}
-.list li{padding:12px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.list li{padding:14px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .list li:first-child{border-top:0;padding-top:0}
 .list li:last-child{padding-bottom:0}
 .list .main{flex:1;min-width:0}
@@ -91,13 +95,14 @@ h3{font-size:16px;margin:24px 0 10px}
 /* 폼 */
 label.field{display:block;margin-bottom:12px;font-size:14px}
 label.field span{display:block;font-weight:500;margin-bottom:4px}
-.input{box-sizing:border-box;width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fbfcfe}
+.input{box-sizing:border-box;width:100%;border:1px solid #e3e5e9;border-radius:12px;padding:11px 12px;background:var(--paper)}
 textarea.input{min-height:120px;resize:vertical;line-height:1.6}
 .row{display:flex;gap:10px}
 .row > *{flex:1}
 /* 파일 올리기: 보조 버튼과 같은 모양, 아래 줄에 짧은 설명 */
-.upload{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;border-radius:10px;padding:12px 16px;
-  cursor:pointer;background:var(--blue-soft);color:var(--blue);font-size:12.5px;font-weight:500;text-align:center}
+.upload{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;border-radius:14px;padding:14px 16px;
+  cursor:pointer;background:var(--fill);color:var(--ink-soft);font-size:12.5px;font-weight:500;text-align:center}
+.upload strong{color:var(--ink)}
 .upload strong{font-size:15px;font-weight:600}
 .upload:hover{filter:brightness(.96)}
 .hint{font-size:13px;color:var(--ink-soft);margin:6px 0 0}
@@ -122,11 +127,11 @@ table.check tr:first-child{border-top:0}
 .dot.read{background:var(--line)}
 
 /* 하단 탭 */
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--paper);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--paper);padding-bottom:env(safe-area-inset-bottom,0px)}
 nav.tabs .inner{max-width:480px;margin:0 auto;display:flex}
-nav.tabs button{flex:1;border:0;background:none;padding:10px 0 12px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav.tabs button{flex:1;border:0;background:none;padding:10px 0 12px;font-size:11.5px;color:#9ca3af;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
 nav.tabs button svg{width:22px;height:22px}
-nav.tabs button[aria-current="page"]{color:var(--blue);font-weight:600}
+nav.tabs button[aria-current="page"]{color:var(--ink);font-weight:600}
 
 /* 첫 설정 */
 .onboard{position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:24px 18px 40px}
@@ -153,11 +158,11 @@ div.field{margin-bottom:12px}
 
 /* 선택 버튼 묶음 */
 .seg{display:flex;gap:6px}
-.seg button{flex:1;border:1px solid var(--line);background:#fbfcfe;border-radius:10px;padding:10px 4px;font-size:14px;font-weight:600;cursor:pointer}
-.seg button[aria-pressed="true"]{border-color:var(--blue);background:var(--blue-soft);color:var(--blue)}
+.seg button{flex:1;border:1px solid transparent;background:var(--fill);border-radius:12px;padding:10px 4px;font-size:14px;font-weight:600;cursor:pointer}
+.seg button[aria-pressed="true"]{border-color:var(--ink);background:var(--paper);color:var(--ink)}
 
 /* 근무 시간 선택: 입력 칸 모양 + 오른쪽 작은 버튼 */
-.schedule-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);background:#fbfcfe;border-radius:10px;padding:8px 8px 8px 12px;cursor:pointer;text-align:left}
+.schedule-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid #e3e5e9;background:var(--paper);border-radius:12px;padding:8px 8px 8px 12px;cursor:pointer;text-align:left}
 .sched-sum{font-size:14px}
 .sched-go{pointer-events:none}
 
@@ -199,12 +204,12 @@ div.field{margin-bottom:12px}
 details.more{border-top:1px solid var(--line);margin-top:6px;padding-top:12px}
 details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--blue);margin-bottom:10px}
 
-.job-switch{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:7px 12px 7px 14px;cursor:pointer;max-width:62%}
-.job-switch strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.job-switch{display:flex;align-items:center;gap:4px;border:0;background:none;border-radius:10px;padding:8px 0 8px 8px;cursor:pointer;max-width:62%}
+.job-switch strong{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .job-switch svg{flex:none;color:var(--ink-soft)}
 .clock-place{font-size:15px;font-weight:600;margin-bottom:2px}
 .sched-line{margin:-8px 0 14px;font-size:13.5px;color:var(--ink-soft)}
-.place-tag{display:inline-block;margin:0 0 12px;background:var(--blue-soft);color:var(--blue);font-weight:600;font-size:13px;border-radius:999px;padding:3px 12px}
+.place-tag{display:inline-block;margin:0 0 12px;background:var(--fill);color:var(--ink-soft);font-weight:600;font-size:13px;border-radius:999px;padding:3px 12px}
 .empty-state{text-align:center;padding:26px 18px}
 .empty-state p{margin:6px 0 0;color:var(--ink-soft);font-size:14px}
 .place-list{display:flex;flex-direction:column;gap:8px}
@@ -229,19 +234,41 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 .qs{margin:0;padding-left:20px}
 .qs li{margin-bottom:8px}
 .quit-panel{border:2px solid #d9a21b}
-.ov-parts{list-style:none;margin:10px 0 0;padding:0}
-.ov-parts li{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-top:1px solid var(--line,#e6e8ef);font-size:13.5px}
+/* 종합 점검 카드: 결과 머리줄(점 + 이름 + 결과), 한 줄 결론, 남은 항목 */
+.ov-head{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink-soft)}
+.ov-head::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.ov-head.ok{color:var(--ok)} .ov-head.warn{color:var(--warn)} .ov-head.bad{color:var(--bad)} .ov-head.pending{color:var(--blue)}
+.ov-head.pending::before{display:none}
+.ov-head .tag{color:inherit;font-size:13px}
+.ov-head .tag:not(.pending)::before{content:"·";width:auto;height:auto;background:none;border-radius:0}
+.ov-headline{display:block;font-size:22px;line-height:1.35;letter-spacing:-.02em;margin:6px 0 2px}
+.ov-summary{margin:0;font-size:14px;color:#4b5563;line-height:1.55}
+.ov-summary:empty{display:none}
+.ov-ai-wrap{margin-top:12px;border-top:0;padding-top:0}
+.ov-panel .ai-note{background:none;padding:0;margin:12px 0 0;color:var(--ink-soft)}  /* 조언이 아직 없을 때 (대기면 도는 표시는 그대로) */
+.ov-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}
+.ov-foot .ov-note{margin:0;font-size:12.5px}
+/* 종합 점검이 본 기록: 누르면 그 화면으로 가는 목록 */
+.ov-list{padding:4px 20px}
+.ov-parts{list-style:none;margin:0;padding:0}
+.ov-parts li{border-top:1px solid var(--line)}
 .ov-parts li:first-child{border-top:0}
-.ov-parts .ov-name{font-weight:700;white-space:nowrap}
-.ov-parts .ov-text{flex:1;color:var(--ink-soft,#555);min-width:0;overflow-wrap:anywhere}
+.ov-row{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:15px 0;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.ov-row:disabled{cursor:default}
+.ov-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.ov-parts .ov-name{font-weight:600;font-size:15px}
+.ov-parts .ov-text{font-size:12.5px;color:var(--ink-soft);overflow-wrap:anywhere;margin-top:2px}
+.ov-val{font-size:13.5px;color:var(--ink-soft);text-align:right;flex:none;max-width:55%}
+.ov-val.muted{color:#9ca3af}
 .ov-parts .tag{flex:none}
-.quit-sub{margin-top:4px;padding:10px 0 4px;border-top:1px solid var(--line)}  /* 종합 점검 카드 안의 퇴직 정산 줄 */
+.ov-chev{width:16px;height:16px;flex:none;fill:none;stroke:#c4c8cf;stroke-width:2.4}
+.quit-sub{margin-top:14px;padding:14px 0 4px;border-top:1px solid var(--line)}  /* 종합 점검 카드 안의 퇴직 정산 줄 */
 .quit-sub .quit-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .quit-sub .ov-name{font-weight:700;font-size:13.5px}
 .quit-sub .ov-text{margin:4px 0 0;font-size:13.5px;color:var(--ink-soft,#555)}
 .quit-links{display:flex;gap:12px;margin-top:8px}
 .quit-ai{margin-top:6px}
-.ov-note{margin:8px 0 0}
+
 .quit-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .quit-panel p{margin:6px 0 0}
 .seek-entry{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:var(--paper);border-radius:var(--radius-lg);padding:14px 14px 14px 18px;margin-bottom:14px;cursor:pointer}
@@ -267,12 +294,13 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 
 /* 뒤로 가기 */
 .top-left{display:flex;align-items:center;gap:6px;min-width:0}
-.back-btn{display:inline-flex;align-items:center;gap:2px;border:0;background:var(--blue-soft);color:var(--blue);border-radius:8px;padding:6px 12px 6px 8px;cursor:pointer;font-size:13px;font-weight:600;line-height:1.3}
+.back-btn{display:inline-flex;align-items:center;gap:2px;border:0;background:var(--fill);color:var(--ink);border-radius:8px;padding:6px 12px 6px 8px;cursor:pointer;font-size:13px;font-weight:600;line-height:1.3}
 #backBtn{padding:6px}
 .ob-back{margin:0 0 12px}
 
 /* 홈의 일하는 곳 카드 */
 .job-card{margin-top:4px}
+.job-card,#askCard{scroll-margin-top:72px}  /* 종합 점검 목록에서 누르면 위 머리줄에 가리지 않게 */
 .job-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .job-card-head h2{margin:10px 0 4px}
 
@@ -308,6 +336,9 @@ details.trace{margin-top:12px}
 #records .rec-gps{justify-self:center}
 #records .rec-act{justify-self:end}
 #records li.void{grid-template-columns:minmax(0,1fr) auto}
+#records:not(.show-all) > li:nth-child(n+6){display:none}  /* 최근 5개만 (app.js의 REC_SHOW) */
+.rec-more{margin-top:12px}
+#records .rec-time{word-break:keep-all}  /* '퇴근'이 줄 끝에서 쪼개지지 않게 */
 .list li.void strong,.list li.void .rec-time{text-decoration:line-through;color:var(--ink-soft)}
 .void-note{color:var(--warn)}
 .open-alert{border:2px solid #d9a21b}
@@ -316,25 +347,25 @@ details.trace{margin-top:12px}
 .alerts-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .alert .main{flex:1;min-width:0}
 .note-at{font-size:12px}
-.note-x{flex:none;border:0;border-radius:8px;background:#e6e9f0;color:var(--ink-soft);font-size:15px;font-weight:600;line-height:1;cursor:pointer;padding:6px 9px;align-self:flex-start}
+.note-x{flex:none;border:0;border-radius:8px;background:var(--fill);color:var(--ink-soft);font-size:15px;font-weight:600;line-height:1;cursor:pointer;padding:6px 9px;align-self:flex-start}
 
 /* ===== 버튼: 세 종류만 쓴다 =====
    .btn          주 버튼 (파란색) - 화면의 핵심 동작
    .btn.ghost    보조 버튼 (연한 파란색), .danger는 지우기처럼 되돌리기 어려운 동작
    .link         글자 버튼 - 작은 부가 동작, .muted는 덜 중요한 것 */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:11px 16px;
-  font-size:15px;font-weight:600;line-height:1.3;cursor:pointer;background:var(--blue);color:#fff;text-decoration:none}
-.btn.ghost{background:var(--blue-soft);color:var(--blue)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:14px;padding:13px 16px;
+  font-size:15px;font-weight:600;line-height:1.3;cursor:pointer;background:var(--ink);color:#fff;text-decoration:none}
+.btn.ghost{background:var(--fill);color:var(--ink)}
 .btn.danger{background:var(--bad-bg);color:var(--bad)}
-.btn.small{padding:7px 12px;font-size:13px;border-radius:8px;flex:none}
+.btn.small{padding:8px 12px;font-size:13px;border-radius:10px;flex:none}
 .btn.block{display:flex;width:100%}
 .btn:hover{filter:brightness(.96)}
-.btn:disabled{background:#c4cbdb;color:#fff;cursor:not-allowed;filter:none}
-/* 작은 동작도 밑줄 글자가 아닌 작은 보조 버튼 모양 (.muted는 회색) */
-.link{display:inline-flex;align-items:center;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;
-  background:var(--blue-soft);color:var(--blue);font-size:13px;font-weight:600;line-height:1.3;text-decoration:none}
+.btn:disabled{background:#d1d5db;color:#fff;cursor:not-allowed;filter:none}
+/* 작은 동작도 밑줄 글자가 아닌 작은 보조 버튼 모양 (.muted는 덜 중요한 것) */
+.link{display:inline-flex;align-items:center;border:0;border-radius:10px;padding:7px 12px;cursor:pointer;
+  background:var(--fill);color:var(--ink);font-size:13px;font-weight:600;line-height:1.3;text-decoration:none}
 .link:hover{filter:brightness(.96)}
-.link.muted{background:#e6e9f0;color:var(--ink-soft)}
+.link.muted{background:var(--fill);color:var(--ink-soft)}
 #quitOpen{margin:0 0 14px}
 /* 근무 기록 줄의 버튼(실수로 누름, 표시 취소)은 목록이 복잡해 보이지 않게 조금 작게 */
 #records .link,#records .btn.small{padding:3px 8px;font-size:11px;border-radius:5px}
@@ -344,8 +375,8 @@ em.hint{display:block;font-style:normal}
 em.hint.bad{color:var(--bad)}
 
 /* 확인 중 (AI 판단 전) */
-.tag.pending{color:var(--blue);background:var(--blue-soft)}
-.tag.none{color:var(--ink-soft);background:#eef0f4}
+.tag.pending{color:var(--blue)}
+.tag.none{color:var(--ink-soft)}
 /* AI 응답 대기 중: 도는 표시로 기다리는 중임을 알린다 */
 .tag.pending::before,.ai-note.wait::before,.wait-note::before{content:"";display:inline-block;width:.8em;height:.8em;margin-right:6px;vertical-align:-1px;
   border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
@@ -364,16 +395,17 @@ em.hint.bad{color:var(--bad)}
 
 /* AI 에이전트 진행 상황과 조언 */
 .case-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.case-steps li{background:#f2f4f8;border-radius:10px;padding:8px;min-width:0}
-.case-steps li strong{display:block;font-size:13.5px;color:var(--ink-soft)}
+.case-steps li{background:var(--fill);border-radius:12px;padding:10px;min-width:0}
+.case-steps li strong{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--ink)}
+.case-steps li strong::before{content:"";width:7px;height:7px;border-radius:50%;background:#c4c8cf;flex:none}
 .case-steps li span{display:block;font-size:11.5px;color:var(--ink-soft);line-height:1.35;margin-top:2px;word-break:keep-all}
 /* 칸 색은 상황에 맞게 (서버의 tone): 초록 문제 없음, 노랑 확인 필요, 빨강 문제 의심, 파랑 상태만 알림(좋고 나쁨 없음), 회색 아직 안 함 */
-.case-steps li.tone-ok{background:var(--ok-bg)} .case-steps li.tone-ok strong{color:var(--ok)}
-.case-steps li.tone-warn{background:var(--warn-bg)} .case-steps li.tone-warn strong{color:var(--warn)}
-.case-steps li.tone-bad{background:var(--bad-bg)} .case-steps li.tone-bad strong{color:var(--bad)}
-.case-steps li.tone-info{background:var(--blue-soft)} .case-steps li.tone-info strong{color:var(--blue)}
-.advice{margin-top:12px;border-left:3px solid var(--blue);padding:2px 0 2px 12px}
-.advice-head{font-size:13px;font-weight:700;color:var(--blue)}
+.case-steps li.tone-ok strong::before{background:var(--ok)}
+.case-steps li.tone-warn strong::before{background:#d69e2e}
+.case-steps li.tone-bad strong::before{background:var(--bad)}
+.case-steps li.tone-info strong::before{background:var(--blue)}
+.advice{margin-top:14px;background:var(--bg);border-radius:14px;padding:12px 14px}
+.advice-head{font-size:12.5px;font-weight:700;color:var(--ink-soft)}
 .advice p{margin:4px 0 8px}
 .case-card .ai-note{margin-bottom:0}
 .follow{margin-top:12px;border-left:3px solid var(--line);padding:2px 0 2px 12px}
