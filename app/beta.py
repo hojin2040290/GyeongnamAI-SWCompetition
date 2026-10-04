@@ -51,11 +51,13 @@ PERSONAS: dict[str, dict] = {
         "story": "곧 첫 알바를 구하려고 해요. 지원하기 전에 조건을 확인하고, 받은 근로계약서를 점검해 보세요.",
         "missions": [
             {"key": "seek", "title": "지원 전 확인으로 공고 조건 점검하기", "go": "seek",
-             "how": "시작 화면의 '지원하기 전이에요'(앱 안에서는 일하는 곳 선택 창의 지원 전 확인)에서 시급과 근무 시간을 적고 점검해요"},
+             "how": "시작 화면에서 '아르바이트를 구하고 있어요' → 다음 → 생년월일을 확인하고 다음. '채용공고 사진 올리기'로 "
+                    "테스트 공고를 올리면 칸이 채워져요. '지원 전 확인하기'를 눌러요 (등록한 뒤에는 계약서 탭 맨 위에 있어요)"},
             {"key": "contract", "title": "일할 곳을 등록하고 계약서 사진으로 점검하기", "go": "check",
-             "how": "일할 곳을 등록한 뒤 계약서 탭에서 '계약서 사진 올리기'를 누르면 테스트용 계약서가 나와요"},
+             "how": "지원 전 확인 결과의 '이곳에서 일하게 됐어요, 등록하기'(또는 시작 화면의 '지금 아르바이트를 하고 있어요')로 등록하고 "
+                    "'시작하기'. 계약서 탭의 '근로계약서 사진 올리기'로 테스트 계약서를 올린 뒤 '이 내용과 근무 기록으로 점검하기'를 눌러요"},
             {"key": "trace", "title": "'에이전트 동작 보기'를 열어 AI가 판단한 과정 보기", "go": "check",
-             "how": "점검 결과 아래의 '에이전트 동작 보기'를 눌러 펼쳐요"},
+             "how": "점검 결과(지원 전 확인 결과나 계약서 탭의 점검 결과) 아래 '에이전트 동작 보기'를 눌러 펼쳐요"},
         ],
         "job_fill": ("알바5개/3_근로계약서.png", "가상카페 근로계약서"),
         "files": {
@@ -70,11 +72,12 @@ PERSONAS: dict[str, dict] = {
         "story": "가상분식에서 일하고 있어요. 8월 급여가 생각보다 적게 들어온 것 같아요.",
         "missions": [
             {"key": "punch", "title": "출근하기와 퇴근하기 눌러 보기", "go": "home",
-             "how": "홈 맨 위의 출근하기를 누르고, 조금 뒤 퇴근하기를 눌러요"},
-            {"key": "payday", "title": "급여 탭에서 명세서 사진을 올리고 점검하기", "go": "pay",
-             "how": "급여 탭에서 8월을 고르고 명세서를 올린 뒤 '지금 점검'을 눌러요"},
+             "how": "홈 맨 위의 출근하기를 누르고, 조금 뒤 퇴근하기를 눌러요. '방금 출근했어요. 정말 퇴근할까요?'가 뜨면 확인을 눌러요"},
+            {"key": "payday", "title": "급여 탭에서 8월 명세서를 올리고 받은 금액 비교하기", "go": "pay", "month": "2026-08",
+             "how": "급여 탭에서 달을 2026년 8월로 고르고, '명세서나 입금 내역' 칸을 눌러 테스트 명세서를 올려요. "
+                    "받은 금액이 비어 있으면 명세서의 실지급액을 적고 '저장하고 비교하기'를 눌러요"},
             {"key": "evidence", "title": "자료 탭에서 입금 내역을 증거로 올리기", "go": "docs",
-             "how": "자료 탭의 '자료 올리기'를 누르면 테스트용 입금 내역이 나와요"},
+             "how": "자료 탭에서 자료 종류를 '입금 내역'으로 고르고 '자료 올리기'를 누르면 테스트용 입금 내역이 나와요"},
         ],
         "files": {
             "seekFile": [POSTING],
@@ -89,11 +92,12 @@ PERSONAS: dict[str, dict] = {
         "story": "가상치킨을 8월 29일에 그만뒀는데 마지막 월급을 아직 못 받았어요. 사장님 메시지도 걱정돼요.",
         "missions": [
             {"key": "paid", "title": "홈의 퇴직 정산에서 '아직 못 받았어요' 누르기", "go": "home",
-             "how": "홈의 AI 에이전트 종합 점검 카드에 있는 퇴직 후 임금 정산 줄에서 눌러요"},
+             "how": "홈의 'AI 에이전트 종합 점검' 카드 안 '퇴직 후 임금 정산'에서 '아직 못 받았어요'를 눌러요"},
             {"key": "guard", "title": "보호 탭에서 '신고했어요'를 켜고 보복 금지 안내 받기", "go": "guard",
-             "how": "보호 탭에서 신고했어요를 켜면 사업주에게 보낼 안내 문구가 만들어져요"},
+             "how": "아래 메뉴의 보호 탭에서 '신고했어요' 스위치를 켜면 AI가 사업주에게 보낼 보복 금지 안내 문구를 써 줘요"},
             {"key": "report", "title": "자료 탭에서 상담 사전 자료 만들기", "go": "docs",
-             "how": "자료 탭에서 사장님 메시지 캡처를 올린 뒤 상담 사전 자료 만들기를 눌러요"},
+             "how": "자료 탭의 '자료 올리기'로 테스트 사장님 메시지 캡처를 올리고(자료 종류는 '사업주 메시지 캡처' 그대로) "
+                    "'상담 사전 자료 만들기'를 눌러요. 다 만들면 자료가 열려요"},
         ],
         "files": {
             "seekFile": [POSTING],
@@ -105,6 +109,8 @@ PERSONAS: dict[str, dict] = {
 }
 ALLOWED_FILES = ({name for p in PERSONAS.values() for files in p["files"].values() for name, _ in files}
                  | {p["job_fill"][0] for p in PERSONAS.values() if p.get("job_fill")})
+
+OTHER_UPLOADS = ("contract", "payslip", "notice")  # 계약서 탭, 급여 탭, 지원 전 확인에서 올린 자료의 종류
 
 router = APIRouter(prefix="/api/beta")
 
@@ -135,8 +141,9 @@ def mission_done(s: Session, user: User, st: BetaState, key: str) -> bool:
     if key == "punch":
         rows = s.exec(select(WorkRecord).where(WorkRecord.user_id == user.id, WorkRecord.clock_in >= since)).all()
         return any(r.clock_out is not None for r in rows)
-    if key == "evidence":
-        return _after(s, Evidence, user.id, since, "uploaded_at")
+    if key == "evidence":  # 자료 탭에서 올린 것만 (계약서 사진, 명세서, 채용공고는 다른 미션에서 올린다)
+        return s.exec(select(Evidence).where(Evidence.user_id == user.id, Evidence.uploaded_at >= since,
+                                             Evidence.kind.not_in(OTHER_UPLOADS))).first() is not None
     if key == "paid":
         return any(j.status == "quit" and j.paid_after_quit is not None for j in jobs)
     if key == "guard":
