@@ -30,6 +30,7 @@ PLAN=(
   "part14 true  3 -            -"
   "part15 true  3 -            -"
   "part16 true  1 FIRST_GUIDE=true -"
+  "part17 true  1 DEMO_MODE=true -"
 )
 
 run() {  # 결과는 $D/summary.txt에 남기고, 다 끝난 뒤 PLAN 순서대로 출력한다

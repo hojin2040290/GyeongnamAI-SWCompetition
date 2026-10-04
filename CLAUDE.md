@@ -40,7 +40,7 @@ app/
   notices.py         알림 보내기 (종류별로 최신 것만)
   ocr.py             계약서, 급여명세서 사진 읽기 (AI)
   demo_db.py         시험 데이터 (test@example.com, test2~test5@example.com / test1234)
-  guide.py           처음 쓰는 사람 체험 안내 (새로 가입한 계정만, FIRST_GUIDE): 고른 상황별 미션 3개 판정, 예시 자료, 설문(SURVEY_URL)
+  guide.py           처음 쓰는 사람 체험 안내 (새로 가입한 계정만, FIRST_GUIDE): 고른 상황별 미션 3개 판정, 예시 자료, 설문(SURVEY_URL), 데모 모드(DEMO_MODE: 모든 업로드에 데모 자료 15장)
   auth.py, guard.py, report.py, scheduler.py, storage.py, evidence_check.py, login_guard.py
   db.py, models.py   SQLite 연결과 테이블
 web/templates, web/static   화면
@@ -91,6 +91,7 @@ bench/               모델 후보 비교 실험 (Qwen3.8-27B 선정 근거)
 - 계산 함수(calc/)를 만들거나 고치면 tests/에 테스트를 함께 작성한다.
 - 비밀키와 모델 주소는 .env에서 읽고, .env는 절대 커밋하지 않는다.
 - 새 라이브러리나 모델, API, 외부 자료를 쓰면 docs/sources.md에 이름, 용도, 출처, 라이선스를 기록한다.
+- 모든 수정마다 README.md를 그 수정에 정확히 맞게 함께 고친다 (기능, 화면, 설정, 명령, 구조). 설정을 더하거나 바꾸면 .env.example과 docs/실행가이드.md 4절 표도 같은 커밋에서 고친다. 쓰인 내용이 코드와 논리적으로 맞는지(기본값, 조건, 버튼 이름) 대조한 뒤 커밋한다.
 
 ## 작업 방식
 - 큰 작업은 바로 코드를 쓰지 말고 먼저 계획을 설명한다.

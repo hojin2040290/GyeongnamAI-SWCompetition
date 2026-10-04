@@ -69,7 +69,7 @@ def test_mode_change_and_turn_off():
     c.put("/api/me", json={"email": me["email"], "birth_date": BIRTH, "mode": "quit"})  # 처음 화면에서 상황을 다시 고름
     assert c.get("/api/guide/state").json()["mode"] == "quit"
     st = c.post("/api/guide/mark", json={"key": "off"}).json()
-    assert st == {"on": False, "survey_url": config.SURVEY_URL}
+    assert st == {"on": False, "survey_url": config.SURVEY_URL, "demo": False}
     assert c.post("/api/guide/mark", json={"key": "bad"}).status_code == 422
 
 
@@ -104,3 +104,16 @@ def test_remove_old_beta_accounts_only():
     assert keep.get("/api/me").status_code == 200
     login = TestClient(app).post("/api/auth/login", json={"email": "beta1@example.com", "password": "test1234"})
     assert login.status_code != 200
+
+
+def test_demo_mode_files_for_every_account(monkeypatch):
+    """데모 모드면 안내가 꺼진 계정(시험 계정 등)도 업로드 칸마다 데모 자료 전체를, 그 칸에 맞는 것부터 받는다."""
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+    c = _join("guide_demo_mode@example.com", "work")
+    st = c.post("/api/guide/mark", json={"key": "off"}).json()
+    assert st["on"] is False and st["demo"] is True and st["job_fill"]
+    assert all(len(st["files"][k]) == len(guide.DEMO) for k in guide.UPLOAD_INPUTS)
+    assert "근로계약서" in st["files"]["contractFile"][0]["label"] and "채용공고" in st["files"]["seekFile"][0]["label"]
+    assert all(c.get(f["url"]).status_code == 200 for f in st["files"]["evFile"])
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+    assert "files" not in c.get("/api/guide/state").json()  # 데모 모드를 끄면 업로드는 바로 내 파일 고르기

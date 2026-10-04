@@ -2,6 +2,7 @@
 
 - 가입할 때 고른 상황(지원 전, 일하는 중, 그만둠)에 맞는 미션 3개를 보여 준다. 서버가 기록으로 판정한다 (가입한 뒤에 한 일만).
 - 체험하는 동안 업로드를 누르면 '내 기기에서 고르기'와 예시 자료(테스트자료의 가상 자료)를 함께 보여 준다.
+- 데모 모드(DEMO_MODE=true): 체험 안내와 상관없이 모든 계정의 업로드에 데모 자료 전체 (실제 업로드와 사진 읽기 시연용).
 - 미션을 다 하면 설문 안내 (SURVEY_URL). 설문은 일하는 곳 선택 창에도 늘 있다.
 - 시험 계정(app/demo_db.py)은 만들 때 안내를 끈다. 사용자도 '체험 안내 끄기'로 끌 수 있다.
 - 예전 베타 계정(beta1~9, owner1~3) 지우기: python -m app.guide --remove-old-beta
@@ -41,6 +42,32 @@ FILES = {
 }
 JOB_FILL = ("알바5개/3_근로계약서.png", "가상카페 근로계약서")  # 일하는 곳 등록 화면이 비어 있을 때 보여 주는 예시
 
+# 데모 모드(DEMO_MODE=true): 모든 계정의 모든 업로드 칸에 데모 자료 전체 (그 칸에 맞는 것부터). 실제 업로드와 사진 읽기 시연용
+DEMO = [  # (파일, 이름, 맞는 업로드 칸)
+    ("예시/채용공고_가상카페.png", "가상카페 채용공고", "seekFile"),
+    ("02_근로계약서.png", "행복편의점 근로계약서", "contractFile"),
+    ("06_급여명세서.png", "행복편의점 9월 급여명세서", "payFile evFile"),
+    ("07_입금내역.png", "행복편의점 입금 내역", "payFile evFile"),
+    ("03_근무표.png", "행복편의점 근무표", "evFile"),
+    ("04_사업주_메시지_캡처.png", "행복편의점 사장님 메시지", "evFile"),
+    ("알바5개/2_근로계약서.png", "가상분식 근로계약서", "contractFile"),
+    ("알바5개/2_급여명세서.png", "가상분식 8월 급여명세서", "payFile evFile"),
+    ("알바5개/2_입금내역.png", "가상분식 입금 내역", "payFile evFile"),
+    ("알바5개/3_근로계약서.png", "가상카페 근로계약서", "contractFile"),
+    ("알바5개/3_급여명세서.png", "가상카페 8월 급여명세서", "payFile evFile"),
+    ("알바5개/3_입금내역.png", "가상카페 입금 내역", "payFile evFile"),
+    ("알바5개/4_사업주_메시지_캡처.png", "가상베이커리 사장님 메시지", "evFile"),
+    ("알바5개/5_근로계약서.png", "가상치킨 근로계약서", "contractFile"),
+    ("알바5개/5_사업주_메시지_캡처.png", "가상치킨 사장님 메시지", "evFile"),
+]
+UPLOAD_INPUTS = ("seekFile", "contractFile", "payFile", "evFile")
+
+
+def demo_files() -> dict[str, list[tuple[str, str]]]:
+    """업로드 칸마다 데모 자료 전체. 그 칸에 맞는 자료를 앞에 둔다."""
+    return {inp: [(n, label) for n, label, fit in DEMO if inp in fit.split()]
+            + [(n, label) for n, label, fit in DEMO if inp not in fit.split()] for inp in UPLOAD_INPUTS}
+
 CONTRACT = {"key": "contract", "title": "계약서 사진으로 점검하기", "go": "check",
             "how": "계약서 탭의 '근로계약서 사진 올리기'로 사진을 올리고(예시 자료도 있어요) '이 내용과 근무 기록으로 점검하기'를 눌러요"}
 # 상황(가입할 때 고른 mode)마다: 제목과 미션 3개 (판정 열쇠, 할 일, 방법, 바로 가기 화면)
@@ -65,7 +92,7 @@ MODES: dict[str, dict] = {
         {"key": "report", "title": "상담 사전 자료 만들기", "go": "docs",
          "how": "자료 탭에서 '상담 사전 자료 만들기'를 눌러요. 다 만들면 자료가 열려요"}]},
 }
-ALLOWED_FILES = {name for files in FILES.values() for name, _ in files} | {JOB_FILL[0]}
+ALLOWED_FILES = {name for files in FILES.values() for name, _ in files} | {JOB_FILL[0]} | {n for n, _, _ in DEMO}
 MARKS = ("intro", "closed", "off")  # 첫 안내 봄, 완료 창 닫음, 안내 끔
 
 router = APIRouter(prefix="/api/guide")
@@ -131,16 +158,21 @@ def _done_all(s: Session, user: User, st: GuideState) -> list[bool]:
     return [mission_done(s, user, st, m["key"]) for m in MODES[st.mode]["missions"]]
 
 
-def _files() -> dict:
+def _files(source: dict) -> dict:
     return {inp: [{"name": n, "label": label, "url": f"/api/guide/files/{n}", "fill": FILLS.get(n)} for n, label in files]
-            for inp, files in FILES.items()}
+            for inp, files in source.items()}
+
+
+def _job_fill() -> dict:
+    return {"url": f"/api/guide/files/{JOB_FILL[0]}", "label": JOB_FILL[1], "fill": FILLS[JOB_FILL[0]]}
 
 
 def state_of(s: Session, user: User) -> dict:
     """화면이 보는 체험 안내 상태. 안내가 없거나 끈 계정은 on=False (설문 주소는 메뉴에 늘 쓰므로 함께 준다)."""
     st = _state(s, user.id)
+    demo = {"demo": True, "files": _files(demo_files()), "job_fill": _job_fill()} if config.DEMO_MODE else {"demo": False}
     if not st or st.mode not in MODES or "off" in _marks(st):
-        return {"on": False, "survey_url": config.SURVEY_URL}
+        return {"on": False, "survey_url": config.SURVEY_URL, **demo}
     mode = MODES[st.mode]
     missions = [{**m, "done": d} for m, d in zip(mode["missions"], _done_all(s, user, st))]
     marks = _marks(st)
@@ -148,10 +180,9 @@ def state_of(s: Session, user: User) -> dict:
     return {"on": True, "mode": st.mode, "title": mode["title"], "missions": missions,
             "done_count": sum(m["done"] for m in missions), "all_done": all_done,
             "intro_seen": "intro" in marks, "closed": "closed" in marks,
-            # 예시 자료는 체험하는 동안만 (다 하고 완료 창을 닫으면 업로드는 바로 내 파일 고르기)
-            "files": _files() if not (all_done and "closed" in marks) else {},
-            "job_fill": {"url": f"/api/guide/files/{JOB_FILL[0]}", "label": JOB_FILL[1], "fill": FILLS[JOB_FILL[0]]},
-            "survey_url": config.SURVEY_URL}
+            # 예시 자료는 체험하는 동안만 (다 하고 완료 창을 닫으면 업로드는 바로 내 파일 고르기). 데모 모드면 늘 데모 자료 전체
+            "files": _files(FILES) if not (all_done and "closed" in marks) else {},
+            "job_fill": _job_fill(), "survey_url": config.SURVEY_URL, "demo": False, **demo}
 
 
 # ---------- API ----------
