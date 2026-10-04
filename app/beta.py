@@ -5,6 +5,8 @@
 - 미션 3개: 상황마다 해 볼 기능. 서버가 기록으로 판정한다 (계정을 만든 뒤에 한 일만 센다).
 - 테스트 자료: 업로드를 누르면 그 상황에 맞는 가상 자료를 보여 주고 '올릴게요'로 올린다 (실제 개인정보를 쓰지 않게).
 - 계정 만들기: python -m app.beta (서버를 켤 때 BETA_GUIDE=true이고 계정이 모자라면 알아서 실행한다)
+- 테스트를 마친 뒤 처음 상태로: python -m app.beta --reset (베타 계정의 기록과 올린 파일을 모두 지우고 다시 만든다.
+  베타 계정(beta1~9, owner1~3)만 지우고, test@example.com 등 다른 계정과 기록은 건드리지 않는다)
 BETA_GUIDE=false면 API는 꺼짐만 알리고, 화면에는 아무것도 보이지 않는다.
 """
 import copy
@@ -226,7 +228,53 @@ def missing_accounts(db: Path) -> list[tuple[str, str]]:
     return [(e, p) for e, p in ACCOUNTS if e not in have]
 
 
+def _delete_user(s: Session, uid: int) -> int:
+    """한 사용자의 기록을 모든 테이블에서 지운다 (사용자 번호가 있는 표, 그 사람 사업장 번호만 있는 표). 지운 행 수."""
+    from sqlalchemy import text
+    from sqlmodel import SQLModel
+    job_ids = [j.id for j in s.exec(select(Job).where(Job.user_id == uid)).all()]
+    n = 0
+    for table in reversed(SQLModel.metadata.sorted_tables):  # 참조하는 표부터
+        cols = table.columns.keys()
+        if "user_id" not in cols and "job_id" in cols and job_ids:
+            n += s.execute(text(f'DELETE FROM "{table.name}" WHERE job_id IN ({",".join(map(str, job_ids))})')).rowcount
+    for table in reversed(SQLModel.metadata.sorted_tables):  # 참조하는 표부터
+        if "user_id" in table.columns.keys():
+            n += s.execute(text(f'DELETE FROM "{table.name}" WHERE user_id = :u'), {"u": uid}).rowcount
+    n += s.execute(text('DELETE FROM "user" WHERE id = :u'), {"u": uid}).rowcount
+    return n
+
+
+def _delete_files(s: Session, uid: int) -> None:
+    """올린 원본(data/uploads/<사용자 번호>/)과 상담 사전 자료 파일. data 폴더 밖은 건드리지 않는다."""
+    import shutil
+    for r in s.exec(select(Report).where(Report.user_id == uid)).all():
+        path = Path(r.path).resolve()
+        if config.REPORT_DIR.resolve() in path.parents and path.is_file():
+            path.unlink()
+    folder = (config.UPLOAD_DIR / str(uid)).resolve()
+    if config.UPLOAD_DIR.resolve() in folder.parents and folder.is_dir():
+        shutil.rmtree(folder)
+
+
+def reset() -> None:
+    """베타 계정(beta1~9, owner1~3)만 기록과 올린 파일까지 지운다. 지운 뒤 main()이 다시 만든다."""
+    from app.db import engine, init_db
+    init_db()
+    emails = [e for e, _ in ACCOUNTS]
+    with Session(engine) as s:
+        users = s.exec(select(User).where(User.email.in_(emails))).all()
+        for u in users:
+            _delete_files(s, u.id)
+            rows = _delete_user(s, u.id)
+            print(f"{u.email}: 기록 {rows}건과 올린 파일을 지웠어요")
+        s.commit()
+    print(f"베타 계정 {len(users)}개를 지웠어요. 다시 만들어요")
+
+
 def main() -> None:
+    if "--reset" in sys.argv[1:]:
+        reset()
     os.environ["BETA_BUILDING"] = "1"  # 이 실행 안에서 서버 시작 처리가 다시 계정을 만들지 않게
     from fastapi.testclient import TestClient
 
