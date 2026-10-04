@@ -47,6 +47,15 @@ def _has_users(db: Path) -> bool:
         return False
 
 
+def run_child(module: list[str]) -> subprocess.CompletedProcess:
+    """계정 만들기 같은 하위 실행. 출력은 항상 UTF-8로 주고받는다
+    (Windows 터미널의 기본 cp949는 '—' 같은 글자를 못 써서 계정을 만들다 멈춘 적이 있다)."""
+    import os
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    return subprocess.run([sys.executable, "-m", *module], cwd=BASE_DIR, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=600, env=env)
+
+
 def prepare_test_data(log: logging.Logger) -> None:
     """시험 데이터(data/test)가 아직 없으면(계정이 없으면) 만든다. 이미 쓰던 시험 데이터는 건드리지 않는다.
     DB_PATH 등을 따로 정해 다른 곳을 쓰고 있으면 만들지 않는다."""
@@ -58,8 +67,7 @@ def prepare_test_data(log: logging.Logger) -> None:
         return
     # 시험 데이터가 없으면 새로, 있으면 없는 시험 계정만 더한다 (쓰던 계정과 기록은 그대로)
     log.info("시험 계정이 없어 만들어요 (python -m app.demo_db와 같음)")
-    out = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", str(config.TEST_DATA_DIR), "--add" if have else "--force"],
-                         cwd=BASE_DIR, capture_output=True, text=True, timeout=600)
+    out = run_child(["app.demo_db", "--dir", str(config.TEST_DATA_DIR), "--add" if have else "--force"])
     if out.returncode == 0:
         log.info("시험 데이터를 만들었어요. 로그인: test@example.com, test2~test5@example.com / test1234")
     else:
@@ -96,7 +104,7 @@ def prepare_beta_accounts(log: logging.Logger) -> None:
         log.info("베타 테스트 체험판으로 실행 중이에요 (BETA_GUIDE=true). 베타 계정은 이미 있어요")
         return
     log.info("베타 계정 %d개를 만들어요 (python -m app.beta와 같음)", len(todo))
-    out = subprocess.run([sys.executable, "-m", "app.beta"], cwd=BASE_DIR, capture_output=True, text=True, timeout=600)
+    out = run_child(["app.beta"])
     if out.returncode == 0:
         log.info("베타 계정을 만들었어요: beta1~9@example.com, owner1~3@example.com / test1234")
     else:
