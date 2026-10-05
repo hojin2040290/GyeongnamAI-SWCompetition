@@ -31,6 +31,16 @@ CAFE = {"name": "가상카페 시험점", "industry": "음식점, 카페", "work
         "schedule": {d: {"start": "15:00", "end": "18:30", "brk": "없음"} for d in ("화", "목")}}
 FILLS = {"예시/채용공고_가상카페.png": CAFE, "알바5개/3_근로계약서.png": CAFE}
 
+
+def _posting_fills() -> dict[str, dict]:
+    """데모 채용공고를 고르면 그 가게 조건으로 공고 입력칸을 채운다 (시험 데이터의 일하는 곳 값)."""
+    from app.demo_db import CASES
+    keys = ("name", "industry", "work_desc", "wage", "start_date", "probation", "schedule")
+    return {f"알바5개/{c['key']}_채용공고.png": {k: c["job"][k] for k in keys} for c in CASES if c["key"] != "3"}
+
+
+FILLS.update(_posting_fills())
+
 # 업로드 칸(input id)마다 보여 줄 예시 자료
 FILES = {
     "seekFile": [("예시/채용공고_가상카페.png", "가상카페 채용공고 (시급 11,000원, 화·목 15:00~18:30)")],
@@ -43,22 +53,19 @@ FILES = {
 JOB_FILL = ("알바5개/3_근로계약서.png", "가상카페 근로계약서")  # 일하는 곳 등록 화면이 비어 있을 때 보여 주는 예시
 
 # 데모 모드(DEMO_MODE=true): 모든 계정의 모든 업로드 칸에 데모 자료 전체 (그 칸에 맞는 것부터). 실제 업로드와 사진 읽기 시연용
+# 시험 데이터의 알바 5곳마다 채용공고, 근로계약서, 근무표, 급여명세서, 입금 내역, 사장님 메시지 (그림은 app/demo_db.py --html)
+_FIT = {"채용공고": "seekFile", "근로계약서": "contractFile", "급여명세서": "payFile evFile", "입금내역": "payFile evFile",
+        "근무표": "evFile", "사업주_메시지_캡처": "evFile"}
+_NAME = {"채용공고": "채용공고", "근로계약서": "근로계약서", "급여명세서": "급여명세서", "입금내역": "입금 내역",
+         "근무표": "근무표", "사업주_메시지_캡처": "사장님 메시지"}
+_STORES = [  # (가게 이름, 자료마다 파일)
+    ("행복편의점", {"채용공고": "알바5개/1_채용공고.png", "근로계약서": "02_근로계약서.png", "근무표": "03_근무표.png",
+                "급여명세서": "06_급여명세서.png", "입금내역": "07_입금내역.png", "사업주_메시지_캡처": "04_사업주_메시지_캡처.png"}),
+    ("가상분식", {}), ("가상카페", {"채용공고": "예시/채용공고_가상카페.png"}), ("가상베이커리", {}), ("가상치킨", {}),
+]
 DEMO = [  # (파일, 이름, 맞는 업로드 칸)
-    ("예시/채용공고_가상카페.png", "가상카페 채용공고", "seekFile"),
-    ("02_근로계약서.png", "행복편의점 근로계약서", "contractFile"),
-    ("06_급여명세서.png", "행복편의점 9월 급여명세서", "payFile evFile"),
-    ("07_입금내역.png", "행복편의점 입금 내역", "payFile evFile"),
-    ("03_근무표.png", "행복편의점 근무표", "evFile"),
-    ("04_사업주_메시지_캡처.png", "행복편의점 사장님 메시지", "evFile"),
-    ("알바5개/2_근로계약서.png", "가상분식 근로계약서", "contractFile"),
-    ("알바5개/2_급여명세서.png", "가상분식 8월 급여명세서", "payFile evFile"),
-    ("알바5개/2_입금내역.png", "가상분식 입금 내역", "payFile evFile"),
-    ("알바5개/3_근로계약서.png", "가상카페 근로계약서", "contractFile"),
-    ("알바5개/3_급여명세서.png", "가상카페 8월 급여명세서", "payFile evFile"),
-    ("알바5개/3_입금내역.png", "가상카페 입금 내역", "payFile evFile"),
-    ("알바5개/4_사업주_메시지_캡처.png", "가상베이커리 사장님 메시지", "evFile"),
-    ("알바5개/5_근로계약서.png", "가상치킨 근로계약서", "contractFile"),
-    ("알바5개/5_사업주_메시지_캡처.png", "가상치킨 사장님 메시지", "evFile"),
+    (files.get(kind) or f"알바5개/{n}_{kind}.png", f"{store} {_NAME[kind]}", _FIT[kind])
+    for n, (store, files) in enumerate(_STORES, 1) for kind in _FIT
 ]
 UPLOAD_INPUTS = ("seekFile", "contractFile", "payFile", "evFile")
 

@@ -19,7 +19,7 @@ http://localhost:8080 을 연다 (8000번은 GPU 서버의 vLLM이 쓴다).
 | 하고 싶은 것 | 방법 |
 |---|---|
 | 시험 데이터로 보기 | `.env`에 `TEST_DATA=true`. 계정 `test@example.com`, `test2~5@example.com` / `test1234` (알바 5개 사례). 기록은 `data/test`에 따로 둔다 |
-| 실제 업로드와 사진 읽기 | `DEMO_MODE=true`. 업로드를 누르면 데모 자료 15장(`테스트자료/`)이 그 칸에 맞는 것부터 나온다 |
+| 실제 업로드와 사진 읽기 | `DEMO_MODE=true`. 업로드를 누르면 데모 자료 30장(`테스트자료/`, 알바 5곳마다 채용공고, 계약서, 근무표, 명세서, 입금 내역, 사장님 메시지)이 그 칸에 맞는 것부터 나온다. 채용공고를 고르면 그 가게 조건으로 칸을 채운다 |
 | 실제 AI 연결 | `LLM_ENABLED=true`, `LLM_BASE_URL`, `LLM_MODEL`을 채우고 서버를 다시 켠 뒤 `python -m app.llm.probe`로 도구 호출을 확인 |
 | 최신 코드 받기 | `git pull origin main` 후 서버를 다시 켠다. 로그의 `알바지킴이 코드 버전`이 main의 마지막 커밋과 같아야 한다 |
 | 테스트 | `pytest` (회귀 시험 포함). 화면 시험은 바꾼 화면의 파트만 `bash tests/ui/run_all.sh part12` |

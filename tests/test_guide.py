@@ -117,3 +117,15 @@ def test_demo_mode_files_for_every_account(monkeypatch):
     assert all(c.get(f["url"]).status_code == 200 for f in st["files"]["evFile"])
     monkeypatch.setattr(config, "DEMO_MODE", False)
     assert "files" not in c.get("/api/guide/state").json()  # 데모 모드를 끄면 업로드는 바로 내 파일 고르기
+
+
+def test_demo_files_cover_every_store():
+    """데모 자료: 시험 데이터의 알바 5곳마다 채용공고, 계약서, 근무표, 명세서, 입금 내역, 메시지가 있고 파일이 실제로 있다.
+    채용공고마다 그 가게 조건으로 칸을 채운다. 사진 속 금액은 지금 계산과 같다."""
+    from app import demo_db
+    assert len(guide.DEMO) == 30 and all((guide.MATERIAL / n).is_file() for n, _, _ in guide.DEMO)
+    for store in ("행복편의점", "가상분식", "가상카페", "가상베이커리", "가상치킨"):
+        assert len([1 for _, label, _ in guide.DEMO if label.startswith(store + " ")]) == 6, store
+    postings = [n for n, _, fit in guide.DEMO if fit == "seekFile"]
+    assert len(postings) == 5 and all(n in guide.FILLS for n in postings)
+    demo_db.check_images()  # 사진이 모두 있고 금액이 계산과 같지 않으면 멈춘다

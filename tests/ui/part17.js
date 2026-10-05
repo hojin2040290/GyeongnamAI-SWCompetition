@@ -11,7 +11,7 @@ const shown = (p, sel) => p.evaluate(s=>!document.querySelector(s).classList.con
   await p.click('#tabs [data-v="check"]'); await p.waitForTimeout(1200);
   await p.click('label.upload:has(#contractFile)'); await p.waitForTimeout(400);
   const n = (await p.$$('#guideFileList .guide-file')).length;
-  ck('[데모] 업로드 누르면 내 기기에서 고르기와 데모 자료 15개', await shown(p,'#guideFiles') && await p.isVisible('#guideOwnFile') && n===15, n);
+  ck('[데모] 업로드 누르면 내 기기에서 고르기와 데모 자료 30개', await shown(p,'#guideFiles') && await p.isVisible('#guideOwnFile') && n===30, n);
   ck('[데모] 계약서 칸은 계약서부터', (await p.textContent('#guideFileList .guide-file p')).includes('근로계약서'), await p.textContent('#guideFileList .guide-file p'));
   ck('[데모] 안내 문구가 데모 자료', (await p.textContent('#guideFilesSub')).includes('데모 자료'));
   await p.screenshot({path:'p17_demo_files.png'});

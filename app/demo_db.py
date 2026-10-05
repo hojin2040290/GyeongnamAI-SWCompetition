@@ -10,6 +10,7 @@
 
 알바마다 서류 사진(계약서, 급여명세서, 입금내역, 사장님 메시지)은 그 알바의 기록과 같은 값으로 그린 것이다.
   1번 알바는 테스트자료 폴더의 원본 사진과 근무기록 CSV, 2~5번은 테스트자료/알바5개 의 사진.
+  데모 자료(extras: 채용공고, 근무표, 나머지 서류)는 그림만 만들고 시험 데이터에는 올리지 않는다 (업로드 선택 목록용, app/guide.py).
   사진 다시 그리기 (기록이나 계산이 바뀌었을 때, 개발자용):
     python -m app.demo_db --html /tmp/docs && node tests/ui/make_case_images.js /tmp/docs 테스트자료/알바5개
   사진 속 금액은 코드(app/calc/pay.py)가 계산한 값이고 manifest.json에 적어 둔다. 계산이 바뀌어 맞지 않으면 만들기를 멈춘다.
@@ -53,6 +54,7 @@ CASES = [
              "deduction": "없음", "consent": "모름", "address": "경상남도 창원시 의창구 도계동 312-7", "owner": "최민호",
              "schedule": {d: {"start": "17:00", "end": "22:30", "brk": "30분"} for d in ("월", "수", "금", "토")}},
      "shifts": "csv", "month": "2026-09", "paid": 557280, "quit": "2026-09-27",
+     "posting_wage": "10,320원 (수습 3개월 동안 9,288원)", "extras": ["1_채용공고.png"],
      "docs": [("02_근로계약서.png", "contract", ""), ("06_급여명세서.png", "payslip", "9월분 명세서"),
               ("03_근무표.png", "schedule", "근무표 (휴게시간 19:30~20:00)"),
               ("04_사업주_메시지_캡처.png", "message", "수습 시급 통보, 22시 반 마감 지시, 그만둠"),
@@ -85,6 +87,12 @@ CASES = [
      "month": "2026-08", "paid": "base", "deposit": "2026.09.10 10:05",
      "contract": {"근로일": "매주 월, 수, 금, 토", "근로시간": "월 수 금 17시 00분 ~ 22시 00분, 토 10시 00분 ~ 16시 00분",
                   "휴게시간": "월 수 금 19시 00분 ~ 19시 30분, 토 13시 00분 ~ 14시 00분", "임금": "시급 10,320원"},
+     "breaks": {"월": "19:00-19:30", "수": "19:00-19:30", "금": "19:00-19:30", "토": "13:00-14:00"},
+     "messages": [("boss", "오늘 손님 많아서 11시까지 있어 줘", "8/5 21:40"), ("me", "네 알겠습니다", "8/5 21:42"),
+                  ("boss", "토요일은 저녁 7시까지 해 줄 수 있지?", "8/14 20:10"), ("me", "네", "8/14 20:15"),
+                  ("me", "8월 월급이 기본급만 들어왔어요. 주휴수당은 없나요?", "9/10 11:20"),
+                  ("boss", "우리 가게는 원래 그렇게 줘", "9/10 13:05")],
+     "extras": ["2_채용공고.png", "2_근무표.png", "2_사업주_메시지_캡처.png"],
      "docs": [("2_근로계약서.png", "contract", ""), ("2_급여명세서.png", "payslip", "8월분 명세서 (기본급만)"),
               ("2_입금내역.png", "deposit", "9/10 입금")],
      "expect": ["8월 급여: 적게 받음 (주휴수당 3주분과 가산수당을 못 받음) → 위반 의심", "청소년 야간근로: 8/5 22~23시 (인가 확인 필요)",
@@ -100,6 +108,10 @@ CASES = [
      "month": "2026-08", "paid": "total", "deposit": "2026.09.10 09:30",
      "contract": {"근로일": "매주 화, 목", "근로시간": "15시 00분 ~ 18시 30분", "휴게시간": "없음 (하루 3시간 30분 근무)",
                   "임금": "시급 11,000원"},
+     "breaks": {"화": "없음", "목": "없음"},
+     "messages": [("boss", "8월 급여 넣었어 확인해 봐", "9/10 09:35"), ("me", "네 확인했습니다 감사합니다", "9/10 10:02"),
+                  ("boss", "다음 주도 화요일, 목요일 3시에 보자", "9/10 10:05")],
+     "extras": ["3_근무표.png", "3_사업주_메시지_캡처.png"],  # 채용공고는 예시/채용공고_가상카페.png
      "docs": [("3_근로계약서.png", "contract", ""), ("3_급여명세서.png", "payslip", "8월분 명세서"),
               ("3_입금내역.png", "deposit", "9/10 입금")],
      "expect": ["계약서 항목 모두 정상 (주 7시간이라 주휴수당 대상 아님, 4시간 미만이라 휴게 의무 없음)", "8월 급여: 계산한 금액과 같음 → 정상"]},
@@ -112,6 +124,12 @@ CASES = [
      "month": "2026-09", "paid": None,
      "messages": [("boss", "내일부터 일요일 아침 9시에 나와", "9/5 18:20"), ("me", "네 계약서는 언제 쓰나요?", "9/5 18:22"),
                   ("boss", "계약서는 나중에 쓰자 바쁘다", "9/5 18:30"), ("me", "알겠습니다", "9/5 18:31")],
+     # 데모 자료 (시험 데이터에는 올리지 않음): 나중에 쓴 계약서(휴게시간, 수습 칸 비어 있음), 9월분 명세서와 입금 내역
+     "address": "경상남도 창원시 가상구 시험로 40", "breaks": {"일": ""}, "slip": "base", "deposit_at": "2026.10.10 10:20",
+     "contract": {"근로일": "매주 일요일", "근로시간": "09시 00분 ~ 15시 00분", "휴게시간": "", "임금": "시급 10,320원",
+                  "계약기간": "2026년 9월 6일부터 (기간 정함 없음)", "수습기간": "", "주휴일": "",
+                  "작성일": "2026-09-27"},
+     "extras": ["4_채용공고.png", "4_근로계약서.png", "4_근무표.png", "4_급여명세서.png", "4_입금내역.png"],
      "docs": [("4_사업주_메시지_캡처.png", "message", "계약서는 나중에 쓰자는 메시지")],
      "expect": ["근로계약서 작성: 위반 의심 (쓰지 않음)", "친권자 동의서: 위반 의심 또는 확인 필요 (안 냄)",
                 "휴게시간: 확인 필요 (6시간 근무인데 쉬는 시간 모름)", "가산수당: 확인 필요 (사업장 인원 모름)",
@@ -130,6 +148,9 @@ CASES = [
                   ("me", "사장님 8월 월급은 언제 주시나요?", "9/14 12:10"), ("boss", "가게가 어려워서 다음 달에 줄게", "9/14 15:40"),
                   ("me", "기한이 지나서 노동청에 신고했습니다", "9/20 10:02"),
                   ("boss", "신고 취소 안 하면 동네에 다 소문낸다", "9/20 10:15")],
+     # 데모 자료: 명세서는 받았지만 입금 내역에 가게 이름이 없음 (못 받음)
+     "breaks": {"금": "없음", "토": "없음"}, "slip": "base",
+     "extras": ["5_채용공고.png", "5_근무표.png", "5_급여명세서.png", "5_입금내역.png"],
      "docs": [("5_근로계약서.png", "contract", ""), ("5_사업주_메시지_캡처.png", "message", "임금 미지급, 신고 뒤 위협")],
      "expect": ["퇴직 정산: 위반 의심 (그만둔 날 8/29, 기한 9/12 지남, 못 받았다고 기록)", "휴게시간 부여: 위반 의심 (4시간 근무에 휴게 없음)",
                 "8월 급여: 받은 금액 없음 → 비교하지 않음", "신고 후 보호: 신고함, 보복 위협 메시지 (게시물 검색은 화면에서)"]},
@@ -152,6 +173,12 @@ def compute(case: dict):
     return paycalc.calc_month(recs, j["schedule"], j["wage"], j["size"], date.fromisoformat(BIRTH), case["month"])
 
 
+def slip_amount(case: dict) -> int:
+    """명세서 사진에 적는 실지급액: 받은 금액, 없으면 그림용 기본급(slip)."""
+    paid = paid_of(case)
+    return paid if paid is not None else getattr(compute(case), case["slip"])
+
+
 def paid_of(case: dict) -> int | None:
     p = case["paid"]
     if p in ("base", "total"):
@@ -171,7 +198,13 @@ td.k{width:180px;text-align:center;font-weight:700}.sig{font-size:26px;margin-to
 .in{color:#1a5fd6;font-weight:700}.out{font-weight:700}
 .chat{width:750px;background:#b2c7d9;min-height:900px;font-size:26px}.chat h1{background:#a9bccd;text-align:center;font-size:28px;margin:0;padding:24px}
 .msg{display:flex;align-items:flex-end;gap:10px;margin:28px 40px}.msg.me{flex-direction:row-reverse}
-.bubble{background:#fff;border-radius:18px;padding:14px 20px;max-width:430px}.me .bubble{background:#fee500}.time{font-size:17px;color:#444}"""
+.bubble{background:#fff;border-radius:18px;padding:14px 20px;max-width:430px}.me .bubble{background:#fee500}.time{font-size:17px;color:#444}
+.sched{width:1040px;padding:30px 40px}.sched h1{text-align:center;font-size:34px;margin:0 0 40px}.sched td{text-align:center;font-size:22px}
+.sched td.h{background:#eee;font-weight:700}.sched p{font-size:22px;margin-top:40px}
+.post{width:1180px;padding:50px 60px;border-radius:24px}.post .badge{display:inline-block;background:#ffe8d6;color:#b54708;font-weight:700;font-size:28px;padding:8px 20px;border-radius:30px}
+.post h1{font-size:52px;margin:24px 0 8px}.post .addr{color:#666;font-size:28px;margin-bottom:30px}
+.post table{font-size:32px}.post td{border:0;border-top:2px solid #eee;padding:24px 8px}.post td.k{text-align:left;width:250px;color:#444}
+.post .wage{color:#1d4ed8;font-weight:800;font-size:40px}.post .note{color:#888;font-size:26px;margin-top:30px}"""
 
 
 def _page(body: str) -> str:
@@ -183,21 +216,27 @@ def _korean_date(s: str) -> str:
     return f"{d.year}년 {d.month}월 {d.day}일"
 
 
+def _address(case: dict) -> str:
+    return case["job"].get("address") or case.get("address", "")
+
+
 def contract_html(case: dict) -> str:
     j, c, e = case["job"], case["contract"], html.escape
+    period = c.get("계약기간") or f"{_korean_date(j['start_date'])} ~ {_korean_date(j['end_date'])}"
+    signed = _korean_date(c.get("작성일") or j["start_date"])
     rows = [("사업주", f"{j['name']} 대표 {j['owner']}"), ("근로자", f"{NAME} (2009년 5월 20일생)"),
-            ("계약기간", f"{_korean_date(j['start_date'])} ~ {_korean_date(j['end_date'])}"), ("수습기간", "없음"),
-            ("근무장소", j["address"]), ("업무내용", j["work_desc"]), ("근로일", c["근로일"]), ("근로시간", c["근로시간"]),
-            ("휴게시간", c["휴게시간"]), ("주휴일", "매주 일요일"), ("임금", c["임금"]),
+            ("계약기간", period), ("수습기간", c.get("수습기간", "없음")),
+            ("근무장소", _address(case)), ("업무내용", j["work_desc"]), ("근로일", c["근로일"]), ("근로시간", c["근로시간"]),
+            ("휴게시간", c["휴게시간"]), ("주휴일", c.get("주휴일", "매주 일요일")), ("임금", c["임금"]),
             ("임금지급일", f"매월 {j['payday']}일, 근로자 명의 계좌 입금"), ("연차휴가", "관계 법령에 따름")]
     trs = "".join(f"<tr><td class='k'>{e(k)}</td><td>{e(v)}</td></tr>" for k, v in rows)
     return _page(f"<div class='doc'><h1>근로계약서 (연소근로자용)</h1><table>{trs}</table>"
-                 f"<div class='sig'>{_korean_date(j['start_date'])}<br>사업주: {e(j['owner'])} (서명)"
+                 f"<div class='sig'>{signed}<br>사업주: {e(j['owner'])} (서명)"
                  f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;근로자: {NAME} (서명)</div></div>")
 
 
 def payslip_html(case: dict) -> str:
-    j, r, paid = case["job"], compute(case), paid_of(case)
+    j, r, paid = case["job"], compute(case), slip_amount(case)
     y, m = map(int, case["month"].split("-"))
     days = sorted(s[0][:10] for s in shifts_of(case))
     hours = f"{r.work_min // 60}시간" + (f" {r.work_min % 60}분" if r.work_min % 60 else "")
@@ -213,9 +252,13 @@ def payslip_html(case: dict) -> str:
 
 
 def deposit_html(case: dict) -> str:
-    j, paid = case["job"], paid_of(case)
-    rows = [(case["deposit"], j["name"].replace(" ", ""), f"+{paid:,}원", "in"),
-            ("2026.09.03 18:40", "가상문구", "-4,500원", "out"), ("2026.08.28 12:05", "가상분식집", "-6,000원", "out")]
+    """입출금 거래내역. 받지 못한 사례(5번)는 가게 이름의 입금이 없다."""
+    j = case["job"]
+    store = [] if paid_of(case) is None and not case.get("deposit_at") else \
+        [(case.get("deposit") or case["deposit_at"], j["name"].replace(" ", ""), f"+{slip_amount(case):,}원", "in")]
+    rows = store + ([("2026.09.15 19:10", "가상편의점", "-2,800원", "out"), ("2026.09.11 08:30", "가상교통카드 충전", "-10,000원", "out")]
+                    if not store else []) + \
+        [("2026.09.03 18:40", "가상문구", "-4,500원", "out"), ("2026.08.28 12:05", "가상분식집", "-6,000원", "out")]
     items = "".join(f"<div class='row'><div class='t'>{t}</div><div class='l'><span>{html.escape(n)}</span>"
                     f"<span class='{c}'>{a}</span></div></div>" for t, n, a, c in rows)
     return _page(f"<div class='bank'><h1>입출금 거래내역</h1>{items}</div>")
@@ -228,18 +271,63 @@ def messages_html(case: dict) -> str:
     return _page(f"<div class='chat'><h1>{html.escape(j['owner'])} 사장님</h1>{items}</div>")
 
 
-DRAW = {"근로계약서": contract_html, "급여명세서": payslip_html, "입금내역": deposit_html, "사업주_메시지_캡처": messages_html}
+def _hhmm(t: str) -> str:
+    return t.replace("시 ", ":").replace("분", "")
+
+
+def schedule_html(case: dict) -> str:
+    """계약한 요일과 시간, 휴게시간의 근무표 (적용 기간은 그 달의 첫 근무일 ~ 마지막 근무일)."""
+    j, e = case["job"], html.escape
+    days = [d for d in ("월", "화", "수", "목", "금", "토", "일") if d in j["schedule"]]
+    days_in = sorted(s[0][:10] for s in shifts_of(case))
+    head = "".join(f"<td class='h'>{d}</td>" for d in days)
+    work = "".join(f"<td>{j['schedule'][d]['start']}-{j['schedule'][d]['end']}</td>" for d in days)
+    brk = "".join(f"<td>{e(case['breaks'].get(d) or '')}</td>" for d in days)
+    y, m = map(int, case["month"].split("-"))
+    return _page(f"<div class='sched'><h1>{e(j['name'])} {m}월 근무표</h1><table><tr><td class='h'>{NAME}</td>{head}</tr>"
+                 f"<tr><td class='h'>근무</td>{work}</tr><tr><td class='h'>휴게</td>{brk}</tr></table>"
+                 f"<p>적용 기간: {y}년 {m}월 {int(days_in[0][8:])}일 ~ {m}월 {int(days_in[-1][8:])}일</p></div>")
+
+
+def posting_html(case: dict) -> str:
+    """채용공고 (예시/채용공고_가상카페.png와 같은 모양)."""
+    j, e = case["job"], html.escape
+    days = [d for d in ("월", "화", "수", "목", "금", "토", "일") if d in j["schedule"]]
+    times: dict[str, list[str]] = {}
+    for d in days:
+        sc = j["schedule"][d]
+        times.setdefault(f"{sc['start']} ~ {sc['end']}", []).append(d)
+    brk = {sc["brk"] for sc in j["schedule"].values()}
+    rest = "쉬는 시간 없음" if brk == {"없음"} else "쉬는 시간 안내 없음" if brk == {"모름"} else "쉬는 시간 포함"
+    hours = ", ".join(f"{' '.join(ds)} {t}" if len(times) > 1 else t for t, ds in times.items()) + f" ({rest})"
+    probation = {"yes": f"{j.get('probation_months', '')}개월", "no": "없음"}.get(j["probation"], "면접 때 안내")
+    wage = case.get("posting_wage") or f"{j['wage']:,}원"
+    rows = [("시급", f"<span class='wage'>{e(wage)}</span>"),
+            ("근무 요일", "매주 " + (f"{days[0]}요일" if len(days) == 1 else ", ".join(days))), ("근무 시간", e(hours)), ("하는 일", e(j["work_desc"])),
+            ("수습 기간", probation), ("급여일", f"매월 {j['payday']}일" + (f", {e(j['pay_method'])}" if j.get("pay_method") else "")),
+            ("근무 시작", _korean_date(j["start_date"]) + "부터")]
+    trs = "".join(f"<tr><td class='k'><b>{k}</b></td><td>{v}</td></tr>" for k, v in rows)
+    return _page(f"<div class='post'><span class='badge'>알바 구해요</span><h1>{e(j['name'])} {e(j['work_desc'].replace(', ', ' · '))}</h1>"
+                 f"<div class='addr'>{e(_address(case))}</div><table>{trs}</table>"
+                 f"<div class='note'>※ 대회 시험용 가상 공고입니다. 실제 가게가 아닙니다.</div></div>")
+
+
+DRAW = {"근로계약서": contract_html, "급여명세서": payslip_html, "입금내역": deposit_html, "사업주_메시지_캡처": messages_html,
+        "근무표": schedule_html, "채용공고": posting_html}
 
 
 def write_html(out: Path) -> None:
     """2~5번 알바의 서류를 HTML로 쓰고, 사진 속 금액을 manifest.json에 적는다."""
     out.mkdir(parents=True, exist_ok=True)
     manifest = {}
-    for case in CASES[1:]:
-        for name, _, _ in case["docs"]:
+    for case in CASES:
+        names = ([n for n, _, _ in case["docs"]] if case["key"] != "1" else []) + case.get("extras", [])
+        for name in names:
             draw = DRAW[name.split("_", 1)[1].removesuffix(".png")]
             (out / name.replace(".png", ".html")).write_text(draw(case), encoding="utf-8")
-        manifest[case["key"]] = {"month": case["month"], "work_min": compute(case).work_min, "paid": paid_of(case)}
+        if case["key"] != "1":
+            manifest[case["key"]] = {"month": case["month"], "work_min": compute(case).work_min, "paid": paid_of(case),
+                                     **({"slip": slip_amount(case)} if case.get("slip") else {})}
     CASE_DIR.mkdir(parents=True, exist_ok=True)
     (CASE_DIR / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"HTML: {out}\n사진으로 찍기: node tests/ui/make_case_images.js {out} {CASE_DIR}")
@@ -251,10 +339,12 @@ def check_images() -> None:
     for case in CASES:
         base = MATERIAL if case["key"] == "1" else CASE_DIR
         missing = [n for n, _, _ in case["docs"] if not (base / n).exists()]
+        missing += [n for n in case.get("extras", []) if not (CASE_DIR / n).exists()]
         if missing:
             sys.exit(f"{case['key']}번 알바의 사진이 없어요: {missing}")
         m = manifest.get(case["key"])
-        if m and (m["work_min"] != compute(case).work_min or m["paid"] != paid_of(case)):
+        if m and (m["work_min"] != compute(case).work_min or m["paid"] != paid_of(case)
+                  or m.get("slip") != (slip_amount(case) if case.get("slip") else None)):
             sys.exit(f"{case['key']}번 알바: 사진 속 금액이 지금 계산과 달라요. 사진을 다시 그려 주세요 (이 파일 맨 위 설명).")
 
 
@@ -380,7 +470,7 @@ def main() -> None:
     ap.add_argument("--dir", default="data/test", help="만들 폴더 (기본 data/test, .env의 TEST_DATA=true가 쓰는 곳)")
     ap.add_argument("--force", action="store_true", help="폴더가 이미 있으면 지우고 다시 만들기")
     ap.add_argument("--add", action="store_true", help="이미 있는 시험 데이터에 없는 계정만 더 만들기 (있던 기록은 그대로)")
-    ap.add_argument("--html", help="(개발자용) 2~5번 알바의 서류를 HTML로 이 폴더에 쓰기")
+    ap.add_argument("--html", help="(개발자용) 알바 서류와 데모 자료를 HTML로 이 폴더에 쓰기")
     args = ap.parse_args()
     if args.html:
         write_html(Path(args.html))
