@@ -40,7 +40,7 @@ app/
   long_task.py       오래 걸리는 AI 요청을 뒤에서 실행 (cloudflared 100초 대비, 화면은 /api/tasks로 결과를 물음)
   notices.py         알림 보내기 (종류별로 최신 것만)
   ocr.py             계약서, 급여명세서, 채용공고 사진 읽기 (비전 모델이 직접, 별도 OCR 엔진 없음)
-  demo_db.py         시험 계정 (test@example.com, test2~test5@example.com / test1234): 기본은 계정마다 사례 하나(test@는 사례 1 … test5는 사례 5)의 일하는 곳과 기록(체험 안내 켜짐, 업로드는 그 사례 사진만), --scenarios는 알바 5개와 기록
+  demo_db.py         시험 계정 (test@example.com, test2~test5@example.com, alba@example.com / test1234): 기본은 계정마다 사례 하나(test@는 사례 1 … test5는 사례 5, 시연 영상용 alba@는 사례 2)의 일하는 곳과 기록(체험 안내 켜짐, 업로드는 그 사례 사진만), --scenarios는 알바 5개와 기록
   guide.py           처음 쓰는 사람 체험 안내 (새로 가입한 계정만, FIRST_GUIDE): 모든 새 계정에 같은 미션 5개 판정(그만둔 곳만 있으면 출퇴근 빼고 4개, 다 하면 설문), 예시 자료, 설문(SURVEY_URL), 데모 모드(DEMO_MODE: 모든 업로드에 데모 자료 30장)
   config.py          .env 설정 읽기 (설정값 설명은 docs/실행가이드.md 4절)
   auth.py, guard.py, report.py, scheduler.py, storage.py, evidence_check.py, login_guard.py

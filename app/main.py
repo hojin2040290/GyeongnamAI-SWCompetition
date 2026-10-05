@@ -69,7 +69,7 @@ def prepare_test_data(log: logging.Logger) -> None:
     log.info("시험 계정이 없어 만들어요 (python -m app.demo_db와 같음)")
     out = run_child(["app.demo_db", "--dir", str(config.TEST_DATA_DIR), "--add" if have else "--force"])
     if out.returncode == 0:
-        log.info("시험 데이터를 만들었어요. 로그인: test@example.com, test2~test5@example.com / test1234")
+        log.info("시험 데이터를 만들었어요. 로그인: test@example.com, test2~test5@example.com, alba@example.com / test1234")
     else:
         log.error("시험 데이터를 만들지 못했어요: %s", (out.stderr or out.stdout)[-500:])
 

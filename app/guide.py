@@ -108,7 +108,7 @@ def _case_names() -> list[str]:
 
 
 def case_stores(s: Session, user: User) -> list[str]:
-    """시험 계정(test@, test2~5@)의 일하는 곳 중 시험 데이터 사례인 곳의 가게 이름 (보통 계정은 빈 목록).
+    """시험 계정(test@, test2~5@, alba@)의 일하는 곳 중 시험 데이터 사례인 곳의 가게 이름 (보통 계정은 빈 목록).
     이름만으로 정하지 않는다: 보통 계정도 예시 계약서(가상카페)로 일하는 곳을 채우면 사례 3과 이름이 같다."""
     from app.demo_db import EMAILS
     if user.email.lower() not in EMAILS:
