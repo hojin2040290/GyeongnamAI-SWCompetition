@@ -25,10 +25,13 @@ def test_demo_db_builds_in_test_folder_only():
                              capture_output=True, text=True, timeout=180)
         assert out.returncode == 0, out.stderr[-800:]
         assert (target / "app.db").exists() and not list((target / "uploads").rglob("*.png"))  # 사진은 미리 올리지 않음 (시연 때 업로드)
-        assert "처음 이용자" in out.stdout
-        with sqlite3.connect(target / "app.db") as db:  # 방금 가입한 상태: 계정 5개, 일하는 곳과 기록 없음, 체험 안내 시작
+        assert "계정마다 사례 하나" in out.stdout
+        with sqlite3.connect(target / "app.db") as db:  # 계정 5개, 계정 n에 사례 n의 일하는 곳과 출퇴근 기록, 체험 안내 시작
             assert db.execute("select count(*) from user").fetchone()[0] == 5
-            assert db.execute("select count(*) from job").fetchone()[0] == 0
+            rows = db.execute("select u.email, j.name from user u join job j on j.user_id=u.id order by u.id").fetchall()
+            assert rows == [(e, c["job"]["name"]) for e, c in zip(demo_db.EMAILS, demo_db.CASES)]
+            assert all(db.execute("select count(*) from workrecord where user_id=?", (u,)).fetchone()[0] > 0
+                       for (u,) in db.execute("select id from user"))
             assert db.execute("select count(*) from guidestate").fetchone()[0] == 5
         again = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", "data/test_pytest"], cwd=ROOT,
                                capture_output=True, text=True)
@@ -57,8 +60,8 @@ def test_server_prepares_test_data_when_missing(monkeypatch):
         db = target / "app.db"
         assert [r[0] for r in sqlite3.connect(db).execute("select email from user order by id")] == [
             "test@example.com", "test2@example.com", "test3@example.com", "test4@example.com", "test5@example.com"]
-        with sqlite3.connect(db) as c:  # 계정 5개 모두 방금 가입한 처음 이용자 (일하는 곳 없음, 체험 안내 시작)
-            assert c.execute("select count(*) from job").fetchone() == (0,)
+        with sqlite3.connect(db) as c:  # 계정 5개, 계정마다 사례 하나 (체험 안내 시작)
+            assert c.execute("select count(*) from job").fetchone() == (5,)
             assert c.execute("select count(*) from guidestate").fetchone() == (5,)
             c.execute("update guidestate set marks='[\"intro\"]' where user_id=(select id from user where email='test2@example.com')")
         main.prepare_test_data(log)  # 이미 있으면 다시 만들지 않는다 (시연하며 진행한 상태는 그대로)

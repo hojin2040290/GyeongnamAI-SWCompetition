@@ -1,7 +1,7 @@
 // 16부: 처음 쓰는 사람 체험 안내 (새로 가입한 계정만, FIRST_GUIDE=true). 사람이 누르는 순서대로
-// 일하는 중으로 가입 → 첫 안내(통합 미션 8개) → 예시 계약서로 등록 → 출퇴근 → 계약서 → 급여 → 지원 전 확인 → 상담 자료
-// → 그만둔 날 → 받음 여부 → 완료 창과 설문
-const { B, ck, browser, page, vis, summary, overflow } = require('./lib');
+// 일하는 중으로 가입 → 첫 안내(미션 5개) → 예시 계약서로 등록 → 출퇴근 → 계약서 → 급여 → 지원 전 확인 → 상담 자료
+// → 완료 창과 설문. 시험 계정처럼 사례가 든 계정은 업로드에 그 가게 자료만
+const { B, ck, browser, page, vis, summary, overflow, api } = require('./lib');
 const until = async (p, fn, arg, ms=20000) => { try{ await p.waitForFunction(fn, arg, {timeout:ms}); return true; }catch(e){ return false; } };
 const chip = p => p.evaluate(()=>{ const c=document.getElementById('guideChip'); return c.classList.contains('hidden')?'숨김':c.textContent; });
 const shown = (p, sel) => p.evaluate(s=>!document.querySelector(s).classList.contains('hidden'), sel);
@@ -15,7 +15,7 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await p.fill('#regEmail','guide_ui@example.com'); await p.fill('#regPw','test1234'); await p.fill('#birth','2009-05-01'); await p.click('#regBtn');
   await until(p, ()=>!document.getElementById('guideIntro').classList.contains('hidden'));
   ck('[안내] 가입하면 첫 안내 창', await shown(p,'#guideIntro'), await vis(p));
-  ck('[안내] 고른 상황과 상관없이 통합 미션 8개', (await p.$$('#guideIntroList li')).length===8 && (await p.textContent('#guideIntroTitle')).includes('8개')
+  ck('[안내] 고른 상황과 상관없이 미션 5개', (await p.$$('#guideIntroList li')).length===5 && (await p.textContent('#guideIntroTitle')).includes('5개')
      && (await p.textContent('#guideIntroList')).includes('지원 전 확인') && (await p.textContent('#guideIntroList')).includes('상담 사전 자료'),
      await p.textContent('#guideIntroList'));
   await p.screenshot({path:'p16_intro.png'});
@@ -25,16 +25,16 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await p.click('#guideJobFillGo'); await p.waitForTimeout(300);
   ck('[안내] 예시 내용으로 칸이 채워짐', (await p.inputValue('#jobList .f-name'))==='가상카페 시험점', await p.inputValue('#jobList .f-name'));
   await p.click('#saveJobsBtn'); await until(p, ()=>!document.getElementById('app').classList.contains('hidden'));
-  await until(p, ()=>document.getElementById('guideChip').textContent.includes('1/8'), null, 5000);
-  ck('[안내] 일하는 곳을 등록하면 미션 버튼 1/8', (await chip(p)).includes('1/8'), await chip(p));
+  await until(p, ()=>document.getElementById('guideChip').textContent.includes('0/5'), null, 5000);
+  ck('[안내] 일하는 곳을 등록하면 미션 버튼 0/5', (await chip(p)).includes('0/5'), await chip(p));
   ck('[안내] 390px에서 넘치는 곳 없음', !(await overflow(p)).length, (await overflow(p)).join(','));
   await p.click('#guideChip'); await p.waitForTimeout(300);
-  ck('[안내] 미션 목록 8개와 남은 미션의 바로 가기', (await p.$$('#guideMissions li')).length===8 && (await p.$$('#guideMissions [data-guide-go]')).length===7);
+  ck('[안내] 미션 목록 5개와 남은 미션의 바로 가기', (await p.$$('#guideMissions li')).length===5 && (await p.$$('#guideMissions [data-guide-go]')).length===5);
   await p.screenshot({path:'p16_sheet.png'});
   await p.click('#guideSheetX');
   // 3. 출근, 퇴근
   await p.click('#punchBtn'); await p.waitForTimeout(1200); await p.click('#punchBtn'); await idle(p);
-  ck('[안내] 출퇴근하면 2/8', await until(p, ()=>document.getElementById('guideChip').textContent.includes('2/8'), null, 8000), await chip(p));
+  ck('[안내] 출퇴근하면 1/5', await until(p, ()=>document.getElementById('guideChip').textContent.includes('1/5'), null, 8000), await chip(p));
   // 4. 계약서: 업로드를 누르면 내 기기 / 예시 자료
   await tab(p,'check'); await idle(p);
   await p.click('label.upload:has(#contractFile)'); await p.waitForTimeout(400);
@@ -44,7 +44,7 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await until(p, ()=>/읽었어요|저장했어요/.test(document.getElementById('ocrNote').textContent), null, 60000);
   ck('[안내] 예시 계약서가 올라가고 AI가 읽음', (await p.textContent('#ocrNote')).includes('읽었어요'), await p.textContent('#ocrNote'));
   await p.click('#checkRun'); await idle(p);
-  ck('[안내] 계약서 점검하면 3/8', await until(p, ()=>document.getElementById('guideChip').textContent.includes('3/8'), null, 30000), await chip(p));
+  ck('[안내] 계약서 점검하면 2/5', await until(p, ()=>document.getElementById('guideChip').textContent.includes('2/5'), null, 30000), await chip(p));
   // 5. 급여: 명세서 예시 올리고 저장하고 비교
   await tab(p,'pay'); await p.fill('#payMonth','2026-08').catch(()=>{});
   await p.evaluate(()=>{ const m=document.getElementById('payMonth'); m.value='2026-08'; m.dispatchEvent(new Event('change')); });
@@ -54,33 +54,19 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await until(p, ()=>/AI가 읽은|저장했어요/.test(document.getElementById('payOcr').textContent), null, 60000);
   if(!(await p.inputValue('#payAmount'))) await p.fill('#payAmount','557280');
   await p.click('#paySave'); await idle(p);
-  ck('[안내] 급여를 저장하고 비교하면 4/8', await until(p, ()=>document.getElementById('guideChip').textContent.includes('4/8'), null, 10000), await chip(p));
+  ck('[안내] 급여를 저장하고 비교하면 3/5', await until(p, ()=>document.getElementById('guideChip').textContent.includes('3/5'), null, 10000), await chip(p));
   // 6. 지원 전 확인: 예시 공고로 칸을 채우고 확인
   await tab(p,'check'); await p.click('#seekEntry'); await p.waitForTimeout(600);
   await p.click('#seekUpload'); await p.waitForTimeout(400);
   await p.click('[data-guide-file="0"]'); await p.waitForTimeout(800);
   await p.click('#seekRun'); await idle(p);
-  ck('[안내] 지원 전 확인하면 5/8', await until(p, ()=>document.getElementById('guideChip').textContent.includes('5/8'), null, 10000), await chip(p));
+  ck('[안내] 지원 전 확인하면 4/5', await until(p, ()=>document.getElementById('guideChip').textContent.includes('4/5'), null, 10000), await chip(p));
   await p.click('#seekClose'); await p.waitForTimeout(500);
   // 7. 상담 사전 자료 (다 만들면 자료 화면으로 넘어간다)
   await tab(p,'docs'); await p.click('#reportBtn');
   await until(p, ()=>!location.pathname.endsWith('/') || location.pathname.includes('report'), null, 60000);
   await p.waitForTimeout(800); await p.goto(B+'/'); await p.waitForSelector('#app:not(.hidden)'); await p.waitForTimeout(1500);
-  ck('[안내] 상담 사전 자료를 만들면 6/8', (await chip(p)).includes('6/8'), await chip(p));
-  // 8. 홈의 '이곳을 그만뒀어요' → 그만둔 날 저장
-  await tab(p,'home'); await idle(p);
-  await p.click('#quitOpen'); await p.waitForTimeout(300);
-  await p.fill('#quitDateMain','2026-09-27'); await p.click('#quitSave'); await idle(p); await p.waitForTimeout(800); await idle(p);
-  ck('[안내] 그만둔 날을 저장하면 7/8', await until(p, ()=>document.getElementById('guideChip').textContent.includes('7/8'), null, 10000), await chip(p));
-  // 9. 남은 임금을 받았는지 답하기
-  // 그만둔 날 저장 뒤 퇴직 정산 점검이 도는 동안 누르면 '다른 점검 중'이라 기다린다 (part19): 점검이 끝날 때까지 다시 누른다
-  for(let i=0;i<10;i++){
-    await until(p, ()=>!document.querySelector('#v-home .live'), null, 30000); await p.waitForTimeout(700);
-    if(await p.evaluate(()=>document.querySelector('#v-home .live'))) continue;
-    await p.click('#paidNo'); await p.waitForTimeout(1500); await idle(p);
-    if((await chip(p)).includes('완료') || await shown(p,'#guideDone')) break;
-  }
-  ck('[안내] 미션 8개를 다 하면 완료 창', await until(p, ()=>!document.getElementById('guideDone').classList.contains('hidden'), null, 15000), await chip(p));
+  ck('[안내] 미션 5개를 다 하면 완료 창', await until(p, ()=>!document.getElementById('guideDone').classList.contains('hidden'), null, 15000), await chip(p));
   ck('[안내] 완료 창에 설문하기', await p.isVisible('#guideDoneSurvey'));
   await p.screenshot({path:'p16_done.png'});
   await p.click('#guideKeep'); await p.waitForTimeout(800);
@@ -127,7 +113,20 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await r.click('.mode[data-mode="quit"]'); await r.click('#modeNext'); await r.waitForTimeout(600);
   ck('[안내] 기본 정보 화면에도 안내 창 없음', (await vis(r))==='ob1' && !(await shown(r,'#guideIntro')), await vis(r));
   await r.click('#regBtn');
-  ck('[안내] 상황을 고른 뒤 첫 안내 (통합 미션 8개)', await until(r, ()=>!document.getElementById('guideIntro').classList.contains('hidden'))
-     && (await r.$$('#guideIntroList li')).length===8, await r.textContent('#guideIntroList'));
+  ck('[안내] 상황을 고른 뒤 첫 안내 (미션 5개)', await until(r, ()=>!document.getElementById('guideIntro').classList.contains('hidden'))
+     && (await r.$$('#guideIntroList li')).length===5, await r.textContent('#guideIntroList'));
+  // 시험 계정 2(app/demo_db.py: 계정 n에 사례 n)처럼 사례 2가 든 계정: 업로드에는 그 사례 가게의 자료 6장만
+  const t = await page(b);
+  await t.goto(B+'/'); await t.waitForTimeout(500);
+  await api(t,'POST','/api/auth/register',{email:'test2@example.com',password:'test1234',birth_date:'2009-05-20',mode:'work'});
+  const jr = await api(t,'POST','/api/jobs',{name:'가상분식 시험점',wage:12000,size:'lt5',probation:'no',payday:10,start_date:'2026-08-01',
+    contract_written:true,copy_received:true,schedule:{'토':{start:'18:00',end:'23:00',brk:'30분'}}});
+  await api(t,'POST','/api/guide/mark',{key:'intro'});
+  await t.goto(B+'/'); await t.waitForSelector('#app:not(.hidden)'); await t.waitForTimeout(1200); await idle(t);
+  await tab(t,'check'); await idle(t);
+  await t.click('label.upload:has(#contractFile)'); await t.waitForTimeout(400);
+  const labels = await t.$$eval('#guideFileList .guide-file', es=>es.map(e=>e.textContent));
+  ck('[사례 계정] 업로드에는 그 가게 자료 6장만', jr.status===200 && labels.length===6 && labels.every(x=>x.includes('가상분식')), labels.join(' / '));
+  await t.screenshot({path:'p16_case_files.png'});
   await b.close(); summary();
 })().catch(e=>{ console.log('중단', e.message); summary(); process.exit(1); });

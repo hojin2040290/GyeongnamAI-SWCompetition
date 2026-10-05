@@ -2,12 +2,13 @@
 
 실행: python -m app.demo_db             → data/test 를 새로 만든다
       python -m app.demo_db --force     → data/test 가 이미 있으면 지우고 다시 만든다 (시연 뒤 처음 상태로)
-      python -m app.demo_db --scenarios → 처음 이용자 대신 알바 5개와 출퇴근 기록을 넣은 계정 (정답지 확인, 화면 캡처용)
+      python -m app.demo_db --scenarios → 계정마다 사례 하나 대신 알바 5개와 출퇴근 기록을 넣은 계정 (정답지 확인, 화면 캡처용)
 시험 데이터로 서버 실행: .env에 TEST_DATA=true (평소 데이터 data/app.db, data/uploads는 그대로)
   TEST_DATA=true로 켰는데 data/test에 시험 데이터가 없으면 서버가 켜지면서 이 명령을 실행한다 (app/main.py)
 로그인: test@example.com, test2@example.com ~ test5@example.com / 모두 test1234 (홍길동, 2009-05-20생, 만 17세)
-  기본은 방금 가입한 처음 이용자: 일하는 곳, 기록, 사진이 없고 체험 안내가 켜져 있다. 로그인하면 시작 화면에서 상황을 고르고
-  체험 미션을 한다. 사진은 시연 때 업로드 화면에서 데모 자료를 골라 올린다 (DEMO_MODE).
+  기본은 계정마다 사례 하나: test@example.com은 사례 1(행복편의점), test2는 사례 2(가상분식), … test5는 사례 5(가상치킨)의
+  일하는 곳과 출퇴근 기록(그만둔 날, 받음 여부, 신고도 사례대로)이 들어 있고 체험 안내가 켜져 있다. 사진과 받은 금액은 없다.
+  사진은 시연 때 업로드 화면에서 그 사례 가게의 자료(6장)만 골라 올린다 (app/guide.py).
   이미 있는 시험 데이터에 없는 계정만 더하기: python -m app.demo_db --add (있던 계정과 기록은 그대로)
 
 알바 5개(CASES)마다 서류 사진(계약서, 급여명세서, 입금내역, 사장님 메시지)은 그 알바의 기록과 같은 값으로 그린 것이다.
@@ -427,14 +428,21 @@ def existing_emails(db: Path) -> set[str]:
         return set()
 
 
+def case_of(email: str) -> dict:
+    """계정마다 사례 하나: test@example.com은 사례 1, test2는 사례 2, … test5는 사례 5."""
+    return CASES[EMAILS.index(email) % len(CASES) if email in EMAILS else 0]
+
+
 def build_account(c, email: str, scenarios: bool = False) -> None:
     """시험 계정 하나 (서버를 띄우지 않고 앱의 API를 부른다, 예약 작업은 돌지 않음).
-    기본: 방금 가입한 처음 이용자 (일하는 곳·기록·사진 없음, 체험 안내 켜짐). 로그인하면 시작 화면에서 상황을 고른다.
+    기본: 계정마다 사례 하나의 일하는 곳과 출퇴근 기록 (사진과 받은 금액은 없음, 체험 안내 켜짐).
+    업로드에는 그 사례 가게의 자료만 나온다 (app/guide.py). 미션은 가입한 뒤에 한 일만 센다.
     scenarios=True: 알바 5개와 출퇴근 기록을 넣은 계정 (체험 안내 끔, 정답지 확인과 화면 캡처용)."""
     _ok(c.post("/api/auth/register", json={"email": email, "password": PASSWORD, "birth_date": BIRTH}), "가입")
-    if not scenarios:
-        return
     uid = _ok(c.get("/api/me"), "내 정보")["id"]
+    if not scenarios:
+        build_case(c, uid, case_of(email))
+        return
     _ok(c.post("/api/guide/mark", json={"key": "off"}), "체험 안내 끄기")
     _ok(c.put("/api/me/prefs", json={"gps_consent": True}), "위치 기록 동의")
     for case in CASES:
@@ -479,12 +487,12 @@ def need_libs() -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="시험 계정 만들기 (기본: 처음 이용자)")
+    ap = argparse.ArgumentParser(description="시험 계정 만들기 (기본: 계정마다 사례 하나)")
     ap.add_argument("--dir", default="data/test", help="만들 폴더 (기본 data/test, .env의 TEST_DATA=true가 쓰는 곳)")
     ap.add_argument("--force", action="store_true", help="폴더가 이미 있으면 지우고 다시 만들기")
     ap.add_argument("--add", action="store_true", help="이미 있는 시험 데이터에 없는 계정만 더 만들기 (있던 기록은 그대로)")
     ap.add_argument("--scenarios", action="store_true",
-                    help="처음 이용자 대신 알바 5개와 출퇴근 기록을 넣은 계정으로 만들기 (정답지 확인, 화면 캡처용)")
+                    help="계정마다 사례 하나 대신 알바 5개와 출퇴근 기록을 넣은 계정으로 만들기 (정답지 확인, 화면 캡처용)")
     ap.add_argument("--html", help="(개발자용) 알바 서류와 데모 자료를 HTML로 이 폴더에 쓰기")
     args = ap.parse_args()
     if args.html:
@@ -495,7 +503,7 @@ def main() -> None:
     # 저장 위치는 app을 하나라도 불러오기 전에 정해야 이 폴더를 쓴다 (.env의 값보다 먼저)
     os.environ.update(DB_PATH=str(target / "app.db"), UPLOAD_DIR=str(target / "uploads"),
                       REPORT_DIR=str(target / "reports"), LLM_FAKE="false", LLM_ENABLED="false",
-                      FIRST_GUIDE="true")  # 처음 이용자 계정은 가입할 때 체험 안내가 시작돼야 한다
+                      FIRST_GUIDE="true")  # 시험 계정은 가입할 때 체험 안내가 시작돼야 한다
     from app import config
     if config.DB_PATH != (target / "app.db").resolve() or target not in config.UPLOAD_DIR.parents:
         sys.exit(f"저장 위치가 시험 폴더가 아니에요 ({config.DB_PATH}). 평소 데이터를 지키려고 멈춰요.")
@@ -523,12 +531,15 @@ def main() -> None:
         if n == 0 and args.scenarios:
             for case in CASES:
                 show(case)
+        elif not args.scenarios:
+            print(f"\n{email}: 사례 {case_of(email)['key']}", end="")
+            show(case_of(email))
     kind = (f"알바 {len(CASES)}개씩 같은 내용" if args.scenarios else
-            "방금 가입한 처음 이용자: 일하는 곳·기록·사진 없음, 로그인하면 시작 화면과 체험 안내")
+            "계정마다 사례 하나의 일하는 곳과 출퇴근 기록, 사진·받은 금액 없음, 체험 안내 켜짐")
     print(f"\n계정 {len(made)}개를 만들었어요: {', '.join(made) or '없음 (모두 이미 있어요)'} / 비밀번호 {PASSWORD}"
           f" ({NAME}, {BIRTH}생, 만 17세, {kind})")
     if not args.scenarios:
-        print("시연 사진: .env에 DEMO_MODE=true면 업로드 칸마다 데모 자료 30장 (테스트자료/). 다시 처음 상태로: --force")
+        print("시연 사진: 업로드 칸마다 그 계정 사례 가게의 자료 6장 (체험 안내 중이거나 .env에 DEMO_MODE=true). 다시 처음 상태로: --force")
     print(f"\n만든 폴더: {target}")
     if args.dir == "data/test":
         print("시험 데이터로 실행: .env에 TEST_DATA=true 를 넣고 서버를 켜세요 (로그에 '시험 데이터로 실행 중')")

@@ -1290,7 +1290,7 @@ $('#postAdd').onclick=async()=>{ const urls=[...new Set($('#postUrl').value.spli
 $('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/search`)); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace, r.trace_at); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
 
 // ---------- 처음 쓰는 사람 체험 안내 (새로 가입한 계정만, app/guide.py) ----------
-// 모든 새 계정에 같은 통합 미션 8개, 업로드할 때 '내 기기에서 고르기'와 예시 자료, 다 하면 설문. 안내가 없는 계정은 아무것도 가로채지 않는다
+// 모든 새 계정에 같은 미션 5개(그만둔 곳만 있으면 4개), 업로드할 때 '내 기기에서 고르기'와 예시 자료, 다 하면 설문. 안내가 없는 계정은 아무것도 가로채지 않는다
 const guide={st:null, doneShown:false, timer:null, input:null, bypass:false};
 function guideSoon(){ if(!guide.st?.on) return; clearTimeout(guide.timer); guide.timer=setTimeout(guideRefresh, 700); }
 // 순번: 늦게 도착한 예전 응답이 더 새 상태(예: 완료 창을 닫음)를 덮어쓰지 않게 한다

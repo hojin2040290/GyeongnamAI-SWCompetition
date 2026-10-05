@@ -18,7 +18,7 @@ http://localhost:8080 을 연다 (8000번은 GPU 서버의 vLLM이 쓴다).
 
 | 하고 싶은 것 | 방법 |
 |---|---|
-| 시험 데이터로 보기 | `.env`에 `TEST_DATA=true`. 계정 `test@example.com`, `test2~5@example.com` / `test1234` (방금 가입한 처음 이용자: 일하는 곳·기록·사진 없음, 로그인하면 '○○ 계정으로 로그인했어요'와 함께 시작 화면에서 상황을 고르고 체험 안내). 알바 5개 사례가 든 계정은 `.venv/bin/python -m app.demo_db --scenarios --force` (Windows: `.venv\Scripts\python.exe -m …`). 기록은 `data/test`에 따로 둔다 |
+| 시험 데이터로 보기 | `.env`에 `TEST_DATA=true`. 계정 `test@example.com`, `test2~5@example.com` / `test1234` (계정마다 사례 하나의 일하는 곳과 출퇴근 기록, 사진·받은 금액 없음, 체험 안내 켜짐. 업로드에는 그 사례 가게의 자료 6장만). 알바 5개 사례가 든 계정은 `.venv/bin/python -m app.demo_db --scenarios --force` (Windows: `.venv\Scripts\python.exe -m …`). 기록은 `data/test`에 따로 둔다 |
 | 실제 업로드와 사진 읽기 | `DEMO_MODE=true`. 업로드를 누르면 데모 자료 30장(`테스트자료/`, 알바 5곳마다 채용공고, 계약서, 근무표, 명세서, 입금 내역, 사장님 메시지)이 그 칸에 맞는 것부터 나온다. 채용공고를 고르면 그 가게 조건으로 칸을 채운다 |
 | 실제 AI 연결 | `LLM_ENABLED=true`, `LLM_BASE_URL`, `LLM_MODEL`을 채우고 서버를 다시 켠 뒤 `python -m app.llm.probe`로 도구 호출을 확인 |
 | 최신 코드 받기 | `git pull origin main` 후 서버를 다시 켠다. 로그의 `알바지킴이 코드 버전`이 main의 마지막 커밋과 같아야 한다 |
@@ -71,7 +71,7 @@ app/
   storage.py         업로드 원본과 상담 자료 저장 (고유 이름, 덮어쓰기 금지, SHA-256)
   evidence_check.py  증거 저장 위치와 SHA-256 점검
   auth.py, login_guard.py   가입, 로그인, 로그인 시도 제한
-  demo_db.py         시험 계정 5개 (기본: 처음 이용자, --scenarios: 알바 5개씩)
+  demo_db.py         시험 계정 5개 (기본: 계정마다 사례 하나, --scenarios: 알바 5개씩)
   guide.py           처음 쓰는 사람 체험 안내, 예시·데모 자료, 설문 주소
 data/law_params.json 법 기준값과 출처
 web/                 화면 (HTML, CSS, JavaScript)
@@ -152,7 +152,7 @@ bench/               모델 후보 9개 비교 실험 (Qwen3.8-27B 선정 근거
 
 알림은 종류마다 최신 것만 남기고, 읽은 지 30일이 지나면 정리한다.
 
-**처음 쓰는 사람 체험 안내**(`FIRST_GUIDE`, 새로 가입한 계정만): 고른 상황과 상관없이 모든 새 계정에 같은 체험 미션 8개(지원 전 확인 → 일할 곳 등록 → 출근·퇴근 → 계약서 사진으로 점검 → 받은 급여 올리고 비교 → 그만둔 곳 등록 → 남은 임금 받았는지 답하기 → 상담 사전 자료)를 서버가 기록으로 판정하고, 업로드 때 예시 자료를 고를 수 있게 하며, 8개를 다 하면 설문(`SURVEY_URL`)을 안내한다 (테스터용).
+**처음 쓰는 사람 체험 안내**(`FIRST_GUIDE`, 새로 가입한 계정만): 고른 상황과 상관없이 모든 새 계정에 같은 체험 미션 5개(지원 전 확인 → 출근·퇴근 → 계약서 사진으로 점검 → 받은 급여 올리고 비교 → 상담 사전 자료, 일하는 곳이 모두 그만둔 곳이면 출근·퇴근은 빼고 4개)를 서버가 기록으로 판정하고, 업로드 때 예시 자료를 고를 수 있게 하며, 미션을 다 하면 설문(`SURVEY_URL`)을 안내한다 (테스터용).
 
 디자인: 옅은 회색 바탕에 흰 카드, 주 버튼은 검정. 상태는 색 점과 글자로 보인다: 초록 문제 없음, 노랑 확인 필요, 빨강 위반 의심, 파랑 좋고 나쁨이 없는 상태, 회색 아직 안 함.
 
@@ -162,7 +162,7 @@ bench/               모델 후보 9개 비교 실험 (Qwen3.8-27B 선정 근거
 - 게시물 화면 캡처 (선택): `pip install playwright && python -m playwright install chromium`
 
 ## 시연
-- 시험 계정(`TEST_DATA=true`): 방금 가입한 처음 이용자로 시작해 체험 안내를 따라 등록, 출퇴근, 사진 올리기를 보여 준다. 처음 상태로 되돌리기 (서버를 끄고): `.venv/bin/python -m app.demo_db --force` (Windows: `.venv\Scripts\python.exe -m app.demo_db --force`). 가상환경 밖의 파이썬이면 시험 데이터를 지우지 않고 멈춘다
+- 시험 계정(`TEST_DATA=true`): test@example.com은 사례 1(행복편의점, 그만둔 곳), test2는 사례 2(가상분식), test3은 사례 3(가상카페), test4는 사례 4(가상베이커리), test5는 사례 5(가상치킨, 그만둔 곳)의 일하는 곳과 출퇴근 기록이 들어 있고, 체험 안내를 따라 그 사례 가게의 사진을 올려 점검한다. 처음 상태로 되돌리기 (서버를 끄고): `.venv/bin/python -m app.demo_db --force` (Windows: `.venv\Scripts\python.exe -m app.demo_db --force`). 가상환경 밖의 파이썬이면 시험 데이터를 지우지 않고 멈춘다
 - 알바 5개 사례(위반 의심, 적게 받음, 모두 정상, 정보 부족, 그만두고 못 받음·신고 후 보호)가 든 계정: `.venv/bin/python -m app.demo_db --scenarios --force`
 - 급여 탭 **지금 점검**: 월급날을 기다리지 않고 급여 점검
 - `POST /api/dev/daily-check`: 매일 자동 점검을 지금 실행 (`DEV_TOOLS=true`일 때만 열림. 매일 점검 자체는 이 설정과 상관없이 돈다)

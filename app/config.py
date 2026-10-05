@@ -106,7 +106,7 @@ OPEN_RECORD_ALERT_HOURS = int(os.getenv("OPEN_RECORD_ALERT_HOURS", "16"))  # 퇴
 AI_RETRY_MIN = int(os.getenv("AI_RETRY_MIN", "10"))
 AI_RETRY_PER_DAY = int(os.getenv("AI_RETRY_PER_DAY", "3"))
 
-# 처음 쓰는 사람 체험 안내 (app/guide.py): 새로 가입한 계정에 통합 미션 8개와 예시 자료 고르기, 다 하면 설문. 기본은 켬.
+# 처음 쓰는 사람 체험 안내 (app/guide.py): 새로 가입한 계정에 미션 5개와 예시 자료 고르기, 다 하면 설문. 기본은 켬.
 # 화면 회귀 시험(tests/ui)은 false로 돌린다 (안내 창이 다른 시험의 클릭을 가리지 않게, 체험 안내는 part16에서 따로 확인)
 FIRST_GUIDE = os.getenv("FIRST_GUIDE", "true").strip().lower() == "true"
 # 데모 모드: 모든 계정의 업로드 칸에 데모 자료(테스트자료의 가상 사진 30장: 알바 5곳마다 채용공고, 계약서, 근무표, 명세서, 입금 내역, 메시지)를 '내 기기에서 고르기'와 함께 보여 준다 (실제 업로드, 사진 읽기 시연용)
