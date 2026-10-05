@@ -536,13 +536,20 @@ $('#sheetSave').onclick=()=>{
 };
 
 // ---------- 지원 전 확인 ----------
-const seek={node:$('#seekForm'), schedule:{}};
+const seek={node:$('#seekForm'), schedule:{}, photos:[]};
 bindSeg(seek.node);
 seek.node.querySelector('.schedule-btn').onclick=()=>openSheetFor(seek);
+// 올린 공고 사진은 올리기 칸 바로 아래에 보여 준다 (알림만 잠깐 뜨고 사라져 올렸는지 알 수 없었다)
 $('#seekFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.length) return; let ok=0;
   for(const f of files){ const fd=new FormData(); fd.append('file',f); fd.append('kind','notice');
-    try{ await api('POST','/api/evidence',fd,true); ok++; }catch(err){ toast(`${f.name}: ${err.message}`); } }
+    try{ seek.photos.push(await api('POST','/api/evidence',fd,true)); ok++; seekPhotos(); }catch(err){ toast(`${f.name}: ${err.message}`); } }
   if(ok) toast(`공고 사진 ${ok}장을 원본으로 보관했어요`); e.target.value=''; };
+function seekPhotos(){
+  const box=$('#seekPhotos'); box.classList.toggle('hidden', !seek.photos.length || $('#seekUpload').classList.contains('hidden'));
+  box.innerHTML=seek.photos.map(p=>{ const url=`/api/evidence/${p.id}/file`, pdf=/\.pdf$/i.test(p.filename);
+    return `<a class="up-shot" href="${url}" target="_blank">${pdf?'<span class="up-pdf">PDF</span>':`<img src="${url}" alt="${esc(p.filename)}">`}
+      <span class="sub">${esc(p.filename)}<br>${fmtDT(p.uploaded_at,{sec:true,wd:true})} 보관</span></a>`; }).join('');
+}
 function seekInput(){ const n=seek.node, w=parseWon(n.querySelector('.f-wage').value);
   return { name:n.querySelector('.f-name').value.trim(), industry:n.querySelector('.f-type').value, work_desc:n.querySelector('.f-work').value.trim(),
     wage:w||null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule,
@@ -657,7 +664,7 @@ $('#seekRun').onclick=async()=>{
     $('#seekItems').innerHTML=r.items.map(itemHTML).join('');
     $('#seekQs').innerHTML=r.questions.map(q=>`<li>${esc(q)}</li>`).join('');
     $('#seekTrace').innerHTML=traceHTML(r.trace, r.trace_at);
-    $('#seekForm').classList.add('hidden'); $('#seekUpload').classList.add('hidden'); $('#seekResult').classList.remove('hidden');
+    $('#seekForm').classList.add('hidden'); $('#seekUpload').classList.add('hidden'); seekPhotos(); $('#seekResult').classList.remove('hidden');
     $('#seekClose').classList.toggle('hidden',!state.seekFromApp); window.scrollTo(0,0); refreshNav();
   }catch(e){ $('#seekErr').textContent=e.message; }
 };
@@ -665,9 +672,9 @@ function seekReset(){ $('#seekLive').innerHTML=''; const n=seek.node; n.querySel
   const bh=n.querySelector('.bizno-hint'); bh.textContent=BIZ_HINT; bh.classList.remove('bad');
   n.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed','false')); seek.schedule={};
   n.querySelector('.sched-sum').textContent='요일과 시간을 선택해 주세요'; n.querySelector('.sched-go').textContent='선택';
-  seekBackToForm(); }
+  seek.photos=[]; seekBackToForm(); }
 // 결과에서 뒤로: 입력한 내용은 그대로 두고 입력 화면으로
-function seekBackToForm(){ $('#seekResult').classList.add('hidden'); $('#seekForm').classList.remove('hidden'); $('#seekUpload').classList.remove('hidden'); window.scrollTo(0,0); refreshNav(); }
+function seekBackToForm(){ $('#seekResult').classList.add('hidden'); $('#seekForm').classList.remove('hidden'); $('#seekUpload').classList.remove('hidden'); seekPhotos(); window.scrollTo(0,0); refreshNav(); }
 $('#seekAgain').onclick=seekReset;
 $('#seekClose').onclick=()=>{ state.seekFromApp=false; closeOverlay(); };
 $('#seekToWork').onclick=()=>{

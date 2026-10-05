@@ -71,9 +71,10 @@
       <button type="button" class="back-btn ob-back" aria-label="뒤로 가기"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>뒤로</button>
       <div class="step">지원 전 확인</div>
       <h1>지원하려는 곳의 조건을 알려 주세요</h1>
-      <p class="lead">공고 사진은 원본으로 보관돼요. 공고 내용 자동 읽기는 AI 연결 후 제공되고, 지금은 직접 입력해 주세요.</p>
+      <p class="lead">공고 사진은 원본으로 보관돼요. 공고에 적힌 조건은 아래 칸에 적어 주세요.</p>
       <label class="upload" id="seekUpload"><input type="file" accept="image/*,.pdf" hidden multiple id="seekFile">
         <strong>채용공고 사진 올리기</strong>캡처나 사진, 여러 장도 돼요</label>
+      <div class="up-shots hidden" id="seekPhotos" aria-label="올린 공고 사진"></div>
       <div class="panel" style="margin-top:14px" id="seekForm">
         <label class="field"><span>사업장 이름</span><input class="input f-name" maxlength="60" placeholder="예: 해맑음 편의점 용호점"></label>
         <label class="field"><span>사업자등록번호 (선택)</span><input class="input f-bizno" inputmode="numeric" maxlength="12" placeholder="000-00-00000" autocomplete="off">
