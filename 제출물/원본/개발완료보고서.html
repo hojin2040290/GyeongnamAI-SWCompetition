@@ -144,13 +144,13 @@ code{font-family:'IBM Plex Sans KR',sans-serif;background:#f1f2f4;padding:0 .8mm
 </table>
 
 <h3>단계별 개발 내용</h3>
-<table class="t">
+<table class="t" style="page-break-inside:auto">
 <tr><th style="width:18mm">날짜</th><th>내용</th></tr>
 <tr><td>9/29</td><td>기록·계산·화면 뼈대, 법제처 API와 법 기준표, 에이전트 구조로 전환(계획, 검증 후 재판단, 질문, 후속 예약, 메모와 조언)</td></tr>
 <tr><td>9/30</td><td>입력 검사와 프롬프트 인젝션 대비, 로그인 시도 제한, 가짜 AI(모델 없이 흐름 시험), 알림 정리, 실행 가이드</td></tr>
 <tr><td>10/1</td><td>항목별 'AI 에이전트 판단' 표시, 시험 데이터(가상 사업장 5곳), 회귀 시험, 법령 자동 갱신, 모델 비교 실험 도구</td></tr>
 <tr><td>10/2~3</td><td>모델 후보 9개 비교 → Qwen3.8-27B 연결, 100초 연결 끊김 대비(뒤에서 실행), 홈 종합 점검, AI 글 검사</td></tr>
-<tr><td>10/4~5</td><td>미니멀 화면, 처음 가입한 사용자 체험 안내와 설문, 데모 모드, 사용자별 실행 대기줄, 제출물</td></tr>
+<tr><td>10/4~5</td><td>미니멀 화면, 처음 가입한 사용자 체험 안내(고른 상황별 미션 3개), 사용자 설문 준비(구글 설문지 연결 SURVEY_URL, 미션 3개를 마치면 뜨는 설문 안내 창, 일하는 곳 선택 창에 늘 있는 '써 보니 어떤가요? 설문하기'), 데모 모드, 사용자별 실행 대기줄, 제출물</td></tr>
 </table>
 </section>
 
@@ -240,7 +240,7 @@ code{font-family:'IBM Plex Sans KR',sans-serif;background:#f1f2f4;padding:0 .8mm
 
 <section>
 <h2><span class="n">7</span>출처와 라이선스</h2>
-<table class="t">
+<table class="t" style="page-break-inside:auto">
 <tr><th style="width:30mm">구분</th><th>이름 · 출처</th><th style="width:30mm">라이선스·조건</th></tr>
 <tr><td class="k">법 기준값</td><td>고용노동부 공식 블로그 「알바 구하기 전 꼭 알아야 할 노동법 10문10답」(2025.12.4, blog.naver.com/molab_suda/224098273869): 최저임금, 연소자 근로, 휴게, 주휴수당, 서면 명시, 임금 청구 · 최저임금법 제5조 제2항(수습 감액) · 청소년 보호법 제2조·제29조 · 근로기준법 제36조(금품 청산), 제56조와 시행령 별표1(가산수당) · 고용노동부 노동포털 아르바이트 피해 구제방법(취직인허증) · 국가법령정보센터 조문(보복 금지). 값은 data/law_params.json에 출처와 함께</td><td>공공 자료</td></tr>
 <tr><td class="k">외부 API</td><td>법제처 국가법령정보 공동활용 OPEN API (open.law.go.kr): 조문·별표, 최저임금 고시, 판례, 법령해석례, 고용노동부 해석, 노동위원회 결정문</td><td>이용 신청 (등록한 IP만)</td></tr>
