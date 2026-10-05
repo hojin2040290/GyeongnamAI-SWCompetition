@@ -45,7 +45,7 @@
 |---|---|---|---|
 | cloudflared | 시연 때 내 컴퓨터의 서버를 https 주소로 열기 | https://github.com/cloudflare/cloudflared | Apache-2.0 |
 | IBM Plex Sans KR | 화면 글꼴 (Google Fonts). 기기 크기 캡처 도구도 같은 글꼴을 받아 씀, 저장소에는 없음 | https://fonts.google.com/specimen/IBM+Plex+Sans+KR | SIL OFL 1.1 |
-| 테스트 자료 (`테스트자료/`) | 가상 인물과 가게로 직접 만든 계약서, 명세서, 입금 내역, 메시지 캡처, 채용공고. 알바 사례 사진은 `tests/ui/make_case_images.js`가 시험 데이터의 계산 값으로 그림 | 직접 제작 | 실존 인물·가게 아님 |
+| 테스트 자료 (`테스트자료/`) | 가상 인물과 가게로 직접 만든 계약서, 명세서, 입금 내역, 메시지 캡처, 채용공고. 알바 5곳마다 채용공고, 계약서, 근무표, 명세서, 입금 내역, 메시지를 `app/demo_db.py --html`과 `tests/ui/make_case_images.js`로 시험 데이터의 계산 값과 같게 그림 | 직접 제작 | 실존 인물·가게 아님 |
 
 ## 모델 선정 실험 (bench/)
 | 이름 | 용도 | 출처 | 라이선스 |

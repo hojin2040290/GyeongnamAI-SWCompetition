@@ -12,11 +12,13 @@
  "4": {
   "month": "2026-09",
   "work_min": 1440,
-  "paid": null
+  "paid": null,
+  "slip": 247680
  },
  "5": {
   "month": "2026-08",
   "work_min": 2160,
-  "paid": null
+  "paid": null,
+  "slip": 371520
  }
 }
