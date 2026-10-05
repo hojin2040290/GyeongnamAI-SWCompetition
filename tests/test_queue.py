@@ -83,7 +83,8 @@ def test_agent_runs_wait_their_turn(monkeypatch):
     c = TestClient(app)
     c.post("/api/auth/register", json={"email": "queue_test@example.com", "password": "test1234", "birth_date": "2009-05-01"})
     uid = c.get("/api/me").json()["id"]
-    job = c.post("/api/jobs", json={"name": "가상대기 시험점", "wage": 10320, "start_date": "2026-08-03", "schedule": {}}).json()["id"]
+    jobs = [c.post("/api/jobs", json={"name": f"가상대기 시험점{n}", "wage": 10320, "start_date": "2026-08-03", "schedule": {}}).json()["id"]
+            for n in (1, 2)]  # 다른 두 사업장 (같은 사업장의 같은 점검은 하나로 합쳐진다)
     spans, real = [], core.Run.agent
 
     def slow_agent(self, goal, context, extra=None):  # 에이전트가 일하는 시간을 흉내 낸다
@@ -91,10 +92,10 @@ def test_agent_runs_wait_their_turn(monkeypatch):
         return None
     monkeypatch.setattr(core.Run, "agent", slow_agent)
 
-    def check():
+    def check(job):
         with Session(engine) as s:
             core.run_contract_check(s, uid, job)
-    ths = [threading.Thread(target=check) for _ in range(2)]
+    ths = [threading.Thread(target=check, args=(j,)) for j in jobs]
     for th in ths:
         th.start()
     time.sleep(0.1)
@@ -105,3 +106,29 @@ def test_agent_runs_wait_their_turn(monkeypatch):
     (a0, a1), (b0, b1) = sorted(spans)
     assert a1 <= b0  # 앞 실행이 끝난 뒤에 다음 실행이 시작됨
     assert QUEUE.snapshot() == []
+
+
+def test_same_work_waits_for_the_one_in_line():
+    """같은 일이 이미 줄에 있으면 새로 서지 않고 그 결과를 함께 받는다 (새로고침마다 같은 점검이 쌓이던 문제)."""
+    q, runs = AgentQueue(), []
+    gate = threading.Event()
+
+    def work():
+        runs.append(1); gate.wait(5); return {"결과": len(runs)}
+    out = []
+    ths = [threading.Thread(target=lambda: out.append(q.run(1, "종합 점검", work, key=("종합 점검", "1", "7")))) for _ in range(3)]
+    for th in ths:
+        th.start()
+    time.sleep(0.2)
+    assert len(q.snapshot()) == 1  # 같은 일은 줄에 하나만
+    gate.set()
+    for th in ths:
+        th.join(3)
+    assert runs == [1] and out == [{"결과": 1}] * 3  # 한 번만 실행하고 결과는 셋 다 받음
+    # 입력이 다르면(다른 사업장) 따로 선다
+    gate2 = threading.Event()
+    a = threading.Thread(target=q.run, args=(1, "종합 점검", lambda: gate2.wait(5)), kwargs={"key": ("종합 점검", "1", "7")})
+    b2 = threading.Thread(target=q.run, args=(1, "종합 점검", lambda: gate2.wait(5)), kwargs={"key": ("종합 점검", "1", "8")})
+    a.start(); b2.start(); time.sleep(0.2)
+    assert len(q.snapshot()) == 2
+    gate2.set(); a.join(3); b2.join(3)
