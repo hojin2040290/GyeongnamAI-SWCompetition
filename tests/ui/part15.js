@@ -29,7 +29,8 @@ const until = async (p, fn, arg, ms=90000) => p.waitForFunction(fn, arg, {timeou
   await until(p, ()=>!document.querySelector('#ovLive .live')); await p.waitForTimeout(800);
   const txt = await p.textContent('#ovPanel');
   ck('[종합 점검] 코드가 정리한 사실 (계약서, 급여, 근무 기록, 증거)', ['계약서 점검','급여','근무 기록','증거 자료'].every(x=>txt.includes(x)), txt.slice(0,120));
-  ck('[종합 점검] AI 에이전트 판단 칸에 결과, 이유(테스트 답변), 근거 조항', !!(await p.$('#ovAi .ai-judge')) && (await p.textContent('#ovAi')).includes(PREFIX) && (await p.textContent('#ovAi')).includes('근거 조항'));
+  ck('[종합 점검] AI 에이전트 판단 칸에 결과, 이유(테스트 답변), 근거 조항', !!(await p.$('#ovLive .trace-judge .ai-judge')) && (await p.textContent('#ovLive .trace-judge')).includes(PREFIX) && (await p.textContent('#ovLive .trace-judge')).includes('근거 조항'));
+  ck('[종합 점검] 판단만 따로 보는 칸은 없음 (동작 보기 끝에 붙음)', !(await p.isVisible('#ovAi')) && !(await p.textContent('#ovPanel')).includes('AI 에이전트 판단 보기'));
   ck('[종합 점검] 조언(테스트 답변)이 같은 카드에', (await p.textContent('#ovPanel #caseAdvice')).includes(PREFIX));
   ck('[종합 점검] 점검 시각', /\d{2}:\d{2}/.test(await p.textContent('#ovNote')), await p.textContent('#ovNote'));
   ck('[종합 점검] 태그가 판단 결과', ['정상','확인 필요','위반 의심'].includes((await p.textContent('#ovTag')).trim()), await p.textContent('#ovTag'));
@@ -83,7 +84,7 @@ const until = async (p, fn, arg, ms=90000) => p.waitForFunction(fn, arg, {timeou
   const live2 = await until(p, id=>!!document.querySelector(`#ovLive .live[data-job="${id}"]`), j2.id, 10000);
   const noOld = !(await p.$(`#ovLive .live[data-job="${j1.id}"]`));
   await until(p, ()=>!document.querySelector('#ovLive .live'));
-  const judged2 = await until(p, x=>document.querySelector('#ovAi').textContent.includes(x), PREFIX, 10000);  // 진행 칸이 닫힌 뒤 결과를 불러온다
+  const judged2 = await until(p, x=>(document.querySelector('#ovLive .trace-judge')?.textContent||'').includes(x), PREFIX, 10000);  // 진행 칸이 닫힌 뒤 결과를 불러온다
   ck('[종합 점검] 다른 일하는 곳에도 카드와 자동 점검', live2 && judged2, `첫 곳 점검 중이었음: ${firstRunning}, 판단 칸: ${(await p.textContent('#ovAi')).slice(0,80)}, 진행 칸: ${(await p.textContent('#ovLive')).slice(0,80)}`);
   ck('[종합 점검] 바꾸기 전 일하는 곳의 진행 칸이 남지 않음', noOld);
   ck('콘솔 오류 없음', p.errs.length===0, p.errs.join(' / '));

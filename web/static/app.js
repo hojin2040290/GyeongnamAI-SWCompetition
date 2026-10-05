@@ -85,6 +85,7 @@ function failText(status){
 // agent() 진행 칸이 떠 있는 동안(값이 0보다 큼) 보내는 저장·점검 요청은 서버가 뒤에서 실행한다 (app/long_task.py).
 // AI가 여러 번 불려 오래 걸려도 cloudflared의 100초 제한에 끊기지 않게, 작업 번호를 받고 결과를 따로 묻는다.
 let longDepth=0;
+let liveBox=null;  // 지금 시작한 에이전트 진행 칸: 그 실행이 보낸 요청의 작업 번호를 모아 대기줄에서 자기 번호를 찾는다
 const NET_ERR='서버에 연결하지 못했어요. 인터넷 연결이나 서버가 켜져 있는지 확인해 주세요';
 async function waitTask(id){
   let fails=0;
@@ -102,12 +103,12 @@ async function api(method, url, body, isForm){
   if (body !== undefined) {
     if (isForm) opt.body = body; else { opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
   }
-  const long = longDepth>0 && method!=='GET';
+  const long = longDepth>0 && method!=='GET', box=liveBox;
   if (long) opt.headers['X-Long-Task']='1';
   let r;
   try { r = await fetch(url, opt); }
   catch(e){ const err=new Error(NET_ERR); err.status=0; throw err; }
-  if (long && r.status===202) { const j=await r.json(); if (j.task_id) r=await waitTask(j.task_id); }
+  if (long && r.status===202) { const j=await r.json(); if (j.task_id){ box?.tasks?.add(j.task_id); r=await waitTask(j.task_id); } }
   if (!r.ok) {
     let msg = failText(r.status);
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : msg; } catch(e) {}
@@ -606,7 +607,7 @@ async function agent(box, run){
   if(follow) HAND.forEach(t=>addEventListener(t,hands,{passive:true}));
   el.innerHTML='<div class="live"><p class="wait-note live-head">에이전트가 일하는 중이에요</p><div class="live-steps"></div></div>';
   const mine=el.querySelector('.live'), ours=()=>el.contains(mine);  // 다른 일하는 곳으로 바꿔 칸이 비워졌으면 이 실행의 칸이 아니다
-  mine.dataset.job=state.current;
+  mine.dataset.job=state.current; mine.tasks=new Set(); liveBox=mine;
   if(follow) reveal(mine);  // 누른 버튼 아래 진행 칸이 가려져 있으면 보이는 곳까지 옮긴다 (끝날 때까지 이 화면에 머문다)
   try{ last=(await api('GET','/api/agent/last')).id; }catch(e){}
   (async()=>{ while(!stop){
@@ -620,12 +621,12 @@ async function agent(box, run){
         if(follow) reveal(mine); } }catch(e){}
     await new Promise(r=>setTimeout(r,700)); } })();
   longDepth++;
-  try{ return await run(); }catch(e){ if(ours()) el.innerHTML=''; throw e; }finally{ stop=true; longDepth--; HAND.forEach(t=>removeEventListener(t,hands)); }
+  try{ return await run(); }catch(e){ if(ours()) el.innerHTML=''; throw e; }finally{ stop=true; longDepth--; if(liveBox===mine) liveBox=null; HAND.forEach(t=>removeEventListener(t,hands)); }
 }
-// 대기줄(서버 전체에 하나, 1번이 실행 중): 내 실행이 1번이 아니면 진행 칸 머리에 순서를 보여 준다
+// 대기줄(사용자마다 하나, 1번이 실행 중): 이 진행 칸의 실행이 1번이 아니면 진행 칸 머리에 순서를 보여 준다
 function queueHead(box, q){
   const head=box.querySelector('.live-head'); if(!head) return;
-  const pos=Math.min(...(q.mine||[]).map(x=>x.pos));  // 내 실행이 여럿이면 가장 앞의 것
+  const pos=Math.min(...(q.mine||[]).filter(x=>box.tasks?.has(x.task)).map(x=>x.pos));  // 이 칸이 보낸 요청의 번호 (여럿이면 가장 앞)
   head.textContent=isFinite(pos)&&pos>1?`대기 중이에요 · 대기줄 ${pos}번째 (앞에 ${pos-1}개)`:'에이전트가 일하는 중이에요';
 }
 // 단계 한 줄: AI가 고른 도구는 판단 글과 따로 태그로 (예전 기록의 '도구 선택: a, b' 글도 서버가 태그로 바꿔 준다)
@@ -767,7 +768,6 @@ async function loadOverview(){
   ovSummary(o.parts);
   const quit=curJob()?.status==='quit';  // 그만둔 곳: 퇴직 정산 줄은 위 #quitPanel이 버튼과 함께 보여 준다 (두 번 나오지 않게)
   $('#ovParts').innerHTML=o.parts.filter(p=>!(quit && p.name==='퇴직 후 임금 정산')).map(ovRowHTML).join('');
-  $('#ovAiWrap').open=!v || v.status==='pending';  // 판단이 없거나 기다리는 중이면 펼쳐 둔다 (대기 표시가 가려지지 않게)
   $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
   $('#ovNote').textContent=v?`${fmtDT(v.at)} 점검${o.changed?' · 그 뒤로 기록이 바뀌었어요. 다시 점검해 보세요':''}`:'';
   if(!$('#ovLive').innerHTML) lastTrace('#ovLive','overview').then(ovTraceJudge); else ovTraceJudge();
@@ -775,7 +775,7 @@ async function loadOverview(){
   // 새 시각으로 열쇠가 바뀌어 끝없이 다시 돌았다 (실제 모델에서 진행 칸이 '시작'부터 계속 다시 뜸). 대기로 남은 것은 뒤의 다시 맡기기가 한다
   if(o.need && !homeBusy()) rejudgeOnce(`overview-${jobId}`, runOverview);  // 다른 점검이 도는 중이면 그 점검이 끝나고 다시 부를 때 시작
 }
-// 종합 점검의 '에이전트 동작 보기' 끝에 'AI 에이전트 판단 보기'와 같은 판단(결과, 이유, 근거 조항, 근거 사실)을 붙인다
+// 종합 점검의 AI 판단(결과, 이유, 근거 조항, 근거 사실)은 따로 칸을 두지 않고 '에이전트 동작 보기' 끝에 붙인다
 function ovTraceJudge(){
   const d=$('#ovLive details.trace'); if(!d) return;
   d.querySelector('.trace-judge')?.remove();
@@ -795,7 +795,6 @@ async function runOverview(){
   }catch(e){ if(jobId!==state.current) return; toast(e.message); }
   // 다시 불러오기: 그사이 로그아웃했거나 화면을 떠났으면 조용히 그만둔다 (자동 점검은 잡아 주는 곳이 없어 오류로 샌다)
   try{ await loadOverview(); await loadAsk(); await loadCase(); await loadAlerts(); }catch(e){ if(e.status!==401) toast(e.message); }
-  if(jobId===state.current) $('#ovAiWrap').open=true;  // 끝나면 판단 결과를 펼쳐 보여 준다
 }
 $('#ovRun').onclick=()=>{ if(!waitOthers()) runOverview(); };
 // 종합 점검 머리줄: 결과 색의 점과 결과 이름 (판단 중이면 도는 표시)

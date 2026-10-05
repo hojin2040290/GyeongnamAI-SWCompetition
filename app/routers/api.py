@@ -1099,10 +1099,10 @@ def agent_live(after: int = 0, u: User = Depends(current_user), s: Session = Dep
 
 @router.get("/agent/queue")
 def agent_queue(u: User = Depends(current_user)):
-    """에이전트 대기줄 (서버 전체에 하나, 1번이 실행 중). 내 실행의 번호와 줄 전체 길이만 알려 준다 (다른 사람의 일은 감춤)."""
-    line = QUEUE.snapshot()
+    """내 에이전트 대기줄 (사용자마다 하나, 1번이 실행 중). 내 실행들의 번호, 하는 일, 화면 요청의 작업 번호."""
+    line = QUEUE.snapshot(u.id)
     return {"size": len(line), "slots": QUEUE.slots,
-            "mine": [{"pos": x["pos"], "label": x["label"]} for x in line if x["user_id"] == u.id]}
+            "mine": [{"pos": x["pos"], "label": x["label"], "task": x["task"]} for x in line]}
 
 
 # ---------- 입력 칸 규칙 (화면이 입력하는 동안 거르고 안내하는 데 쓴다) ----------

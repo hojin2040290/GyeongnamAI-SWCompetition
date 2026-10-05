@@ -21,7 +21,7 @@ app/
   main.py            FastAPI 진입점
   routers/api.py     화면이 부르는 API
   agent/loop.py      에이전트 판단 반복 (최대 30회, 매 단계 기록)
-  agent/queue.py     에이전트 실행 대기줄 (서버 전체에 하나, 1번~10번 자리, 1번만 실행, 같은 일은 하나만. core.run_*에 @queued)
+  agent/queue.py     에이전트 실행 대기줄 (사용자마다 하나, 1번~10번 자리, 1번만 실행, 같은 일은 하나만. core.run_*에 @queued)
   agent/core.py      상황별 목표와 도구, AI 응답이 없을 때의 정해 둔 순서
   agent/tools.py     에이전트가 호출하는 도구 (user_id는 코드가 고정)
   agent/argcheck.py  AI가 낸 도구 입력 검사
