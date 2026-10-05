@@ -467,6 +467,17 @@ def _target(arg: str) -> Path:
     return target
 
 
+def need_libs() -> None:
+    """시험 데이터를 지우기 전에 서버 라이브러리가 있는지 본다 (가상환경 밖의 파이썬이면 지우지 않고 멈춘다)."""
+    import importlib.util
+    missing = [m for m in ("fastapi", "sqlmodel", "httpx") if importlib.util.find_spec(m) is None]
+    if missing:
+        sys.exit(f"이 파이썬에는 {', '.join(missing)}가 없어요 (가상환경 밖의 파이썬). 시험 데이터는 건드리지 않았어요.\n"
+                 "가상환경의 파이썬으로 다시 실행해 주세요:\n"
+                 "  Windows: .venv\\Scripts\\python.exe -m app.demo_db --force\n"
+                 "  리눅스, macOS: .venv/bin/python -m app.demo_db --force")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="시험 계정 만들기 (기본: 처음 이용자)")
     ap.add_argument("--dir", default="data/test", help="만들 폴더 (기본 data/test, .env의 TEST_DATA=true가 쓰는 곳)")
@@ -479,6 +490,7 @@ def main() -> None:
     if args.html:
         write_html(Path(args.html))
         return
+    need_libs()
     target = _target(args.dir)
     # 저장 위치는 app을 하나라도 불러오기 전에 정해야 이 폴더를 쓴다 (.env의 값보다 먼저)
     os.environ.update(DB_PATH=str(target / "app.db"), UPLOAD_DIR=str(target / "uploads"),

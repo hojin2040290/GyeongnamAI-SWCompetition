@@ -18,7 +18,7 @@ http://localhost:8080 을 연다 (8000번은 GPU 서버의 vLLM이 쓴다).
 
 | 하고 싶은 것 | 방법 |
 |---|---|
-| 시험 데이터로 보기 | `.env`에 `TEST_DATA=true`. 계정 `test@example.com`, `test2~5@example.com` / `test1234` (방금 가입한 처음 이용자: 일하는 곳·기록·사진 없음, 로그인하면 시작 화면과 체험 안내). 알바 5개 사례가 든 계정은 `python -m app.demo_db --scenarios --force`. 기록은 `data/test`에 따로 둔다 |
+| 시험 데이터로 보기 | `.env`에 `TEST_DATA=true`. 계정 `test@example.com`, `test2~5@example.com` / `test1234` (방금 가입한 처음 이용자: 일하는 곳·기록·사진 없음, 로그인하면 시작 화면과 체험 안내). 알바 5개 사례가 든 계정은 `.venv/bin/python -m app.demo_db --scenarios --force` (Windows: `.venv\Scripts\python.exe -m …`). 기록은 `data/test`에 따로 둔다 |
 | 실제 업로드와 사진 읽기 | `DEMO_MODE=true`. 업로드를 누르면 데모 자료 30장(`테스트자료/`, 알바 5곳마다 채용공고, 계약서, 근무표, 명세서, 입금 내역, 사장님 메시지)이 그 칸에 맞는 것부터 나온다. 채용공고를 고르면 그 가게 조건으로 칸을 채운다 |
 | 실제 AI 연결 | `LLM_ENABLED=true`, `LLM_BASE_URL`, `LLM_MODEL`을 채우고 서버를 다시 켠 뒤 `python -m app.llm.probe`로 도구 호출을 확인 |
 | 최신 코드 받기 | `git pull origin main` 후 서버를 다시 켠다. 로그의 `알바지킴이 코드 버전`이 main의 마지막 커밋과 같아야 한다 |
@@ -162,8 +162,8 @@ bench/               모델 후보 9개 비교 실험 (Qwen3.8-27B 선정 근거
 - 게시물 화면 캡처 (선택): `pip install playwright && python -m playwright install chromium`
 
 ## 시연
-- 시험 계정(`TEST_DATA=true`): 방금 가입한 처음 이용자로 시작해 체험 안내를 따라 등록, 출퇴근, 사진 올리기를 보여 준다. 처음 상태로 되돌리기: `python -m app.demo_db --force`
-- 알바 5개 사례(위반 의심, 적게 받음, 모두 정상, 정보 부족, 그만두고 못 받음·신고 후 보호)가 든 계정: `python -m app.demo_db --scenarios --force`
+- 시험 계정(`TEST_DATA=true`): 방금 가입한 처음 이용자로 시작해 체험 안내를 따라 등록, 출퇴근, 사진 올리기를 보여 준다. 처음 상태로 되돌리기 (서버를 끄고): `.venv/bin/python -m app.demo_db --force` (Windows: `.venv\Scripts\python.exe -m app.demo_db --force`). 가상환경 밖의 파이썬이면 시험 데이터를 지우지 않고 멈춘다
+- 알바 5개 사례(위반 의심, 적게 받음, 모두 정상, 정보 부족, 그만두고 못 받음·신고 후 보호)가 든 계정: `.venv/bin/python -m app.demo_db --scenarios --force`
 - 급여 탭 **지금 점검**: 월급날을 기다리지 않고 급여 점검
 - `POST /api/dev/daily-check`: 매일 자동 점검을 지금 실행 (`DEV_TOOLS=true`일 때만 열림. 매일 점검 자체는 이 설정과 상관없이 돈다)
 
