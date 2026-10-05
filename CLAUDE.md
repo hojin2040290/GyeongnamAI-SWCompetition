@@ -41,7 +41,7 @@ app/
   notices.py         알림 보내기 (종류별로 최신 것만)
   ocr.py             계약서, 급여명세서 사진 읽기 (AI)
   demo_db.py         시험 계정 (test@example.com, test2~test5@example.com / test1234): 기본은 방금 가입한 처음 이용자(체험 안내 켜짐), --scenarios는 알바 5개와 기록
-  guide.py           처음 쓰는 사람 체험 안내 (새로 가입한 계정만, FIRST_GUIDE): 고른 상황별 미션 3개 판정, 예시 자료, 설문(SURVEY_URL), 데모 모드(DEMO_MODE: 모든 업로드에 데모 자료 30장)
+  guide.py           처음 쓰는 사람 체험 안내 (새로 가입한 계정만, FIRST_GUIDE): 모든 새 계정에 같은 통합 미션 8개 판정(다 하면 설문), 예시 자료, 설문(SURVEY_URL), 데모 모드(DEMO_MODE: 모든 업로드에 데모 자료 30장)
   config.py          .env 설정 읽기 (설정값 설명은 docs/실행가이드.md 4절)
   auth.py, guard.py, report.py, scheduler.py, storage.py, evidence_check.py, login_guard.py
   db.py, models.py   SQLite 연결과 테이블

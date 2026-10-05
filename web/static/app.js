@@ -103,7 +103,8 @@ async function api(method, url, body, isForm){
   if (body !== undefined) {
     if (isForm) opt.body = body; else { opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
   }
-  const long = longDepth>0 && method!=='GET', box=liveBox;
+  // 체험 안내 저장(/api/guide/)은 AI 없이 바로 끝나므로 뒤에서 실행하지 않는다 (AI 점검 중에 누른 '계속 쓰기'가 늦게 반영되던 문제)
+  const long = longDepth>0 && method!=='GET' && !url.startsWith('/api/guide/'), box=liveBox;
   if (long) opt.headers['X-Long-Task']='1';
   let r;
   try { r = await fetch(url, opt); }
@@ -234,10 +235,11 @@ document.addEventListener('change',e=>{ const el=e.target; if(!el.matches?.('inp
 async function boot(){
   await loadRules(); bindJobChars(seek.node);
   try {
-    state.me = await api('GET','/api/me'); guideRefresh();
+    state.me = await api('GET','/api/me');
     await loadJobs();
     if (!state.jobs.length) openOverlay('ob0');
     else startApp();
+    guideRefresh();  // 첫 화면(시작 화면 또는 앱)을 정한 뒤에: 시작 화면이면 안내를 띄우지 않는다
   } catch(e) {
     if (e.status === 401) openOverlay('ob0'); else toast(e.message);
   }
@@ -1284,17 +1286,20 @@ $('#postAdd').onclick=async()=>{ const urls=[...new Set($('#postUrl').value.spli
 $('#postSearch').onclick=async()=>{ try{ const r=await agent('#guardTrace',()=>api('POST',`/api/jobs/${state.current}/guard/search`)); await loadGuard(); $('#guardTrace').innerHTML=traceHTML(r.trace, r.trace_at); toast(r.skipped?r.reason:`새 게시물 ${r.added}건을 찾았어요`); }catch(e){ toast(e.message); } };
 
 // ---------- 처음 쓰는 사람 체험 안내 (새로 가입한 계정만, app/guide.py) ----------
-// 가입할 때 고른 상황의 미션 3개, 업로드할 때 '내 기기에서 고르기'와 예시 자료, 다 하면 설문. 안내가 없는 계정은 아무것도 가로채지 않는다
+// 모든 새 계정에 같은 통합 미션 8개, 업로드할 때 '내 기기에서 고르기'와 예시 자료, 다 하면 설문. 안내가 없는 계정은 아무것도 가로채지 않는다
 const guide={st:null, doneShown:false, timer:null, input:null, bypass:false};
 function guideSoon(){ if(!guide.st?.on) return; clearTimeout(guide.timer); guide.timer=setTimeout(guideRefresh, 700); }
+// 순번: 늦게 도착한 예전 응답이 더 새 상태(예: 완료 창을 닫음)를 덮어쓰지 않게 한다
 async function guideRefresh(){
   if(!state.me) return;
-  try{ guide.st=await api('GET','/api/guide/state'); }catch(e){ return; }
-  guideRender();
+  const n=guide.seq=(guide.seq||0)+1; let st;
+  try{ st=await api('GET','/api/guide/state'); }catch(e){ return; }
+  if(n!==guide.seq) return;
+  guide.st=st; guideRender();
 }
 function guideOpen(id){ $(id).classList.remove('hidden'); }
 function guideClose(id){ $(id).classList.add('hidden'); }
-async function guideMark(key){ try{ guide.st=await api('POST','/api/guide/mark',{key}); guideRender(); }catch(e){ toast(e.message); } }
+async function guideMark(key){ guide.seq=(guide.seq||0)+1; try{ guide.st=await api('POST','/api/guide/mark',{key}); guideRender(); }catch(e){ toast(e.message); } }
 function guideRender(){
   const st=guide.st, chip=$('#guideChip');
   $('#surveyBtn').classList.toggle('hidden', !st?.survey_url);  // 설문은 일하는 곳 선택 창에 늘 있다
@@ -1313,7 +1318,7 @@ function guideRender(){
   if(st.all_done && !st.closed && !guide.doneShown){ guide.doneShown=true; $('#guideDoneSurvey').classList.toggle('hidden', !st.survey_url); guideOpen('#guideDone'); }
 }
 function guideIntro(){
-  const st=guide.st; $('#guideIntroMode').textContent=st.title;
+  const st=guide.st; $('#guideIntroTitle').textContent=`미션 ${st.missions.length}개로 둘러보기`;
   $('#guideIntroList').innerHTML=st.missions.map(m=>`<li>${esc(m.title)}</li>`).join('');
   guideOpen('#guideIntro');
 }
