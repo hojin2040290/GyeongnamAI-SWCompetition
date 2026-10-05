@@ -764,7 +764,9 @@ async function loadOverview(){
   $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
   $('#ovNote').textContent=v?`${fmtDT(v.at)} 점검${o.changed?' · 그 뒤로 기록이 바뀌었어요. 다시 점검해 보세요':''}`:'';
   if(!$('#ovLive').innerHTML) lastTrace('#ovLive','overview');
-  if(o.need) rejudgeOnce(`overview-${jobId}-${v?.at||'new'}`, runOverview);
+  // 자동 점검은 사업장마다 화면을 연 동안 한 번만. 점검 시각을 열쇠에 넣으면, AI가 답을 못 내 대기로 끝날 때마다
+  // 새 시각으로 열쇠가 바뀌어 끝없이 다시 돌았다 (실제 모델에서 진행 칸이 '시작'부터 계속 다시 뜸). 대기로 남은 것은 뒤의 다시 맡기기가 한다
+  if(o.need) rejudgeOnce(`overview-${jobId}`, runOverview);
 }
 async function runOverview(){
   const jobId=state.current;
