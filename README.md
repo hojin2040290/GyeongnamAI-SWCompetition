@@ -79,7 +79,7 @@ tests/               계산, 판단, API 흐름 테스트와 회귀 시험. test
 evaluation/          정답 사례와 목표 성능 측정
 테스트자료/           가상 계약서, 명세서, 입금 내역, 메시지 캡처, 채용공고와 정답지
 docs/                실행 가이드, 출처와 AI 활용 기록
-제출물/              대회 제출물 PDF(개발완료보고서, AI Agent 기술설명서, 발표자료)와 원본 HTML. 다시 만들기: node 제출물/build.js
+제출물/              대회 제출물 PDF(개발완료보고서, AI Agent 기술설명서, 발표자료). 원본 HTML은 제출물/원본, 다시 만들기: node 제출물/원본/build.js
 deploy/              GPU 서버의 vLLM 켜기와 끄기
 bench/               모델 후보 9개 비교 실험 (Qwen3.8-27B 선정 근거)
 ```

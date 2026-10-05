@@ -1,9 +1,10 @@
 // 제출물 PDF 만들기: 이 폴더의 HTML을 PDF로 (보고서·기술설명서는 A4, 발표자료는 16:9)
 // 준비: bash tests/ui/fetch_fonts.sh (한 번, 앱과 같은 IBM Plex Sans KR 글꼴)
-// 사용: node 제출물/build.js  → 제출물/*.pdf 와 쪽마다 확인용 PNG(제출물/미리보기/, pdftoppm이 있을 때. 저장소에는 올리지 않음)
+// 사용: node 제출물/원본/build.js  → 제출물/*.pdf (원본 HTML은 이 폴더), 쪽마다 확인용 PNG(제출물/원본/미리보기/, pdftoppm이 있을 때. 저장소에는 올리지 않음)
 const path = require('path'), fs = require('fs');
-const { chromium } = require(path.join(__dirname, '..', 'tests', 'ui', 'node_modules', 'playwright'));
-const FONT = path.join(__dirname, '..', 'tests', 'ui', '.fonts');
+const { chromium } = require(path.join(__dirname, '..', '..', 'tests', 'ui', 'node_modules', 'playwright'));
+const FONT = path.join(__dirname, '..', '..', 'tests', 'ui', '.fonts');
+const OUT_DIR = path.join(__dirname, '..');  // PDF는 제출물/ 에
 const DOCS = [
   { html: '개발완료보고서.html', pdf: '개발완료보고서.pdf', a4: true },
   { html: 'AI_Agent_기술설명서.html', pdf: 'AI_Agent_기술설명서.pdf', a4: true, onePage: true },
@@ -30,7 +31,7 @@ async function useFonts(ctx) {  // Google 글꼴 요청에 미리 받아 둔 파
     const p = await ctx.newPage();
     await p.goto('file://' + path.join(__dirname, d.html));
     await p.evaluate(() => document.fonts.ready);
-    const out = path.join(__dirname, d.pdf);
+    const out = path.join(OUT_DIR, d.pdf);
     await p.pdf(d.a4 ? { path: out, format: 'A4', printBackground: true, preferCSSPageSize: true }
                      : { path: out, width: '1920px', height: '1080px', printBackground: true });
     const pages = (fs.readFileSync(out, 'latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
