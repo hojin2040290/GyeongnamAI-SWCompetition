@@ -327,7 +327,8 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 /* 조문 원문, 에이전트 동작 */
 details.law-text{margin-top:8px;font-size:13px}
 details.law-text summary{cursor:pointer;color:var(--blue);font-weight:500}
-details.law-text pre{white-space:pre-wrap;font-family:inherit;background:var(--bg);border-radius:8px;padding:10px;margin:6px 0 0;max-height:240px;overflow:auto}
+details.law-text pre{white-space:pre-wrap;font-family:inherit;background:var(--bg);border-radius:8px;padding:10px;margin:6px 0 0}
+details.law-text .law-more{margin-top:6px}
 details.trace{margin-top:12px}
 .trace-judge{border-top:1px solid var(--line);margin-top:6px;padding-top:4px}  /* 동작 보기 끝의 AI 에이전트 판단 */
 .live{margin-top:12px;background:var(--blue-soft);border-radius:10px;padding:8px 12px;scroll-margin:90px 0 110px}  /* 위 머리줄, 아래 메뉴에 가리지 않게 */

@@ -585,10 +585,20 @@ function seekInput(){ const n=seek.node, w=parseWon(n.querySelector('.f-wage').v
   return { name:n.querySelector('.f-name').value.trim(), industry:n.querySelector('.f-type').value, work_desc:n.querySelector('.f-work').value.trim(),
     wage:w||null, probation:segVal(n,'probation')||'unknown', schedule:seek.schedule,
     biz_no:n.querySelector('.f-bizno').value.trim() }; }
+// 조문 앞부분: LAW_SHORT자 안에서 줄 끝(없으면 띄어쓰기)에서 끊는다. 짧으면 그대로
+const LAW_SHORT=360;
+function lawCut(t){ if(t.length<=LAW_SHORT+40) return t; const head=t.slice(0,LAW_SHORT);
+  const at=Math.max(head.lastIndexOf('\n'), head.lastIndexOf(' ')); return head.slice(0, at>LAW_SHORT/2?at:LAW_SHORT).trimEnd(); }
+document.addEventListener('click',e=>{ const b=e.target.closest('.law-more'); if(!b) return; const d=b.closest('details.law-text');
+  d.querySelector('.law-short').classList.add('hidden'); d.querySelector('.law-full').classList.remove('hidden'); b.remove(); });
 function articleHTML(a){
   if(!a || a.na) return '';
   if(!a.built) return `<p class="basis"><span class="chip muted">법 기준표 미구축</span> 법제처 API로 조문을 불러오면 원문이 붙어요.</p>`;
-  return `<details class="law-text"><summary>조문 원문 보기${a.title?` (${esc(a.title)})`:''}</summary><pre>${esc(a.text)}</pre></details>`;
+  // 긴 조문은 앞부분만 '…'을 붙여 보여 주고 '전체 보기'로 펼친다 (칸 안 스크롤은 휴대폰에서 보이지 않아 끊긴 것처럼 보였다)
+  const t=String(a.text||''), cut=lawCut(t);
+  const body=cut===t?`<pre>${esc(t)}</pre>`
+    :`<pre class="law-short">${esc(cut)}…</pre><pre class="law-full hidden">${esc(t)}</pre><button type="button" class="link small law-more">전체 보기</button>`;
+  return `<details class="law-text"><summary>조문 원문 보기${a.title?` (${esc(a.title)})`:''}</summary>${body}</details>`;
 }
 // 법제처에서 받아 둔 판례, 해석례, 결정문 (참고용)
 function refsHTML(refs){
