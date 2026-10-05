@@ -1,10 +1,12 @@
 """처음 쓰는 사람 체험 안내 (새로 가입한 계정만).
 
-- 모든 새 계정에 같은 체험 미션 8개(세 상황의 미션을 합친 것)를 보여 준다. 서버가 기록으로 판정한다 (가입한 뒤에 한 일만).
+- 모든 새 계정에 같은 체험 미션 5개(지원 전 확인, 출퇴근, 계약서 점검, 급여 비교, 상담 사전 자료)를 보여 준다.
+  일하는 곳이 모두 그만둔 곳이면 출퇴근 미션은 뺀다 (그만둔 곳은 출근할 수 없다). 서버가 기록으로 판정한다 (가입한 뒤에 한 일만).
 - 체험하는 동안 업로드를 누르면 '내 기기에서 고르기'와 예시 자료(테스트자료의 가상 자료)를 함께 보여 준다.
 - 데모 모드(DEMO_MODE=true): 체험 안내와 상관없이 모든 계정의 업로드에 데모 자료 전체 (실제 업로드와 사진 읽기 시연용).
 - 미션을 다 하면 설문 안내 (SURVEY_URL). 설문은 일하는 곳 선택 창에도 늘 있다.
-- 시험 계정(app/demo_db.py)은 방금 가입한 처음 이용자라 안내가 켜져 있다 (--scenarios 계정은 끈다). 사용자도 '체험 안내 끄기'로 끌 수 있다.
+- 시험 계정(app/demo_db.py)은 계정마다 사례 하나(일하는 곳과 근무 기록)가 들어 있고 안내가 켜져 있다 (--scenarios 계정은 끈다).
+  시험 계정의 업로드에는 그 계정 사례 가게의 자료만 보여 주고 내준다. 사용자도 '체험 안내 끄기'로 끌 수 있다.
 - 예전 베타 계정(beta1~9, owner1~3) 지우기: python -m app.guide --remove-old-beta
 """
 import json
@@ -75,23 +77,17 @@ def demo_files() -> dict[str, list[tuple[str, str]]]:
     return {inp: [(n, label) for n, label, fit in DEMO if inp in fit.split()]
             + [(n, label) for n, label, fit in DEMO if inp not in fit.split()] for inp in UPLOAD_INPUTS}
 
-# 체험 미션 8개: 고른 상황(구하는 중, 일하는 중, 그만둠)과 상관없이 모든 새 계정에 같은 미션 (테스터가 핵심 기능을 다 써 보고 설문)
-# (판정 열쇠, 할 일, 방법, 바로 가기 화면). 세 상황의 미션을 합치고 겹치는 '계약서 사진으로 점검'은 하나로
+# 체험 미션 5개: 고른 상황(구하는 중, 일하는 중, 그만둠)과 상관없이 모든 새 계정에 같은 미션 (테스터가 핵심 기능을 다 써 보고 설문)
+# (판정 열쇠, 할 일, 방법, 바로 가기 화면). 일하는 곳이 모두 그만둔 곳이면 출퇴근(punch)은 뺀다 (missions_of)
 MISSIONS: list[dict] = [
     {"key": "seek", "title": "지원 전 확인으로 공고 조건 점검하기", "go": "seek",
      "how": "'지원 전 확인'(계약서 탭 맨 위)에서 채용공고 사진을 올리거나(예시 공고는 칸을 채워 줘요) 조건을 적고 '지원 전 확인하기'를 눌러요"},
-    {"key": "job", "title": "일할 곳 등록하기", "go": "job",
-     "how": "지원 전 확인 결과 아래 '이곳에서 일하게 됐어요, 등록하기'를 누르거나, 일하는 곳 선택 창에서 일하는 곳을 추가해요"},
     {"key": "punch", "title": "출근하기와 퇴근하기 눌러 보기", "go": "home",
      "how": "홈의 '출근하기'를 누르고 조금 뒤 '퇴근하기'를 눌러요. '방금 출근했어요' 확인 창이 뜨면 확인을 눌러요"},
     {"key": "contract", "title": "계약서 사진으로 점검하기", "go": "check",
      "how": "계약서 탭의 '근로계약서 사진 올리기'로 사진을 올리고(예시 자료도 있어요) '이 내용과 근무 기록으로 점검하기'를 눌러요"},
     {"key": "payday", "title": "받은 급여를 올리고 비교하기", "go": "pay",
      "how": "급여 탭에서 달을 고르고 '명세서나 입금 내역' 칸에 명세서를 올려요. 받은 금액을 확인하고 '저장하고 비교하기'를 눌러요"},
-    {"key": "quitjob", "title": "그만둔 곳 등록하기", "go": "home",
-     "how": "홈 아래의 '이곳을 그만뒀어요'를 눌러 그만둔 날을 저장해요 (그만둔 곳을 새로 등록해도 돼요)"},
-    {"key": "paid", "title": "남은 임금을 받았는지 답하기", "go": "home",
-     "how": "홈의 'AI 에이전트 종합 점검' 카드 안 '퇴직 후 임금 정산'에서 '남은 임금 받았어요'나 '아직 못 받았어요'를 눌러요"},
     {"key": "report", "title": "상담 사전 자료 만들기", "go": "docs",
      "how": "자료 탭에서 '상담 사전 자료 만들기'를 눌러요. 다 만들면 자료가 열려요"},
 ]
@@ -101,6 +97,45 @@ MODES: dict[str, dict] = {"seek": {"title": "아르바이트를 구하고 있어
                           "work": {"title": "지금 아르바이트를 하고 있어요", "missions": MISSIONS},
                           "quit": {"title": "아르바이트를 그만뒀어요", "missions": MISSIONS}}
 ALLOWED_FILES = {name for files in FILES.values() for name, _ in files} | {JOB_FILL[0]} | {n for n, _, _ in DEMO}
+
+
+# ---------- 사례가 든 계정 (시험 계정): 업로드에 그 사례 가게의 자료만 ----------
+def _case_names() -> list[str]:
+    """시험 데이터 사례의 일하는 곳 이름 (_STORES와 같은 순서: 사례 1~5)."""
+    from app.demo_db import CASES
+    return [c["job"]["name"] for c in CASES]
+
+
+def case_stores(s: Session, user: User) -> list[str]:
+    """시험 계정(test@, test2~5@)의 일하는 곳 중 시험 데이터 사례인 곳의 가게 이름 (보통 계정은 빈 목록).
+    이름만으로 정하지 않는다: 보통 계정도 예시 계약서(가상카페)로 일하는 곳을 채우면 사례 3과 이름이 같다."""
+    from app.demo_db import EMAILS
+    if user.email.lower() not in EMAILS:
+        return []
+    names = {j.name for j in _jobs(s, user)}
+    return [store for (store, _), case_name in zip(_STORES, _case_names()) if case_name in names]
+
+
+def _store_of(name: str) -> str:
+    """데모 자료 파일의 가게 이름."""
+    return next((label.split(" ")[0] for n, label, _ in DEMO if n == name), "")
+
+
+def store_files(stores: list[str]) -> dict[str, list[tuple[str, str]]]:
+    """업로드 칸마다 그 가게들의 데모 자료만 (그 칸에 맞는 자료를 앞에)."""
+    return {inp: [(n, label) for n, label in files if _store_of(n) in stores] for inp, files in demo_files().items()}
+
+
+def _store_fill(stores: list[str]) -> dict:
+    """일하는 곳 등록 화면의 예시: 그 가게의 채용공고 (공고 조건으로 칸을 채운다)."""
+    n, label, _ = next(d for d in DEMO if _store_of(d[0]) == stores[0] and "seekFile" in d[2])
+    return {"url": f"/api/guide/files/{n}", "label": label, "fill": FILLS.get(n)}
+
+
+def allowed_for(s: Session, user: User) -> set[str]:
+    """이 계정이 받을 수 있는 예시 자료 (사례가 든 계정은 그 가게 것만)."""
+    stores = case_stores(s, user)
+    return {n for files in store_files(stores).values() for n, _ in files} if stores else ALLOWED_FILES
 MARKS = ("intro", "closed", "off")  # 첫 안내 봄, 완료 창 닫음, 안내 끔
 
 router = APIRouter(prefix="/api/guide")
@@ -144,10 +179,6 @@ def mission_done(s: Session, user: User, st: GuideState, key: str) -> bool:
     if key in ("seek", "contract"):
         return s.exec(select(CheckRun).where(CheckRun.user_id == user.id, CheckRun.kind == key,
                                              CheckRun.created_at >= since)).first() is not None
-    if key == "job":
-        return bool(_jobs(s, user))
-    if key == "quitjob":
-        return any(j.status == "quit" for j in _jobs(s, user))
     if key == "punch":
         rows = s.exec(select(WorkRecord).where(WorkRecord.user_id == user.id, WorkRecord.clock_in >= since)).all()
         return any(r.clock_out is not None for r in rows)
@@ -155,15 +186,20 @@ def mission_done(s: Session, user: User, st: GuideState, key: str) -> bool:
         job_ids = [j.id for j in _jobs(s, user)]
         return bool(job_ids) and s.exec(select(Payslip).where(Payslip.job_id.in_(job_ids),
                                                               Payslip.created_at >= since)).first() is not None
-    if key == "paid":
-        return any(j.status == "quit" and j.paid_after_quit is not None for j in _jobs(s, user))
     if key == "report":
         return s.exec(select(Report).where(Report.user_id == user.id, Report.created_at >= since)).first() is not None
     return False
 
 
+def missions_of(s: Session, user: User) -> list[dict]:
+    """이 계정의 미션. 일하는 곳이 있고 모두 그만둔 곳이면 출퇴근은 뺀다 (그만둔 곳은 출근할 수 없다)."""
+    jobs = _jobs(s, user)
+    quit_only = bool(jobs) and all(j.status == "quit" for j in jobs)
+    return [m for m in MISSIONS if not (quit_only and m["key"] == "punch")]
+
+
 def _done_all(s: Session, user: User, st: GuideState) -> list[bool]:
-    return [mission_done(s, user, st, m["key"]) for m in MODES[st.mode]["missions"]]
+    return [mission_done(s, user, st, m["key"]) for m in missions_of(s, user)]
 
 
 def _files(source: dict) -> dict:
@@ -178,19 +214,21 @@ def _job_fill() -> dict:
 def state_of(s: Session, user: User) -> dict:
     """화면이 보는 체험 안내 상태. 안내가 없거나 끈 계정은 on=False (설문 주소는 메뉴에 늘 쓰므로 함께 준다)."""
     st = _state(s, user.id)
-    demo = {"demo": True, "files": _files(demo_files()), "job_fill": _job_fill()} if config.DEMO_MODE else {"demo": False}
+    stores = case_stores(s, user)  # 사례가 든 계정: 예시 자료와 데모 자료 모두 그 가게 것만
+    source = store_files(stores) if stores else demo_files()
+    fill = _store_fill(stores) if stores else _job_fill()
+    demo = {"demo": True, "files": _files(source), "job_fill": fill} if config.DEMO_MODE else {"demo": False}
     if not st or st.mode not in MODES or "off" in _marks(st):
         return {"on": False, "survey_url": config.SURVEY_URL, **demo}
-    mode = MODES[st.mode]
-    missions = [{**m, "done": d} for m, d in zip(mode["missions"], _done_all(s, user, st))]
+    missions = [{**m, "done": d} for m, d in zip(missions_of(s, user), _done_all(s, user, st))]
     marks = _marks(st)
     all_done = all(m["done"] for m in missions)
     return {"on": True, "mode": st.mode, "title": GUIDE_TITLE, "missions": missions,
             "done_count": sum(m["done"] for m in missions), "all_done": all_done,
             "intro_seen": "intro" in marks, "closed": "closed" in marks,
             # 예시 자료는 체험하는 동안만 (다 하고 완료 창을 닫으면 업로드는 바로 내 파일 고르기). 데모 모드면 늘 데모 자료 전체
-            "files": _files(FILES) if not (all_done and "closed" in marks) else {},
-            "job_fill": _job_fill(), "survey_url": config.SURVEY_URL, "demo": False, **demo}
+            "files": _files(source if stores else FILES) if not (all_done and "closed" in marks) else {},
+            "job_fill": fill, "survey_url": config.SURVEY_URL, "demo": False, **demo}
 
 
 # ---------- API ----------
@@ -217,9 +255,9 @@ def guide_mark(data: MarkIn, u: User = Depends(current_user), s: Session = Depen
 
 
 @router.get("/files/{name:path}")
-def guide_file(name: str, u: User = Depends(current_user)):
-    """예시 자료 (정해 둔 가상 자료만)."""
-    if name not in ALLOWED_FILES:
+def guide_file(name: str, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """예시 자료 (정해 둔 가상 자료만, 사례가 든 계정은 그 가게 것만)."""
+    if name not in allowed_for(s, u):
         raise HTTPException(404, "자료를 찾지 못했어요")
     path = (MATERIAL / name).resolve()
     if MATERIAL.resolve() not in path.parents or not path.is_file():

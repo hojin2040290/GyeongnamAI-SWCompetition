@@ -61,7 +61,7 @@ def register(data: RegisterIn, request: Request, s: Session = Depends(get_sessio
              mode=data.mode, created_at=now_kst())
     s.add(u)
     s.commit()
-    if config.FIRST_GUIDE:  # 처음 쓰는 사람 체험 안내 (통합 미션 8개)
+    if config.FIRST_GUIDE:  # 처음 쓰는 사람 체험 안내 (미션 5개)
         guide.start(s, u)
     request.session["uid"] = u.id
     return user_out(u)
