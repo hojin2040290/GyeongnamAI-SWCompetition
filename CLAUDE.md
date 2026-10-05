@@ -54,6 +54,7 @@ tests/               계산 함수와 판단 흐름 테스트 (tests/fake_agent.
                      device_shots.js: 아이폰·갤럭시 크기 캡처 (fetch_fonts.sh로 받은 실제 글꼴)
 docs/sources.md      출처와 AI 활용 기록 (대회 별지2 작성용)
 docs/실행가이드.md    실행 명령과 인자, .env 설정값, 자주 겪은 문제
+제출물/              대회 제출물: 개발완료보고서(A4 표지+5쪽 이내), AI Agent 기술설명서(1쪽), 발표자료(10장 이내)의 HTML과 PDF (node 제출물/build.js가 쪽 수 한도 확인)
 deploy/              GPU 서버의 vLLM 켜기와 끄기 (start_vllm.sh, stop_vllm.sh)
 bench/               모델 후보 비교 실험 (Qwen3.8-27B 선정 근거)
 ```

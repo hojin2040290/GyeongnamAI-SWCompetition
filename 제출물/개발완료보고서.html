@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>알바지킴이 개발완료보고서</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+@page{size:A4;margin:14mm 15mm 13mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:'IBM Plex Sans KR',sans-serif;color:#111827;font-size:9.3pt;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.cover{height:262mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always}
+.cover .top{font-size:11pt;color:#2f5bea;font-weight:600}
+.cover h1{font-size:40pt;margin:18mm 0 4mm;letter-spacing:-.5pt}
+.cover .sub{font-size:14pt;color:#374151;line-height:1.5}
+.cover table{width:100%;border-collapse:collapse;font-size:11pt}
+.cover td{padding:3.2mm 0;border-top:1px solid #e5e7eb}
+.cover td.k{width:34mm;color:#6b7280}
+h2{font-size:13pt;margin:0 0 2.2mm;padding-top:1mm;page-break-after:avoid}
+h2 .n{color:#2f5bea;margin-right:2mm}
+h3{font-size:10.4pt;margin:3.2mm 0 1.4mm;page-break-after:avoid}
+p{margin:0 0 1.8mm}
+section{margin-bottom:3.5mm}
+table.t{width:100%;border-collapse:collapse;margin:1mm 0 2.4mm;font-size:8.9pt;page-break-inside:avoid}
+.t th{background:#f1f2f4;text-align:left;font-weight:600;padding:1.5mm 2mm;border-bottom:1px solid #d1d5db}
+.t td{padding:1.5mm 2mm;border-bottom:1px solid #e5e7eb;vertical-align:top}
+.t td.k{font-weight:600;white-space:nowrap}
+.lead{font-size:10pt;background:#f4f5f7;border-radius:2.5mm;padding:3mm 3.6mm;margin:1.5mm 0 2.4mm}
+ol,ul{margin:0 0 2mm;padding-left:5mm}
+li{margin:.5mm 0}
+.dot{display:inline-block;width:2mm;height:2mm;border-radius:50%;margin-right:1.2mm;vertical-align:.3mm}
+.bad{background:#dc2626}.warn{background:#d97706}.ok{background:#16a34a}
+.small{font-size:8.3pt;color:#4b5563}
+.fig{margin:1.5mm 0 2.6mm;page-break-inside:avoid}
+.fig svg{width:100%;height:auto}
+.cap{font-size:8.2pt;color:#6b7280;margin-top:.8mm}
+.fill{background:#fff3c4;padding:0 1mm}
+.brk{page-break-before:always}
+code{font-family:'IBM Plex Sans KR',sans-serif;background:#f1f2f4;padding:0 .8mm;border-radius:.8mm}
+</style></head><body>
+
+<div class="cover">
+  <div>
+    <div class="top">제4회 경남AI·SW경진대회 · 고등부 · 개발완료보고서</div>
+    <h1>알바지킴이</h1>
+    <div class="sub">청소년 중심 아르바이트 근로권익 점검 및 보호 AI Agent</div>
+  </div>
+  <table>
+    <tr><td class="k">지정주제</td><td>01 사회문제 해결형 AI Agent</td></tr>
+    <tr><td class="k">팀명 / 팀원</td><td><span class="fill">[팀명]</span> / 김호진 (1인 개발, <span class="fill">[학교명]</span>)</td></tr>
+    <tr><td class="k">개발 기간</td><td>2026. 9. 29. ~ 10. 6. (8일)</td></tr>
+    <tr><td class="k">완성도</td><td>Level 3 (MVP)</td></tr>
+    <tr><td class="k">저장소</td><td>github.com/hojin2040290/GyeongnamAI-SWCompetition</td></tr>
+  </table>
+</div>
+
+<section>
+<h2><span class="n">1</span>프로젝트 현황</h2>
+<p class="lead"><b>요약.</b> 청소년 아르바이트생이 출퇴근을 누르고 계약서와 급여명세서를 올리면, AI 에이전트가 필요한 점검을 스스로 골라 법 기준과 대조합니다. 위반이 의심되면 근거 조항과 사실을 붙여 알리고, 모르는 정보는 묻고, 다시 확인할 날을 예약하며, 상담 사전 자료와 신고 후 보호까지 이어 줍니다. 숫자 계산은 코드가, 법 조항 판단과 글쓰기는 AI가 맡고, AI의 판단은 코드 검증 장치가 다시 확인합니다.</p>
+<table class="t">
+<tr><th style="width:26mm">항목</th><th>내용</th></tr>
+<tr><td class="k">작품명</td><td>알바지킴이: 청소년 중심 아르바이트 근로권익 점검 및 보호 AI Agent</td></tr>
+<tr><td class="k">부문 / 주제</td><td>고등부 / 01 사회문제 해결형 AI Agent</td></tr>
+<tr><td class="k">팀 / 역할</td><td><span class="fill">[팀명]</span> · 김호진: 기획, 설계, 개발, 시험, 문서 (1인)</td></tr>
+<tr><td class="k">실행 형태</td><td>휴대폰 웹(390px 기준) + FastAPI 서버 + GPU 서버의 vLLM(Qwen3.8-27B)</td></tr>
+</table>
+</section>
+
+<section>
+<h2><span class="n">2</span>프로젝트 개요</h2>
+<h3>문제</h3>
+<p>고용노동부에 따르면 청소년·청년근로권익센터에 2026년 6월까지 접수된 상담은 26만 건이 넘고, 상담의 60% 이상이 20대 초반 이하의 청소년과 청년입니다 <span class="small">(참가신청서 인용)</span>. 청소년은 최저임금, 주휴수당, 휴게시간, 야간근로 제한, 퇴직 후 14일 안 지급 같은 기본 권리를 잘 모릅니다. 문제가 생겨도 출퇴근 기록과 증거가 없어 임금을 증명하기 어렵고, 신고 뒤 보복이 두려워 권리를 포기하기도 합니다.</p>
+<h3>대상 사용자</h3>
+<p>만 15~18세 청소년 아르바이트생(주 사용자), 보호자, 상담을 맡는 청소년근로권익센터·고용노동부 등 상담 기관.</p>
+<h3>8일 목표와 핵심기능</h3>
+<p>사용자가 기록만 남기면 에이전트가 점검을 골라 실행하고, 근거와 함께 결과를 알리며, 필요하면 묻고 예약해 다시 확인하는 흐름을 처음부터 끝까지 동작시킵니다.</p>
+<table class="t">
+<tr><th style="width:6mm">#</th><th style="width:38mm">핵심기능</th><th>코드가 하는 일</th><th style="width:52mm">AI가 하는 일</th></tr>
+<tr><td>1</td><td class="k">근무 기록과 증거 보존</td><td>출퇴근은 서버가 받은 시각으로, 올린 자료는 원본 그대로 SHA-256과 함께 저장. 위치는 동의한 경우만</td><td>퇴근하면 그날과 그 주의 근무 점검</td></tr>
+<tr><td>2</td><td class="k">계약서·근무 점검</td><td>근무일별 만 나이로 적용 조항을 가리고 법 기준표와 대조</td><td>계약서 사진 읽기, 조항마다 정상·확인 필요·위반 의심 판단</td></tr>
+<tr><td>3</td><td class="k">급여 비교와 퇴직 정산</td><td>기본급, 주휴수당, 가산수당 계산과 받은 금액 비교, 퇴직 후 지급 기한 계산</td><td>명세서 사진 읽기, 체불 의심 판단</td></tr>
+<tr><td>4</td><td class="k">AI 에이전트 종합 점검</td><td>사업장의 모든 기록을 한 줄씩 정리, 매일 9시 자동 실행</td><td>종합 판단, 조언, 질문, 후속 확인 예약</td></tr>
+<tr><td>5</td><td class="k">상담 자료와 신고 후 보호</td><td>기록·계산·증거 목록을 문서로, 공개 게시물 검색과 화면 보존</td><td>AI 요약, 보복 금지 안내 문구, 보복성 게시물 판별</td></tr>
+</table>
+</section>
+
+<section class="brk">
+<h2><span class="n">3</span>개발 세부 내용</h2>
+<h3>Agent Architecture</h3>
+<p>AI는 점검마다 목표와 쓸 수 있는 도구 목록만 받습니다. 어떤 도구를 쓸지 AI가 고르면(vLLM tool calling) 코드가 실행해 결과를 돌려주고, AI는 결과를 보고 다음 행동을 정합니다. LangChain 같은 에이전트 프레임워크 없이 직접 만들었습니다.</p>
+<div class="fig">
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans KR" font-size="11">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6b7280"/></marker></defs>
+<rect x="4" y="60" width="118" height="78" rx="9" fill="#f4f5f7"/>
+<text x="63" y="84" text-anchor="middle" font-weight="700" font-size="12">입력</text>
+<text x="63" y="102" text-anchor="middle" fill="#4b5563">퇴근, 급여 저장,</text><text x="63" y="117" text-anchor="middle" fill="#4b5563">그만둔 날, 매일 9시,</text><text x="63" y="132" text-anchor="middle" fill="#4b5563">예약한 날, 답변</text>
+<line x1="124" y1="99" x2="162" y2="99" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="166" y="48" width="150" height="102" rx="9" fill="#111827"/>
+<text x="241" y="72" text-anchor="middle" font-weight="700" font-size="12" fill="#fff">AI (Qwen3.8-27B)</text>
+<text x="241" y="92" text-anchor="middle" fill="#d1d5db">① 계획 세우기</text><text x="241" y="108" text-anchor="middle" fill="#d1d5db">② 도구 고르기</text><text x="241" y="124" text-anchor="middle" fill="#d1d5db">③ 근거를 붙여 판단</text><text x="241" y="140" text-anchor="middle" fill="#d1d5db">④ 행동 정하기</text>
+<line x1="318" y1="82" x2="372" y2="82" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="372" y1="100" x2="320" y2="100" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="345" y="76" text-anchor="middle" font-size="9.5" fill="#6b7280">호출</text><text x="345" y="113" text-anchor="middle" font-size="9.5" fill="#6b7280">결과</text>
+<rect x="376" y="48" width="160" height="72" rx="9" fill="#eef2ff"/>
+<text x="456" y="70" text-anchor="middle" font-weight="700" font-size="12" fill="#2f5bea">도구 32개 (코드가 실행)</text>
+<text x="456" y="89" text-anchor="middle" fill="#374151">임금·만 나이·기한 계산,</text><text x="456" y="105" text-anchor="middle" fill="#374151">조문·판례, 기록 조회, 알림</text>
+<line x1="241" y1="152" x2="241" y2="176" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="166" y="180" width="150" height="44" rx="9" fill="#fff7e6"/>
+<text x="241" y="199" text-anchor="middle" font-weight="700" font-size="12" fill="#92400e">검증 장치</text><text x="241" y="215" text-anchor="middle" font-size="9.8" fill="#92400e">계산과 다름·없는 조항·근거 없음</text>
+<path d="M164 202 C 130 202, 130 130, 164 130" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#a)"/>
+<text x="112" y="172" text-anchor="middle" font-size="9.5" fill="#92400e">돌려보내</text><text x="112" y="185" text-anchor="middle" font-size="9.5" fill="#92400e">다시 판단</text>
+<line x1="318" y1="202" x2="372" y2="202" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="376" y="160" width="160" height="64" rx="9" fill="#f4f5f7"/>
+<text x="456" y="182" text-anchor="middle" font-weight="700" font-size="12">행동</text><text x="456" y="200" text-anchor="middle" fill="#4b5563">알림, 질문, 확인 예약,</text><text x="456" y="215" text-anchor="middle" fill="#4b5563">메모, 조언, 결과 저장</text>
+<rect x="562" y="10" width="154" height="60" rx="9" fill="#f4f5f7"/>
+<text x="639" y="31" text-anchor="middle" font-weight="700" font-size="11.5">법 기준표 (DB)</text><text x="639" y="48" text-anchor="middle" font-size="10" fill="#4b5563">법제처 API: 조문·고시·판례</text><text x="639" y="62" text-anchor="middle" font-size="10" fill="#4b5563">기준값: law_params.json</text>
+<rect x="562" y="80" width="154" height="56" rx="9" fill="#f4f5f7"/>
+<text x="639" y="101" text-anchor="middle" font-weight="700" font-size="11.5">사용자 기록 (SQLite)</text><text x="639" y="118" text-anchor="middle" font-size="10" fill="#4b5563">출퇴근, 계약서, 명세서,</text><text x="639" y="131" text-anchor="middle" font-size="10" fill="#4b5563">원본 파일 + SHA-256</text>
+<rect x="562" y="146" width="154" height="78" rx="9" fill="#f4f5f7"/>
+<text x="639" y="167" text-anchor="middle" font-weight="700" font-size="11.5">Memory</text><text x="639" y="184" text-anchor="middle" font-size="10" fill="#4b5563">메모, 질문과 답, 예약,</text><text x="639" y="198" text-anchor="middle" font-size="10" fill="#4b5563">점검 결과, 동작 기록</text><text x="639" y="212" text-anchor="middle" font-size="10" fill="#4b5563">→ 다음 실행에 넘김</text>
+<line x1="538" y1="84" x2="558" y2="60" stroke="#9ca3af" stroke-width="1.2"/><line x1="538" y1="90" x2="558" y2="106" stroke="#9ca3af" stroke-width="1.2"/>
+<line x1="538" y1="192" x2="558" y2="186" stroke="#9ca3af" stroke-width="1.2"/>
+</svg>
+<div class="cap">그림 1. 알바지킴이 에이전트 구조. 판단 반복은 최대 30회이고, 매 단계를 화면과 동작 기록에 남깁니다.</div>
+</div>
+
+<h3>Workflow 예: 그만둔 사업장의 퇴직 정산 점검</h3>
+<ol>
+<li><b>입력</b> 사용자가 그만둔 날을 저장하면 에이전트가 시작합니다 (같은 사용자의 다른 점검이 돌고 있으면 그 사용자의 대기줄에서 차례를 기다립니다).</li>
+<li><b>계획</b> AI가 make_plan으로 "기본 정보 → 지급 기한 → 조문 → 판단" 순서를 세웁니다.</li>
+<li><b>도구</b> AI가 settlement를 고르면 코드가 그만둔 날로부터 14일 기한과 받음 여부를 계산해 돌려주고, get_article로 법 기준표의 근로기준법 제36조를 확인합니다.</li>
+<li><b>판단과 검증</b> AI가 결과·이유·근거 조항·근거 사실을 냅니다. 코드 계산과 어긋나거나 근거가 없으면 검증 장치가 돌려보내 다시 판단하게 합니다 (최대 2회).</li>
+<li><b>행동</b> 알림을 보내고, 받았는지 모르면 묻고, 필요하다고 보면 기한 뒤로 다시 확인할 날을 예약합니다. 예약한 날이 되면 메모를 읽고 그 점검을 다시 시작합니다.</li>
+</ol>
+
+<h3>사용한 AI·Tool·Data</h3>
+<table class="t">
+<tr><th style="width:20mm">구분</th><th style="width:48mm">이름</th><th>쓰임</th></tr>
+<tr><td class="k">AI 모델</td><td>Qwen3.8-27B (vLLM 0.30.0, GPU 서버)</td><td>도구 선택, 조항 판단, 사진 읽기, 글쓰기. 후보 9개를 같은 시험(속도, 도구 호출, 판단, 사진 읽기, 한국어)으로 비교해 선정</td></tr>
+<tr><td class="k">외부 API</td><td>법제처 국가법령정보 API</td><td>근로기준법 등 법령 7개의 현행 조문, 최저임금 고시, 판례·해석례를 법 기준표로 저장. 바뀐 법령은 매일 다시 받음</td></tr>
+<tr><td class="k">외부 API</td><td>네이버 검색 API</td><td>신고 뒤 공개 게시물 검색 (로그인이 필요한 공간은 접근하지 않음)</td></tr>
+<tr><td class="k">데이터</td><td>law_params.json</td><td>최저임금액 등 법 기준값과 출처. 코드와 프롬프트에 기억으로 적지 않음</td></tr>
+<tr><td class="k">데이터</td><td>사용자 기록</td><td>출퇴근, 계약서·명세서 사진, 받은 금액, 메시지 캡처. 원본 그대로, 올린 시각과 SHA-256</td></tr>
+</table>
+
+<h3>단계별 개발 내용</h3>
+<table class="t">
+<tr><th style="width:18mm">날짜</th><th>내용</th></tr>
+<tr><td>9/29</td><td>기록·계산·화면 뼈대, 법제처 API와 법 기준표, 에이전트 구조로 전환(계획, 검증 후 재판단, 질문, 후속 예약, 메모와 조언)</td></tr>
+<tr><td>9/30</td><td>입력 검사와 프롬프트 인젝션 대비, 로그인 시도 제한, 가짜 AI(모델 없이 흐름 시험), 알림 정리, 실행 가이드</td></tr>
+<tr><td>10/1</td><td>항목별 'AI 에이전트 판단' 표시, 시험 데이터(가상 사업장 5곳), 회귀 시험, 법령 자동 갱신, 모델 비교 실험 도구</td></tr>
+<tr><td>10/2~3</td><td>모델 후보 9개 비교 → Qwen3.8-27B 연결, 100초 연결 끊김 대비(뒤에서 실행), 홈 종합 점검, AI 글 검사</td></tr>
+<tr><td>10/4~5</td><td>미니멀 화면, 처음 가입한 사용자 체험 안내와 설문, 데모 모드, 사용자별 실행 대기줄, 제출물</td></tr>
+</table>
+</section>
+
+<section>
+<h2><span class="n">4</span>구현 결과와 테스트</h2>
+<p>핵심기능 5개가 모두 동작하고, 출근부터 상담 사전 자료까지 하나의 흐름으로 이어집니다.</p>
+<ul>
+<li><b>홈:</b> 출퇴근, AI 에이전트 종합 점검(확인할 것의 개수는 코드가 세고, 종합 판단과 조언은 AI), 에이전트의 질문, 진행 상황, 알림.</li>
+<li><b>판단 표시:</b> 항목마다 코드가 정리한 사실과 'AI 에이전트 판단'(결과, 이유, 근거 조항, 근거 사실)을 나눠 보여 줍니다. '에이전트 동작 보기'는 계획, 고른 도구, 도구 결과, 검증 장치의 돌려보냄을 단계별로 남깁니다.</li>
+<li><b>상담 사전 자료:</b> 기록, 계산, AI 판단, 증거 목록(SHA-256, 한국 시간), 상담 기관을 한 문서로 만듭니다.</li>
+<li><b>모델이 없어도 동작:</b> 기록·계산·대조는 계속하고 판단만 'AI 응답 대기 중'으로 둡니다. 모델이 연결되면 10분마다 다시 맡깁니다.</li>
+</ul>
+
+<h3>대표 Test Case 5건</h3>
+<p class="small">가상 사용자 '홍길동'(2009-05-20생, 근무 기간 중 만 17세)과 가상 사업장 5곳. 서류 사진은 기록과 같은 값으로 직접 만들었습니다. '결과'는 AI 판단을 확인하는 검증 장치(코드 규칙)의 결과입니다.</p>
+<table class="t">
+<tr><th style="width:5mm">#</th><th style="width:44mm">상황</th><th>결과</th></tr>
+<tr><td>1</td><td>행복편의점: 수습 시급 9,288원(계약 6개월), 매일 22시 넘어 근무, 9/27 그만둠</td><td><span class="dot bad"></span>수습 감액 요건 미충족(최저임금법 제5조 제2항) <span class="dot bad"></span>청소년 야간근로(근로기준법 제70조) <span class="dot warn"></span>친권자 동의서 확인 필요 · 9월 급여 계산 674,309원, 받은 금액 557,280원 · 퇴직 정산 기한 10/11 (확인 필요)</td></tr>
+<tr><td>2</td><td>가상분식: 5인 이상, 23시 퇴근 1회, 하루 8시간 근무 1회, 기본급만 받음</td><td><span class="dot bad"></span>청소년 야간근로(제70조) <span class="dot warn"></span>청소년 근로시간 한도 확인 필요(제69조) · 8월 급여 계산 878,232원, 받은 금액 753,360원 → 124,872원 적게 받음</td></tr>
+<tr><td>3</td><td>가상카페: 시급 11,000원, 화·목 3시간 30분, 전액 받음</td><td><span class="dot ok"></span>최저임금 정상 · 급여 계산 308,000원 = 받은 금액 · <span class="dot warn"></span>업종이 음식점이라 청소년 고용 금지 업소 여부만 확인 필요(청소년 보호법 제29조)</td></tr>
+<tr><td>4</td><td>가상베이커리: 계약서 안 씀, 동의서 안 냄, 인원과 휴게시간 모름</td><td><span class="dot bad"></span>근로조건 서면 명시(제17조) <span class="dot bad"></span>친권자 동의서(제66조) <span class="dot warn"></span>휴게시간·가산수당은 정보가 없어 추측하지 않고 확인 필요 · 받은 금액이 없어 체불 판단 안 함</td></tr>
+<tr><td>5</td><td>가상치킨: 4시간 근무에 휴게 없음, 8/29 그만두고 못 받음, 신고 뒤 위협 메시지</td><td><span class="dot bad"></span>휴게시간(제54조) <span class="dot bad"></span>퇴직 후 지급 기한 9/12 지남(제36조) · 신고 후 보호: 보복 금지 안내 문구와 게시물 검색·보존</td></tr>
+</table>
+
+<h3>정량 측정</h3>
+<table class="t">
+<tr><th>지표</th><th style="width:36mm">목표</th><th style="width:40mm">결과</th></tr>
+<tr><td>위반 의심 누락 (정답 사례에서 잡아야 할 조항)</td><td>0건</td><td>13건 중 0건</td></tr>
+<tr><td>정상 사례 오탐 / 결과까지 정확히 맞음</td><td>0건 / 전부</td><td>9건 중 0건 / 10건 중 10건</td></tr>
+<tr><td>급여 계산 일치 (사람이 계산한 정답과)</td><td>100%</td><td>8건 중 8건 (100%)</td></tr>
+<tr><td>자동 시험 (모든 API와 예약 작업의 회귀 시험 포함)</td><td>모두 통과</td><td>pytest 213개 통과</td></tr>
+<tr><td>화면 시험 (390px 휴대폰 화면, 사람이 누르는 순서)</td><td>모두 통과</td><td>19개 파트</td></tr>
+</table>
+<p class="small">판단 측정은 AI 판단을 검증하는 코드 규칙 기준이며 <code>python -m evaluation.run</code>으로 다시 잴 수 있습니다. 실제 모델(Qwen3.8)의 판단 정확도는 아직 따로 측정하지 않았습니다.</p>
+
+<h3>데이터·안전·윤리</h3>
+<ul>
+<li><b>역할 분담:</b> 시간·금액·나이는 코드만 만들고, 법 조항은 법 기준표에서만 가져옵니다. 정보가 없으면 추측하지 않고 확인 필요로 둡니다.</li>
+<li><b>AI 글 검사:</b> 링크, 상담 기관이 아닌 전화번호, 한자, 서버 내부 이름이 있거나 글자 수를 넘으면 몰래 고치지 않고 AI에게 돌려보내 다시 쓰게 합니다.</li>
+<li><b>프롬프트 인젝션 대비:</b> 사용자가 적은 글과 외부 게시물은 데이터로만 다루고, 채팅 틀을 흉내 내는 특수 토큰은 지웁니다. AI는 다른 사용자 기록에 접근할 수 없습니다(사용자 번호는 코드가 고정).</li>
+<li><b>개인정보:</b> 위치는 동의한 경우만 저장하고, 시험 데이터는 모두 가상 정보입니다. 비밀키는 저장소에 올리지 않습니다.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">5</span>기존자산과 8일 신규개발분</h2>
+<p>저장소는 9월 27일 빈 상태(README만)로 만들었고, 앱 코드는 모두 대회 기간에 새로 만들었습니다. 커밋 262개(병합 122번), 앱 코드 약 10,200줄, 시험 코드 약 5,100줄입니다.</p>
+<table class="t">
+<tr><th style="width:26mm">구분</th><th>내용</th></tr>
+<tr><td class="k">기존자산</td><td>오픈소스 라이브러리(FastAPI, SQLModel, APScheduler, httpx, Playwright), vLLM, Qwen3.8-27B, 법제처·네이버 API, IBM Plex Sans KR 글꼴. 출처와 라이선스는 출처·AI 활용 신고서에 기록</td></tr>
+<tr><td class="k">8일 신규개발</td><td>에이전트 반복과 도구 32개, 사용자별 실행 대기줄, 법 기준 대조와 검증 장치, 근무일별 만 나이·임금·퇴직 정산 계산, 법 기준표 구축, 화면 5개 탭과 체험 안내, 증거 보존, 상담 사전 자료, 신고 후 보호, 입력 검사와 프롬프트 인젝션 대비, 가짜 AI와 시험, 모델 비교 실험 도구, GPU 서버 실행 스크립트</td></tr>
+<tr><td class="k">AI 코딩 도구</td><td>Claude Code로 코드와 시험 초안을 작성했습니다. 요구사항과 판단 규칙은 직접 정했고, 화면을 직접 눌러 확인하며 틀린 점을 지적해 고쳤습니다(예: 정해진 순서로 도구를 부르는 구조를 AI가 고르는 구조로 변경, 조언이 400자에서 잘리는 문제, 100초 연결 끊김).</td></tr>
+</table>
+</section>
+
+<section>
+<h2><span class="n">6</span>성과와 기대효과, 한계와 향후 계획</h2>
+<h3>성과</h3>
+<p>법을 몰라도 기록만 남기면 에이전트가 점검을 골라 실행하고 근거 조항과 사실을 붙여 알려 줍니다. 정답 사례에서 위반 의심 누락 0건, 급여 계산 100% 일치를 확인했습니다.</p>
+<h3>기대효과</h3>
+<table class="t">
+<tr><th style="width:24mm">대상</th><th>지금까지</th><th>알바지킴이로</th></tr>
+<tr><td class="k">청소년</td><td>체불을 늦게 알고, 증거가 흩어져 증명이 어려움</td><td>퇴근할 때마다 점검, 서버 시각 기록과 원본 증거가 쌓임</td></tr>
+<tr><td class="k">상담 기관</td><td>상담 때 기록과 금액을 처음부터 확인</td><td>기록·계산·증거 목록이 정리된 상담 사전 자료로 시작</td></tr>
+<tr><td class="k">사회</td><td>보복이 두려워 신고를 포기</td><td>보복 금지 안내와 게시물 보존으로 신고 뒤까지 지켜봄</td></tr>
+</table>
+<h3>한계</h3>
+<ul>
+<li>실제 모델로 모든 흐름을 반복 검증하지 못했습니다. 자동 시험은 가짜 AI로 했습니다.</li>
+<li>임금 계산은 기본급, 주휴수당, 5인 이상 사업장의 야간·연장 가산까지입니다. 휴일 가산, 연차수당, 퇴직금, 세금과 보험 공제는 없습니다.</li>
+<li>결과는 법적 판단이 아닌 참고용입니다. 실제 청소년 사용자 검증은 설문을 준비했지만 아직 결과가 없습니다.</li>
+</ul>
+<h3>향후 계획과 비즈니스 모델</h3>
+<ol>
+<li>실제 모델로 대표 사례를 반복 측정하고, 틀린 판단을 정답 사례에 더해 검증 장치를 보완합니다.</li>
+<li>휴일 가산, 연차수당, 퇴직금 계산을 더하고, 상담 기관과 상담 사전 자료 양식을 맞춥니다.</li>
+<li><b>보급 방식:</b> 청소년에게는 무료로 제공하고, 교육청·지자체가 학교 노동인권 교육과 청소년근로권익센터 상담에 쓰도록 보급합니다 (공공 운영 예산, GPU 서버 운영비가 주된 비용).</li>
+</ol>
+</section>
+</body></html>
