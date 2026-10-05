@@ -10,11 +10,12 @@
 서버 켜는 명령 앞에 `TEST_DATA=true`를 붙이거나 `.env`에 넣습니다 (`TEST_DATA=true .venv/bin/uvicorn app.main:app --port 8080`, Windows는 `$env:TEST_DATA="true"; .venv\Scripts\python.exe -m uvicorn app.main:app --port 8080`).
 - 시험 데이터(`data/test`)가 없으면 서버가 켜지면서 만듭니다. 평소 데이터(`data/app.db`)는 건드리지 않습니다.
 - 로그에 `저장 위치: 기록 …/data/test/app.db`와 `시험 데이터로 실행 중이에요`가 보이면 됩니다.
-- 로그인: `test@example.com`, `test2@example.com` ~ `test5@example.com` / `test1234` (홍길동, 2009-05-20생, 만 17세, 다섯 계정 내용 같음). 오른쪽 위 사업장 이름을 눌러 알바 5개를 바꿔 봅니다.
-- 처음 상태로 되돌리기 (서버를 끄고): `.venv/bin/python -m app.demo_db --force`. 알바마다 만든 내용, 코드가 계산한 금액, 기대 결과를 출력합니다.
+- 로그인: `test@example.com`, `test2@example.com` ~ `test5@example.com` / `test1234` (홍길동, 2009-05-20생, 만 17세). 기본은 방금 가입한 처음 이용자라 시작 화면과 체험 안내부터 나옵니다.
+- 처음 상태로 되돌리기 (서버를 끄고): `.venv/bin/python -m app.demo_db --force`.
+- 아래 알바 5개 사례로 정답을 확인하려면: `.venv/bin/python -m app.demo_db --scenarios --force`. 알바마다 만든 내용, 코드가 계산한 금액, 기대 결과를 출력하고, 오른쪽 위 사업장 이름을 눌러 알바 5개를 바꿔 봅니다.
 - 법 기준표는 평소 DB에서 복사합니다. 출력 첫 줄이 `법 기준표: 평소 DB에서 N건 복사`가 아니면 실행가이드 3-1절을 봅니다.
 
-### 시험 데이터에 들어 있는 것
+### 알바 5개 사례 (`--scenarios`로 만든 계정에 들어 있는 것)
 | 알바 | 시험할 경우 | 넣어 둔 기록 | 시연 때 올릴 사진 |
 |---|---|---|---|
 | 1. 행복편의점 도계점 | 이 폴더의 원본 시나리오 (1~6절) | 근무기록 CSV 12건(GPS), 9/27 그만둠 | 계약서, 근무표, 사장님 메시지, 9월 명세서(557,280원), 입금내역 |
