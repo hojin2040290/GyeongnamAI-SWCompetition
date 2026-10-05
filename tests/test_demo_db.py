@@ -73,3 +73,24 @@ def test_server_prepares_test_data_when_missing(monkeypatch):
             assert c.execute("select count(*) from guidestate").fetchone() == (5,)
     finally:
         shutil.rmtree(target, ignore_errors=True)
+
+
+def test_outside_venv_stops_before_deleting(monkeypatch, tmp_path):
+    """가상환경 밖의 파이썬(서버 라이브러리 없음)으로 --force를 하면 시험 데이터를 지우기 전에 멈춘다."""
+    import importlib.util
+    target = ROOT / "data" / "test_pytest_novenv"
+    shutil.rmtree(target, ignore_errors=True)
+    (target / "uploads").mkdir(parents=True)
+    (target / "app.db").write_bytes(b"keep")
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda m, *a: None if m == "fastapi" else real(m, *a))
+    monkeypatch.setattr(sys, "argv", ["demo_db", "--force", "--dir", "data/test_pytest_novenv"])
+    try:
+        try:
+            demo_db.main()
+            raise AssertionError("멈추지 않음")
+        except SystemExit as e:
+            assert ".venv" in str(e) and "fastapi" in str(e)
+        assert (target / "app.db").read_bytes() == b"keep"  # 지우지 않았다
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
