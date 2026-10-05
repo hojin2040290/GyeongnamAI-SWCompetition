@@ -31,6 +31,7 @@ PLAN=(
   "part15 true  3 -            -"
   "part16 true  1 FIRST_GUIDE=true -"
   "part17 true  1 DEMO_MODE=true -"
+  "part18 auto  0 LLM_ENABLED=true,LLM_MODEL=albajikimi,LLM_BASE_URL=http://127.0.0.1:9/v1,LLM_TIMEOUT=3 -"
 )
 
 run() {  # 결과는 $D/summary.txt에 남기고, 다 끝난 뒤 PLAN 순서대로 출력한다
@@ -38,13 +39,14 @@ run() {  # 결과는 $D/summary.txt에 남기고, 다 끝난 뒤 PLAN 순서대�
   local name=$1 fake=$2 delay=$3 srv=$4 env=$5 D="$OUT/$1" t0=$SECONDS; mkdir -p "$D"
   local BASE="http://localhost:$port"
   [ "$srv" = "-" ] && srv=""; [ "$env" = "-" ] && env=""
+  srv=${srv//,/ }  # 서버 설정이 여럿이면 쉼표로 이어 적는다 (PLAN 한 줄은 띄어쓰기로 칸을 나누므로)
   if [ "$name" = part10 ]; then  # AI 없이 저장된 대기 결과가 있는 DB
     DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=false LLM_FAKE_DELAY=0 \
       PYTHONPATH=. "$PY" "$UI/stale_check.py" > /dev/null 2>&1
   fi
-  # 처음 쓰는 사람 체험 안내는 part16에서만 켠다 (안내 창이 다른 파트의 클릭을 가리지 않게. 뒤에 오는 $srv가 이긴다)
-  env FIRST_GUIDE=false $srv LAW_REFRESH_ON_START=false DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=$fake LLM_ENABLED=false \
-    LLM_FAKE_DELAY=$delay "$PY" -m uvicorn app.main:app --port "$port" > "$D/server.log" 2>&1 &
+  # 처음 쓰는 사람 체험 안내는 part16에서만 켠다 (안내 창이 다른 파트의 클릭을 가리지 않게). 파트별 설정($srv)은 맨 뒤에 둬 기본값을 이긴다
+  env FIRST_GUIDE=false LAW_REFRESH_ON_START=false DB_PATH="$D/app.db" UPLOAD_DIR="$D/up" REPORT_DIR="$D/rep" LLM_FAKE=$fake LLM_ENABLED=false \
+    LLM_FAKE_DELAY=$delay $srv "$PY" -m uvicorn app.main:app --port "$port" > "$D/server.log" 2>&1 &
   local pid=$!  # 띄운 서버의 프로세스 번호 (끝나면 이 번호로만 끈다)
   for _ in $(seq 1 50); do curl -s -o /dev/null "$BASE/api/version" && break; sleep 0.2; done
   (cd "$D" && env $env BASE="$BASE" DB="$D/app.db" node "$UI/$name.js" > "$D/out.txt" 2>&1)
