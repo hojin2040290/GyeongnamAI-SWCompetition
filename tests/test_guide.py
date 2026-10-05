@@ -116,6 +116,12 @@ def test_demo_accounts_have_one_case_and_its_files_only():
     o = _join("guide_cafe@example.com", "work")  # 보통 계정이 예시 계약서(가상카페, 사례 3과 같은 이름)로 등록해도 사례 계정이 아니다
     _job(o, name=demo_db.CASES[2]["job"]["name"])
     assert len(o.get("/api/guide/state").json()["files"]["contractFile"]) == len(guide.FILES["contractFile"])
+    v = TestClient(app)  # 시연 영상용 alba@example.com: test2와 같은 사례 2(가상분식, 일하는 중), 체험 안내 켜짐, 가상분식 자료만
+    demo_db.build_account(v, "alba@example.com")
+    assert [j["name"] for j in v.get("/api/jobs").json()] == ["가상분식 시험점"]
+    st = v.get("/api/guide/state").json()
+    assert st["on"] and [m["key"] for m in st["missions"]] == ["seek", "punch", "contract", "payday", "report"]
+    assert all(f["label"].startswith("가상분식 ") for files in st["files"].values() for f in files)
     s = TestClient(app)
     demo_db.build_account(s, "guide_demo_cases@example.com", scenarios=True)
     assert s.get("/api/guide/state").json()["on"] is False and len(s.get("/api/jobs").json()) == len(demo_db.CASES)

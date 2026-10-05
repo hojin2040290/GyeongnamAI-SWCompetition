@@ -1,11 +1,11 @@
-"""시험 데이터 만들기 (가상 정보만 사용): 시험 계정 5개를 data/test 아래에 만든다.
+"""시험 데이터 만들기 (가상 정보만 사용): 시험 계정 6개를 data/test 아래에 만든다.
 
 실행: python -m app.demo_db             → data/test 를 새로 만든다
       python -m app.demo_db --force     → data/test 가 이미 있으면 지우고 다시 만든다 (시연 뒤 처음 상태로)
       python -m app.demo_db --scenarios → 계정마다 사례 하나 대신 알바 5개와 출퇴근 기록을 넣은 계정 (정답지 확인, 화면 캡처용)
 시험 데이터로 서버 실행: .env에 TEST_DATA=true (평소 데이터 data/app.db, data/uploads는 그대로)
   TEST_DATA=true로 켰는데 data/test에 시험 데이터가 없으면 서버가 켜지면서 이 명령을 실행한다 (app/main.py)
-로그인: test@example.com, test2@example.com ~ test5@example.com / 모두 test1234 (홍길동, 2009-05-20생, 만 17세)
+로그인: test@example.com, test2@example.com ~ test5@example.com, alba@example.com / 모두 test1234 (홍길동, 2009-05-20생, 만 17세)
   기본은 계정마다 사례 하나: test@example.com은 사례 1(행복편의점), test2는 사례 2(가상분식), … test5는 사례 5(가상치킨)의
   일하는 곳과 출퇴근 기록(그만둔 날, 받음 여부, 신고도 사례대로)이 들어 있고 체험 안내가 켜져 있다. 사진과 받은 금액은 없다.
   사진은 시연 때 업로드 화면에서 그 사례 가게의 자료(6장)만 골라 올린다 (app/guide.py).
@@ -35,7 +35,9 @@ ROOT = Path(__file__).resolve().parent.parent
 MATERIAL = ROOT / "테스트자료"
 CASE_DIR = MATERIAL / "알바5개"
 EMAIL, PASSWORD, NAME, BIRTH = "test@example.com", "test1234", "홍길동", "2009-05-20"
-EMAILS = [EMAIL] + [f"test{n}@example.com" for n in range(2, 6)]  # 이메일만 다른 같은 내용의 시험 계정 5개
+DEMO_EMAIL = "alba@example.com"  # 시연 영상용: test2와 같은 사례 2(가상분식, 일하는 중이라 출퇴근 가능)
+EMAILS = [EMAIL] + [f"test{n}@example.com" for n in range(2, 6)] + [DEMO_EMAIL]  # 시험 계정 6개
+CASE_OF = {DEMO_EMAIL: "2"}  # 사례 번호를 따로 정한 계정 (나머지는 순서대로 test@는 1, test2는 2, … test5는 5)
 
 
 def _day_shifts(days: list[str], start: str, end: str) -> list[tuple[str, str, str]]:
@@ -429,8 +431,9 @@ def existing_emails(db: Path) -> set[str]:
 
 
 def case_of(email: str) -> dict:
-    """계정마다 사례 하나: test@example.com은 사례 1, test2는 사례 2, … test5는 사례 5."""
-    return CASES[EMAILS.index(email) % len(CASES) if email in EMAILS else 0]
+    """계정마다 사례 하나: test@example.com은 사례 1, test2는 사례 2, … test5는 사례 5, alba@는 사례 2."""
+    key = CASE_OF.get(email) or (str(EMAILS.index(email) % len(CASES) + 1) if email in EMAILS else "1")
+    return next(c for c in CASES if c["key"] == key)
 
 
 def build_account(c, email: str, scenarios: bool = False) -> None:
