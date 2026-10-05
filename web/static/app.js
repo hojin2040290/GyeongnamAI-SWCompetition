@@ -766,8 +766,11 @@ async function loadOverview(){
   if(!$('#ovLive').innerHTML) lastTrace('#ovLive','overview');
   // 자동 점검은 사업장마다 화면을 연 동안 한 번만. 점검 시각을 열쇠에 넣으면, AI가 답을 못 내 대기로 끝날 때마다
   // 새 시각으로 열쇠가 바뀌어 끝없이 다시 돌았다 (실제 모델에서 진행 칸이 '시작'부터 계속 다시 뜸). 대기로 남은 것은 뒤의 다시 맡기기가 한다
-  if(o.need) rejudgeOnce(`overview-${jobId}`, runOverview);
+  if(o.need && !homeBusy()) rejudgeOnce(`overview-${jobId}`, runOverview);  // 다른 점검이 도는 중이면 그 점검이 끝나고 다시 부를 때 시작
 }
+// 홈에서 에이전트 진행 칸은 한 번에 하나만 (퇴직 정산과 종합 점검이 동시에 돌면 같은 단계가 두 칸에 겹쳐 보였다)
+function homeBusy(){ return quitBusy || !!document.querySelector('#v-home .live'); }  // quitBusy: 그만둔 날 저장, 받았어요/못 받았어요가 점검을 곧 시작함
+function waitOthers(){ if(!homeBusy()) return false; toast('에이전트가 다른 점검을 하는 중이에요. 끝난 뒤에 다시 눌러 주세요'); return true; }
 async function runOverview(){
   const jobId=state.current;
   ovStatus('pending', JUDGING);
@@ -778,8 +781,9 @@ async function runOverview(){
   }catch(e){ if(jobId!==state.current) return; toast(e.message); }
   // 다시 불러오기: 그사이 로그아웃했거나 화면을 떠났으면 조용히 그만둔다 (자동 점검은 잡아 주는 곳이 없어 오류로 샌다)
   try{ await loadOverview(); await loadAsk(); await loadCase(); await loadAlerts(); }catch(e){ if(e.status!==401) toast(e.message); }
+  if(jobId===state.current) $('#ovAiWrap').open=true;  // 끝나면 판단 결과를 펼쳐 보여 준다
 }
-$('#ovRun').onclick=runOverview;
+$('#ovRun').onclick=()=>{ if(!waitOthers()) runOverview(); };
 // 종합 점검 머리줄: 결과 색의 점과 결과 이름 (판단 중이면 도는 표시)
 function ovStatus(status, text){ $('#ovHead').className='ov-head '+status; $('#ovTag').className='tag '+status; $('#ovTag').textContent=text; }
 // 한 줄 결론과 남은 항목: 코드가 항목의 결과를 센다 (AI 판단 글은 아래 'AI 에이전트 판단 보기'에)
@@ -986,7 +990,7 @@ async function renderQuit(){
   if(!st){ $('#quitTag').className='tag warn'; $('#quitTag').textContent='확인 필요'; $('#quitText').textContent='그만둔 날을 입력하면 정산 기한을 계산해 드려요.'; return; }
   const f=s=>{const d=new Date(s+'T00:00:00'); return `${d.getMonth()+1}월 ${d.getDate()}일`;};
   $('#quitTag').className='tag '+st.status; $('#quitTag').textContent=LABEL[st.status]; $('#quitAi').innerHTML=aiJudgeHTML(st);
-  if(st.status==='pending' && ai && !quitBusy && !$('#quitLive .live') && !$('#quitFormLive .live')) rejudgeOnce(`quit-${j.id}-${st.due}-${j.paid_after_quit}`, quitCheck);
+  if(st.status==='pending' && ai && !quitBusy && !homeBusy()) rejudgeOnce(`quit-${j.id}-${st.due}-${j.paid_after_quit}`, quitCheck);
   $('#quitText').textContent = j.paid_after_quit===true ? `${f(st.quit_date)}에 그만뒀고, 남은 임금을 받았다고 기록했어요.`
     : st.left>=0 ? `${f(st.quit_date)}에 그만뒀어요. 남은 임금 지급 기한은 ${f(st.due)}로, ${st.left}일 남았어요.`
     : `${f(st.quit_date)}에 그만뒀고 지급 기한 ${f(st.due)}이 지났어요. 아직 못 받았다면 상담을 준비하세요.`;
@@ -999,11 +1003,11 @@ function openQuitForm(){ const j=curJob(); $('#quitDateMain').value=j.quit_date|
   reveal($('#quitForm')); }  // '그만둔 날 고치기'는 위 종합 점검 카드에 있어 아래 입력 칸까지 옮긴다
 function closeQuitForm(){ $('#quitForm').classList.add('hidden'); $('#quitOpen').classList.toggle('hidden',curJob().status==='quit'); refreshNav(); }
 $('#quitOpen').onclick=openQuitForm; $('#quitEdit').onclick=openQuitForm; $('#quitCancel').onclick=goBack;
-$('#quitSave').onclick=async()=>{ const v=$('#quitDateMain').value; if(!v){ toast('그만둔 날을 골라 주세요'); return; }
+$('#quitSave').onclick=async()=>{ if(waitOthers()) return; const v=$('#quitDateMain').value; if(!v){ toast('그만둔 날을 골라 주세요'); return; }
   const st=curJob().start_date; if(st && v<st){ toast('그만둔 날은 근무 시작일보다 앞일 수 없어요'); return; }
   quitBusy=true;
   try{ await api('POST',`/api/jobs/${state.current}/quit`,{quit_date:v, check:false}); await loadJobs(); closeQuitForm(); await loadHome();
-    toast('그만둔 날을 저장했어요. 이어서 퇴직 정산을 점검해요'); await quitCheck('#quitFormLive'); }catch(e){ toast(e.message); }finally{ quitBusy=false; } };
+    toast('그만둔 날을 저장했어요. 이어서 퇴직 정산을 점검해요'); await quitCheck('#quitFormLive'); }catch(e){ toast(e.message); }finally{ quitBusy=false; afterQuit(); } };
 // box: 누른 버튼 바로 아래 진행 칸 (그만둔 날 저장은 아래 입력 칸, 받았어요/못 받았어요는 종합 점검 카드 안)
 async function quitCheck(box='#quitLive'){
   $('#quitTag').className='tag pending'; $('#quitTag').textContent=JUDGING;
@@ -1012,9 +1016,11 @@ async function quitCheck(box='#quitLive'){
   $(box).innerHTML='';  // 동작 보기는 종합 점검 카드의 것 하나만 (에이전트 동작 기록 탭에는 실행마다 남는다)
   await loadJobs(); await renderQuit(); await loadAsk(); await loadOverview();  // 퇴직 정산이 바뀌었으니 종합 점검도 새로
 }
-async function setPaid(p){ quitBusy=true; try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p, check:false}); await loadJobs(); await renderQuit();
+async function setPaid(p){ if(waitOthers()) return; quitBusy=true; try{ await api('POST',`/api/jobs/${state.current}/paid`,{paid:p, check:false}); await loadJobs(); await renderQuit();
     await loadAsk();  // 받았는지 묻던 질문은 이 버튼으로 답한 것이라 서버가 닫는다
-    toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); await quitCheck(); }catch(e){ toast(e.message); }finally{ quitBusy=false; } }
+    toast(p?'받았다고 기록했어요':'못 받았다고 기록했어요'); await quitCheck(); }catch(e){ toast(e.message); }finally{ quitBusy=false; afterQuit(); } }
+// 퇴직 정산 점검이 끝난 뒤: 기다리던 종합 점검(자동)을 이어서 시작할 수 있게 다시 부른다
+function afterQuit(){ if(state.inApp && currentTab==='home') loadOverview().catch(()=>{}); }
 $('#paidYes').onclick=()=>setPaid(true); $('#paidNo').onclick=()=>setPaid(false);
 $('#quitReport').onclick=()=>showTab('docs');
 

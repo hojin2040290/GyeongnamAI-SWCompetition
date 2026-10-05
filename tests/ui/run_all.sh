@@ -32,6 +32,7 @@ PLAN=(
   "part16 true  1 FIRST_GUIDE=true -"
   "part17 true  1 DEMO_MODE=true -"
   "part18 auto  0 LLM_ENABLED=true,LLM_MODEL=albajikimi,LLM_BASE_URL=http://127.0.0.1:9/v1,LLM_TIMEOUT=3 -"
+  "part19 true  2 -            -"
 )
 
 run() {  # 결과는 $D/summary.txt에 남기고, 다 끝난 뒤 PLAN 순서대로 출력한다
