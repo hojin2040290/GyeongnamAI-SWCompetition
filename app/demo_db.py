@@ -9,6 +9,7 @@
   이미 있는 시험 데이터에 없는 계정만 더하기: python -m app.demo_db --add (있던 계정과 기록은 그대로)
 
 알바마다 서류 사진(계약서, 급여명세서, 입금내역, 사장님 메시지)은 그 알바의 기록과 같은 값으로 그린 것이다.
+  사진과 명세서의 받은 금액은 시험 데이터에 미리 올리지 않는다. 시연 때 업로드 화면에서 데모 자료를 골라 올린다 (DEMO_MODE).
   1번 알바는 테스트자료 폴더의 원본 사진과 근무기록 CSV, 2~5번은 테스트자료/알바5개 의 사진.
   데모 자료(extras: 채용공고, 근무표, 나머지 서류)는 그림만 만들고 시험 데이터에는 올리지 않는다 (업로드 선택 목록용, app/guide.py).
   사진 다시 그리기 (기록이나 계산이 바뀌었을 때, 개발자용):
@@ -45,7 +46,7 @@ def _csv_shifts() -> list[tuple]:
              (float(r["gps_출근_위도"]), float(r["gps_출근_경도"]))) for r in rows]
 
 
-# 알바 5개. job은 화면의 '일하는 곳' 입력값 그대로, docs는 (파일, 올릴 곳, 메모)
+# 알바 5개. job은 화면의 '일하는 곳' 입력값 그대로, docs는 (파일, 올릴 곳, 메모): 시연 때 올릴 사진 (미리 올리지 않음)
 CASES = [
     {"key": "1", "title": "테스트자료 원본: 수습 감액(계약 6개월), 휴게시간 미기재, 청소년 야간, 5인 미만, 그만둠",
      "job": {"name": "행복편의점 도계점", "industry": "편의점", "work_desc": "편의점 계산, 상품 진열", "wage": 9288,
@@ -404,15 +405,8 @@ def build_case(c, uid: int, case: dict) -> int:
             a, b, why = case["void"]
             s.add(WorkRecord(user_id=uid, job_id=job_id, clock_in=_dt(a), clock_out=_dt(b), void_at=now_kst(), void_reason=why))
         s.commit()
-    base = MATERIAL if case["key"] == "1" else CASE_DIR
-    paid = paid_of(case)
-    for name, kind, note in case["docs"]:
-        if kind == "contract":
-            _upload(c, f"/api/jobs/{job_id}/contract", base / name, {"read": "false"})  # 사진 읽기는 화면에서 AI로
-        elif kind == "payslip":
-            _upload(c, f"/api/jobs/{job_id}/payslip", base / name, {"month": case["month"], "amount": str(paid), "check": "false"})
-        else:
-            _upload(c, f"/api/jobs/{job_id}/evidence", base / name, {"kind": kind, "note": note})
+    # 서류 사진(docs)과 명세서의 받은 금액은 미리 올리지 않는다: 시연 때 업로드 화면에서 데모 자료를 골라 사진과 함께 올린다
+    # (DEMO_MODE=true면 업로드 칸마다 데모 자료 30장이 나온다, app/guide.py)
     if case.get("quit"):
         _ok(c.post(f"/api/jobs/{job_id}/quit", json={"quit_date": case["quit"], "check": False}), "그만둔 날 저장")
     if case.get("paid_after_quit") is not None:
@@ -451,8 +445,10 @@ def show(case: dict) -> None:
     print(f"  근무 기록 {len(days)}건: {', '.join(days)}" + (f" (+ 실수 표시 {case['void'][0][5:10]})" if case.get("void") else ""))
     print(f"  {case['month']} 계산: 근무 {r.work_min // 60}시간 {r.work_min % 60}분, 기본급 {r.base:,}원, "
           f"주휴수당 {r.weekly_holiday:,}원, 가산수당 {r.premium:,}원, 합계 {r.total:,}원")
-    print(f"  받은 금액: {'기록 없음' if paid is None else f'{paid:,}원 (차이 {r.total - paid:,}원)'}")
-    print(f"  올린 사진: {', '.join(n for n, _, _ in case['docs'])}")
+    print(f"  받은 금액: 처음에는 없음 (시연 때 명세서 사진과 함께 입력"
+          + (f", 사진 속 받은 금액 {paid:,}원, 계산과 차이 {r.total - paid:,}원)" if paid is not None
+             else ", 그만두고 받지 못한 사례)" if case.get("quit") else ", 받은 금액이 아직 없는 사례)"))
+    print(f"  시연 때 올릴 사진: {', '.join(n for n, _, _ in case['docs'])}")
     for x in case["expect"]:
         print(f"  기대: {x}")
 

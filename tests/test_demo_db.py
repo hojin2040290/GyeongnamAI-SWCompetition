@@ -23,7 +23,7 @@ def test_demo_db_builds_in_test_folder_only():
         out = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", "data/test_pytest"], cwd=ROOT,
                              capture_output=True, text=True, timeout=180)
         assert out.returncode == 0, out.stderr[-800:]
-        assert (target / "app.db").exists() and len(list((target / "uploads").rglob("*.png"))) == 14 * 5  # 계정 5개가 각자 원본 사진을 가진다
+        assert (target / "app.db").exists() and not list((target / "uploads").rglob("*.png"))  # 사진은 미리 올리지 않음 (시연 때 업로드)
         for name in ("행복편의점 도계점", "가상분식 시험점", "가상카페 시험점", "가상베이커리 시험점", "가상치킨 시험점"):
             assert name in out.stdout
         again = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", "data/test_pytest"], cwd=ROOT,
