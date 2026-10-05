@@ -9,18 +9,18 @@ const { B, ck, browser, page, api, summary } = require('./lib');
   let most=0, midShown=0, seen=0;
   for(let i=0;i<60;i++){ await p.waitForTimeout(500);
     const s=await p.evaluate(()=>({n:document.querySelectorAll('#v-home .live').length,
-      mid:!!document.querySelector('#ovPanel .live') && getComputedStyle(document.getElementById('ovAiWrap')).display!=='none'}));
+      mid:!!document.querySelector('#ovPanel .live') && !!document.querySelector('#ovPanel .trace-judge')}));
     most=Math.max(most,s.n); if(s.mid) midShown++; if(s.n) seen++; }
   ck('[홈] 진행 칸은 한 번에 하나', most===1, `최대 ${most}개`);
-  ck('[홈] 진행 중에는 가운데 판단 칸을 숨김', seen>0 && midShown===0, `진행 ${seen}번 중 보임 ${midShown}번`);
+  ck('[홈] 진행 중에는 판단 칸이 보이지 않음', seen>0 && midShown===0, `진행 ${seen}번 중 보임 ${midShown}번`);
   await p.waitForFunction(()=>!document.querySelector('#v-home .live'),null,{timeout:120000}).catch(()=>{});
   await p.waitForTimeout(800);
-  ck('[홈] 끝나면 가운데 판단 칸이 펼쳐져 결과가 보임', await p.evaluate(()=>document.getElementById('ovAiWrap').open) && (await p.textContent('#ovAi')).includes('테스트 답변'));
+  ck('[홈] 판단만 따로 보는 칸(AI 에이전트 판단 보기)이 없음', !(await p.textContent('#ovPanel')).includes('AI 에이전트 판단 보기') && !(await p.isVisible('#ovAi')));
   ck('[홈] 에이전트 동작 보기 끝에 AI 에이전트 판단 (결과, 이유)', await p.evaluate(()=>{ const d=document.querySelector('#ovLive details.trace');
     const last=d && d.lastElementChild; return !!last && last.classList.contains('trace-judge') && last.textContent.includes('테스트 답변'); }));
   await p.reload(); await p.waitForSelector('#app:not(.hidden)'); await p.waitForTimeout(2500);
   ck('[홈] 다시 열어도 동작 보기 끝에 판단이 붙음', await p.evaluate(()=>!!document.querySelector('#ovLive details.trace > .trace-judge .ai-judge')));
-  ck('[홈] 판단 칸은 가운데 하나만 펼쳐짐 (퇴직 정산 판단은 눌러서 봄)', !(await p.evaluate(()=>document.querySelector('#quitPanel .quit-ai').open)));
+  ck('[홈] 퇴직 정산 판단은 눌러서 봄', !(await p.evaluate(()=>document.querySelector('#quitPanel .quit-ai').open)));
   const ev = await p.evaluate(async()=>{ const j=(await (await fetch('/api/jobs')).json())[0];
     const rs=await (await fetch(`/api/jobs/${j.id}/agent/runs?limit=20`)).json(); return rs.map(r=>r.event); });
   ck('[홈] 퇴직 정산과 종합 점검이 차례로 다 돎', ev.includes('quit_check') && ev.includes('overview'), ev.join(','));

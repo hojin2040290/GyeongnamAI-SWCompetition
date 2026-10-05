@@ -6,6 +6,7 @@ cloudflared(Cloudflare)는 응답이 100초 안에 시작되지 않으면 연결
 로그인 확인, 입력 검사, 오류 처리 등 기존 API 처리는 그대로 거친다. 작업은 로그인한 본인만 받을 수 있다.
 """
 import asyncio
+import contextvars
 import json
 import logging
 import time
@@ -15,6 +16,7 @@ HEADER = b"x-long-task"
 POLL_PREFIX = "/api/tasks/"
 KEEP_SEC = 1800  # 끝난 뒤 이 시간 안에 받아 가지 않은 결과는 지운다
 TASKS: dict[str, dict] = {}
+CURRENT: contextvars.ContextVar[str | None] = contextvars.ContextVar("long_task", default=None)  # 지금 뒤에서 실행 중인 작업 번호 (에이전트 대기줄 표에 붙인다)
 log = logging.getLogger("uvicorn.error")
 
 
@@ -62,12 +64,13 @@ class LongTaskMiddleware:
         tid = uuid.uuid4().hex
         task = {"owner": _owner(scope), "done": False, "status": 500, "headers": [], "body": b"", "at": time.time()}
         inner = dict(scope, headers=[(k, v) for k, v in scope["headers"] if k != HEADER])
-        task["job"] = asyncio.create_task(self.run(inner, body, task))  # 참조를 남겨 도중에 사라지지 않게
+        task["job"] = asyncio.create_task(self.run(inner, body, task, tid))  # 참조를 남겨 도중에 사라지지 않게
         TASKS[tid] = task
         await _json(send, 202, {"task_id": tid, "pending": True})
 
-    async def run(self, scope, body: bytes, task: dict) -> None:
+    async def run(self, scope, body: bytes, task: dict, tid: str = "") -> None:
         given = False
+        CURRENT.set(tid or None)  # 이 작업 안에서 선 대기줄 표에 작업 번호가 붙어, 화면이 자기 실행의 번호를 찾는다
 
         async def receive():
             nonlocal given
