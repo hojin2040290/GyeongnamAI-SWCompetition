@@ -1,5 +1,6 @@
 """시험 데이터 만들기(app/demo_db.py): 지금 코드에서 동작하고, 평소 데이터는 건드리지 않으며, 사진 속 금액이 계산과 같은지."""
 import shutil
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -24,8 +25,11 @@ def test_demo_db_builds_in_test_folder_only():
                              capture_output=True, text=True, timeout=180)
         assert out.returncode == 0, out.stderr[-800:]
         assert (target / "app.db").exists() and not list((target / "uploads").rglob("*.png"))  # 사진은 미리 올리지 않음 (시연 때 업로드)
-        for name in ("행복편의점 도계점", "가상분식 시험점", "가상카페 시험점", "가상베이커리 시험점", "가상치킨 시험점"):
-            assert name in out.stdout
+        assert "처음 이용자" in out.stdout
+        with sqlite3.connect(target / "app.db") as db:  # 방금 가입한 상태: 계정 5개, 일하는 곳과 기록 없음, 체험 안내 시작
+            assert db.execute("select count(*) from user").fetchone()[0] == 5
+            assert db.execute("select count(*) from job").fetchone()[0] == 0
+            assert db.execute("select count(*) from guidestate").fetchone()[0] == 5
         again = subprocess.run([sys.executable, "-m", "app.demo_db", "--dir", "data/test_pytest"], cwd=ROOT,
                                capture_output=True, text=True)
         assert again.returncode != 0 and "--force" in again.stderr  # 있는 데이터를 덮어쓰지 않는다
@@ -53,21 +57,19 @@ def test_server_prepares_test_data_when_missing(monkeypatch):
         db = target / "app.db"
         assert [r[0] for r in sqlite3.connect(db).execute("select email from user order by id")] == [
             "test@example.com", "test2@example.com", "test3@example.com", "test4@example.com", "test5@example.com"]
-        with sqlite3.connect(db) as c:  # 계정마다 알바 5개가 같은 내용으로
-            per = c.execute("select u.email, count(j.id), group_concat(j.name, '|') from user u join job j on j.user_id=u.id "
-                            "group by u.id").fetchall()
-        assert len(per) == 5 and all(n == 5 for _, n, _ in per) and len({names for _, _, names in per}) == 1
-        with sqlite3.connect(db) as c:
-            c.execute("update job set name='바꾼 이름' where id=2")
-        main.prepare_test_data(log)  # 이미 있으면 다시 만들지 않는다
-        assert sqlite3.connect(db).execute("select name from job where id=2").fetchone() == ("바꾼 이름",)
+        with sqlite3.connect(db) as c:  # 계정 5개 모두 방금 가입한 처음 이용자 (일하는 곳 없음, 체험 안내 시작)
+            assert c.execute("select count(*) from job").fetchone() == (0,)
+            assert c.execute("select count(*) from guidestate").fetchone() == (5,)
+            c.execute("update guidestate set marks='[\"intro\"]' where user_id=(select id from user where email='test2@example.com')")
+        main.prepare_test_data(log)  # 이미 있으면 다시 만들지 않는다 (시연하며 진행한 상태는 그대로)
+        assert sqlite3.connect(db).execute("select count(*) from guidestate where marks like '%intro%'").fetchone() == (1,)
         with sqlite3.connect(db) as c:  # 예전 코드로 만든 시험 DB (계정이 test@example.com 하나뿐)
+            c.execute("delete from guidestate where user_id in (select id from user where email!='test@example.com')")
             c.execute("delete from job where user_id in (select id from user where email!='test@example.com')")
             c.execute("delete from user where email!='test@example.com'")
         main.prepare_test_data(log)  # 없는 시험 계정만 더한다
         with sqlite3.connect(db) as c:
             assert c.execute("select count(*) from user").fetchone() == (5,)
-            assert c.execute("select count(*) from job where user_id=(select id from user where email='test4@example.com')").fetchone() == (5,)
-            assert c.execute("select name from job where id=2").fetchone() == ("바꾼 이름",)  # 쓰던 계정의 기록은 그대로
+            assert c.execute("select count(*) from guidestate").fetchone() == (5,)
     finally:
         shutil.rmtree(target, ignore_errors=True)

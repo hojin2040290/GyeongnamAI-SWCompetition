@@ -86,13 +86,19 @@ def test_example_files_only_listed_ones():
     assert set(guide.FILLS) <= guide.ALLOWED_FILES and all((guide.MATERIAL / n).is_file() for n in guide.ALLOWED_FILES)
 
 
-def test_demo_accounts_have_no_guide():
-    """시연 영상용 시험 계정(app/demo_db.py)에는 체험 안내가 뜨지 않는다."""
+def test_demo_accounts_start_as_new_users():
+    """시험 계정(app/demo_db.py)은 방금 가입한 처음 이용자: 일하는 곳이 없고 체험 안내가 처음부터 켜져 있다.
+    --scenarios 계정(알바 5개와 기록)에는 체험 안내가 없다."""
     from app import demo_db
     init_db()
     c = TestClient(app)
     demo_db.build_account(c, "guide_demo@example.com")
-    assert c.get("/api/guide/state").json()["on"] is False
+    st = c.get("/api/guide/state").json()
+    assert st["on"] is True and not st["intro_seen"] and not any(m["done"] for m in st["missions"])
+    assert c.get("/api/jobs").json() == []
+    s = TestClient(app)
+    demo_db.build_account(s, "guide_demo_cases@example.com", scenarios=True)
+    assert s.get("/api/guide/state").json()["on"] is False and len(s.get("/api/jobs").json()) == len(demo_db.CASES)
 
 
 def test_remove_old_beta_accounts_only():

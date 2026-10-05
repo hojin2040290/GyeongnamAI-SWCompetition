@@ -1301,6 +1301,8 @@ function guideRender(){
   guideJobFillSync();  // 가입 직후에는 등록 화면이 먼저 열리고 안내 상태가 뒤에 온다
   // 안내가 없거나, 다 하고 완료 창을 닫았으면 버튼을 숨긴다 (설문은 메뉴에)
   if(!st?.on || (st.all_done && st.closed)){ chip.classList.add('hidden'); if(!st?.on) ['#guideIntro','#guideSheet','#guideDone'].forEach(guideClose); return; }
+  // 시작 화면에서 상황을 고르는 동안은 띄우지 않는다: 고른 상황의 미션으로 안내한다 (상황을 고르기 전에 가입된 시험 계정, 저장 뒤 guideRefresh)
+  if(visible('#ob0') || visible('#ob1')){ chip.classList.add('hidden'); guideClose('#guideIntro'); return; }
   chip.classList.remove('hidden'); chip.classList.toggle('done', st.all_done);
   chip.textContent = st.all_done ? '체험 완료 · 설문하기' : `체험 미션 ${st.done_count}/${st.missions.length}`;
   $('#guideSheetSub').textContent=`${st.title}: 하나씩 해 보면 핵심 기능을 다 써 볼 수 있어요.`;

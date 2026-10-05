@@ -2,6 +2,7 @@
 // 진짜 사파리, 삼성 인터넷은 아니고 Chromium에 화면 크기, 해상도, 사용자 에이전트, 한국어를 맞춘 것이다 (삼성 인터넷은 Chromium 기반이라 거의 같다).
 // 준비: bash tests/ui/fetch_fonts.sh (한 번)
 // 사용: BASE=http://localhost:8080 EMAIL=test@example.com JOB=가상분식 OUT=/tmp/shots node tests/ui/device_shots.js [iphone|galaxy]
+//   (알바가 있는 화면을 찍으려면 시험 데이터를 python -m app.demo_db --scenarios --force 로 만든다)
 //   홈(위, 전체), 급여, 계약서, 자료, 보호 탭과 로그인 전 첫 화면을 찍는다. 화면 스타일을 바꾸면 찍어서 직접 열어 본다.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');

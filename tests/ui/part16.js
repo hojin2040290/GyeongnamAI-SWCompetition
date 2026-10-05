@@ -78,5 +78,17 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   const ch2 = q.waitForEvent('filechooser', {timeout:3000}).then(()=>true).catch(()=>false);
   await q.click('#seekUpload');
   ck('[안내] 끈 뒤 업로드는 바로 내 파일 고르기', await ch2 && !(await shown(q,'#guideFiles')));
+  // 상황을 고르기 전에 가입된 계정 (시험 계정, app/demo_db.py): 시작 화면에서는 안내를 띄우지 않고, 고른 상황의 미션으로 안내한다
+  const r = await page(b);
+  await r.goto(B+'/'); await r.waitForTimeout(500);
+  await r.evaluate(()=>fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:'guide_nomode@example.com',password:'test1234',birth_date:'2009-05-20'})}));
+  await r.goto(B+'/'); await r.waitForTimeout(1500);
+  ck('[안내] 상황 고르기 전 계정: 시작 화면에 안내 창과 미션 버튼 없음', (await vis(r))==='ob0' && !(await shown(r,'#guideIntro')) && (await chip(r))==='숨김', await vis(r));
+  await r.click('.mode[data-mode="quit"]'); await r.click('#modeNext'); await r.waitForTimeout(600);
+  ck('[안내] 기본 정보 화면에도 안내 창 없음', (await vis(r))==='ob1' && !(await shown(r,'#guideIntro')), await vis(r));
+  await r.click('#regBtn');
+  ck('[안내] 고른 상황(그만뒀어요)의 미션으로 첫 안내', await until(r, ()=>!document.getElementById('guideIntro').classList.contains('hidden'))
+     && (await r.textContent('#guideIntroList')).includes('그만둔 곳 등록'), await r.textContent('#guideIntroList'));
   await b.close(); summary();
 })().catch(e=>{ console.log('중단', e.message); summary(); process.exit(1); });
