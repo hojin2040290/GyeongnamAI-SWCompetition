@@ -610,6 +610,7 @@ async function agent(box, run){
   if(follow) reveal(mine);  // 누른 버튼 아래 진행 칸이 가려져 있으면 보이는 곳까지 옮긴다 (끝날 때까지 이 화면에 머문다)
   try{ last=(await api('GET','/api/agent/last')).id; }catch(e){}
   (async()=>{ while(!stop){
+    try{ queueHead(mine, await api('GET','/api/agent/queue')); }catch(e){}
     try{ const rows=await api('GET',`/api/agent/live?after=${last}`);
       const steps=ours()?mine.querySelector('.live-steps'):null;
       if(rows.length && !stop && steps){ last=rows[rows.length-1].id;
@@ -620,6 +621,12 @@ async function agent(box, run){
     await new Promise(r=>setTimeout(r,700)); } })();
   longDepth++;
   try{ return await run(); }catch(e){ if(ours()) el.innerHTML=''; throw e; }finally{ stop=true; longDepth--; HAND.forEach(t=>removeEventListener(t,hands)); }
+}
+// 대기줄(서버 전체에 하나, 1번이 실행 중): 내 실행이 1번이 아니면 진행 칸 머리에 순서를 보여 준다
+function queueHead(box, q){
+  const head=box.querySelector('.live-head'); if(!head) return;
+  const pos=Math.min(...(q.mine||[]).map(x=>x.pos));  // 내 실행이 여럿이면 가장 앞의 것
+  head.textContent=isFinite(pos)&&pos>1?`대기 중이에요 · 대기줄 ${pos}번째 (앞에 ${pos-1}개)`:'에이전트가 일하는 중이에요';
 }
 // 단계 한 줄: AI가 고른 도구는 판단 글과 따로 태그로 (예전 기록의 '도구 선택: a, b' 글도 서버가 태그로 바꿔 준다)
 function stepHTML(t){
@@ -763,10 +770,17 @@ async function loadOverview(){
   $('#ovAiWrap').open=!v || v.status==='pending';  // 판단이 없거나 기다리는 중이면 펼쳐 둔다 (대기 표시가 가려지지 않게)
   $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
   $('#ovNote').textContent=v?`${fmtDT(v.at)} 점검${o.changed?' · 그 뒤로 기록이 바뀌었어요. 다시 점검해 보세요':''}`:'';
-  if(!$('#ovLive').innerHTML) lastTrace('#ovLive','overview');
+  if(!$('#ovLive').innerHTML) lastTrace('#ovLive','overview').then(ovTraceJudge); else ovTraceJudge();
   // 자동 점검은 사업장마다 화면을 연 동안 한 번만. 점검 시각을 열쇠에 넣으면, AI가 답을 못 내 대기로 끝날 때마다
   // 새 시각으로 열쇠가 바뀌어 끝없이 다시 돌았다 (실제 모델에서 진행 칸이 '시작'부터 계속 다시 뜸). 대기로 남은 것은 뒤의 다시 맡기기가 한다
   if(o.need && !homeBusy()) rejudgeOnce(`overview-${jobId}`, runOverview);  // 다른 점검이 도는 중이면 그 점검이 끝나고 다시 부를 때 시작
+}
+// 종합 점검의 '에이전트 동작 보기' 끝에 'AI 에이전트 판단 보기'와 같은 판단(결과, 이유, 근거 조항, 근거 사실)을 붙인다
+function ovTraceJudge(){
+  const d=$('#ovLive details.trace'); if(!d) return;
+  d.querySelector('.trace-judge')?.remove();
+  const judge=$('#ovAi').innerHTML.trim(); if(!judge) return;
+  d.insertAdjacentHTML('beforeend',`<div class="trace-judge">${judge}</div>`);
 }
 // 홈에서 에이전트 진행 칸은 한 번에 하나만 (퇴직 정산과 종합 점검이 동시에 돌면 같은 단계가 두 칸에 겹쳐 보였다)
 function homeBusy(){ return quitBusy || !!document.querySelector('#v-home .live'); }  // quitBusy: 그만둔 날 저장, 받았어요/못 받았어요가 점검을 곧 시작함

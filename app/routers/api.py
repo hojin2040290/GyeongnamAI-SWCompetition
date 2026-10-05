@@ -11,6 +11,7 @@ from sqlmodel import Session, func, select
 
 from app import config, guard, guide, input_rules, login_guard, notices, storage
 from app.agent import core
+from app.agent.queue import QUEUE
 from app.agent.tools import keywords_of, make_tools, saved_settlement, usable_pay
 from app.auth import check_password, current_user, hash_password
 from app.calc import bizno
@@ -1094,6 +1095,14 @@ def agent_live(after: int = 0, u: User = Depends(current_user), s: Session = Dep
     rows = s.exec(select(AgentLog).where(AgentLog.user_id == u.id, AgentLog.id > after)
                   .order_by(AgentLog.id).limit(50)).all()
     return [{"id": r.id, "event": r.event, "step": r.step, "detail": _detail(r), "tags": _tags(r)} for r in rows]
+
+
+@router.get("/agent/queue")
+def agent_queue(u: User = Depends(current_user)):
+    """에이전트 대기줄 (서버 전체에 하나, 1번이 실행 중). 내 실행의 번호와 줄 전체 길이만 알려 준다 (다른 사람의 일은 감춤)."""
+    line = QUEUE.snapshot()
+    return {"size": len(line), "slots": QUEUE.slots,
+            "mine": [{"pos": x["pos"], "label": x["label"]} for x in line if x["user_id"] == u.id]}
 
 
 # ---------- 입력 칸 규칙 (화면이 입력하는 동안 거르고 안내하는 데 쓴다) ----------
