@@ -147,7 +147,7 @@ def test_demo_mode_files_for_every_account(monkeypatch):
 
 def test_demo_files_cover_every_store():
     """데모 자료: 시험 데이터의 알바 5곳마다 채용공고, 계약서, 근무표, 명세서, 입금 내역, 메시지가 있고 파일이 실제로 있다.
-    채용공고마다 그 가게 조건으로 칸을 채운다. 사진 속 금액은 지금 계산과 같다."""
+    채용공고마다 그 가게 조건이 있다('이 예시로 채우기'용). 사진 속 금액은 지금 계산과 같다."""
     from app import demo_db
     assert len(guide.DEMO) == 30 and all((guide.MATERIAL / n).is_file() for n, _, _ in guide.DEMO)
     for store in ("행복편의점", "가상분식", "가상카페", "가상베이커리", "가상치킨"):

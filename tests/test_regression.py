@@ -168,6 +168,9 @@ def common(call: Sweep) -> None:
         call("GET", p)
     call("PUT", "/api/me/prefs", json={"gps_consent": True})
     call("POST", "/api/seek/check", json={"name": "가상분식", "wage": 9000, "schedule": SCHED})
+    notice = call.json("POST", "/api/evidence", files={"file": ("n.png", IMG, "image/png")}, data={"kind": "notice"})
+    if isinstance(notice, dict) and notice.get("id"):  # 지원 전 확인: 공고 사진 읽기
+        call("POST", f"/api/seek/read?evidence_id={notice['id']}")
     call("POST", "/api/notifications/read")
 
 

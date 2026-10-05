@@ -210,6 +210,10 @@ def read_image(payload: dict) -> dict:
     size = len(image.get("image_url", {}).get("url", "")) * 3 // 4
     if "month" in prompt:  # 급여명세서
         answer = {"month": "", "net_pay": None, "base_pay": None, "weekly_holiday_pay": None, "deduction": None}
+    elif "채용공고" in prompt:  # 지원 전 확인: 글 칸만 테스트 글로 채우고 선택지, 시급, 근무 시간은 비워 둔다
+        answer = {"name": f"{PREFIX}, 사진 속 사업장 이름", "industry": "",
+                  "work_desc": f"{PREFIX}, 사진 속 하는 일, 사진 {size // 1024}킬로바이트를 넘김",
+                  "wage": "", "probation": "", "shifts": []}
     else:  # 근로계약서: 프롬프트의 {"임금", "근로시간", ...}
         braces = re.search(r"\{([^{}]*)\}", prompt)
         keys = re.findall(r'"([^"]+)"', braces.group(1)) if braces else []

@@ -16,6 +16,13 @@ CONTRACT = {"임금": "시급 9,288원 (수습기간 중 최저임금의 90%)", 
             "휴게시간": "", "휴일": "매주 일요일", "연차휴가": "관계 법령에 따름",
             "근무장소": "경상남도 창원시 의창구 도계동 312-7", "업무내용": "편의점 계산, 상품 진열"}
 PAYSLIP = {"month": "2026-09", "net_pay": "557,280원", "base_pay": "557,280", "weekly_holiday_pay": "0", "deduction": "0"}
+# 채용공고: 모델이 칸에 맞지 않는 값(쓸 수 없는 글자, 없는 요일, 틀린 시각)을 섞어 내도 코드가 거른다
+POSTING = {"name": "가상분식 시험점★", "industry": "음식점, 카페", "work_desc": "주문 받기, 서빙", "wage": "10,320원",
+           "probation": "없음",
+           "shifts": [{"days": ["월", "수", "금"], "start": "17:00", "end": "22:00", "brk": "30분"},
+                      {"days": ["토요일"], "start": "10:00", "end": "16:00", "brk": ""},
+                      {"days": ["토"], "start": "18:00", "end": "20:00", "brk": "없음"},
+                      {"days": ["X"], "start": "25:00", "end": "9"}, "틀린 모양"]}
 
 
 AGENT = FakeAgent(smart_policy)
@@ -26,7 +33,8 @@ def fake_post(payload: dict) -> dict:
     content = payload["messages"][-1]["content"]
     if isinstance(content, list):  # 사진
         assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
-        answer = "```json\n" + json.dumps(PAYSLIP if "급여명세서" in content[0]["text"] else CONTRACT,
+        text = content[0]["text"]
+        answer = "```json\n" + json.dumps(PAYSLIP if "급여명세서" in text else POSTING if "채용공고" in text else CONTRACT,
                                           ensure_ascii=False) + "\n```"
         return {"choices": [{"message": {"role": "assistant", "content": answer}}]}
     return AGENT(payload)
@@ -82,6 +90,57 @@ def test_payslip_photo_fills_amount_then_saved(c, ai):
     c.post(f"/api/jobs/{jid}/payslip", data={"month": r["month"], "amount": str(r["net_pay"]),
                                               "evidence_id": str(r["evidence_id"])})
     assert c.get(f"/api/jobs/{jid}/payslips").json()[0]["evidence_id"] == r["evidence_id"]
+
+
+def _notice(c) -> int:
+    r = c.post("/api/evidence", files={"file": ("공고.png", (SAMPLE / "알바5개" / "2_채용공고.png").read_bytes(), "image/png")},
+               data={"kind": "notice"})
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+def test_posting_photo_without_model(c):
+    r = c.post(f"/api/seek/read?evidence_id={_notice(c)}").json()
+    assert r["ai"] is False and "연결되지 않았어요" in r["reason"] and r["found"] == 0
+
+
+def test_posting_photo_read_into_seek_fields(c, ai):
+    """지원 전 확인: 공고 사진을 AI가 읽고, 코드가 칸에 맞게 거른 값만 돌려준다 (업종 선택지, 시급 범위, 요일과 시각, 쓸 수 있는 글자)."""
+    r = c.post(f"/api/seek/read?evidence_id={_notice(c)}").json()
+    f = r["fields"]
+    assert r["ai"] is True and r["found"] == 6 and r["total"] == 6
+    assert f["name"] == "가상분식 시험점" and f["industry"] == "음식점, 카페" and f["work_desc"] == "주문 받기, 서빙"
+    assert f["wage"] == 10320 and f["probation"] == "no"
+    slot = {"start": "17:00", "end": "22:00", "brk": "30분"}
+    assert f["schedule"] == {"월": slot, "수": slot, "금": slot,
+                             "토": [{"start": "10:00", "end": "16:00", "brk": "모름"}, {"start": "18:00", "end": "20:00", "brk": "없음"}]}
+    assert any(t["step"] == "도구 read_posting_image" for t in r["trace"])
+    # 읽은 값을 그대로 지원 전 확인에 넣어도 서버 검사를 통과한다
+    seek = c.post("/api/seek/check", json={k: f[k] for k in ("name", "industry", "work_desc", "wage", "probation", "schedule")})
+    assert seek.status_code == 200, seek.text
+
+
+def test_posting_read_only_own_notice(c, ai):
+    """다른 사람의 공고 사진, 일하는 곳에 올린 자료(계약서)는 지원 전 확인으로 읽지 않는다."""
+    contract = c.post(f"/api/jobs/{job_id(c)}/contract", files={"file": ("c.png", (SAMPLE / "02_근로계약서.png").read_bytes(), "image/png")},
+                      data={"read": "false"}).json()["evidence"]["id"]
+    assert c.post(f"/api/seek/read?evidence_id={contract}").status_code == 404
+    other = TestClient(app)
+    other.post("/api/auth/register", json={"email": "ai_other@example.com", "password": "test1234", "birth_date": "2009-05-20"})
+    assert other.post(f"/api/seek/read?evidence_id={_notice(c)}").status_code == 404
+
+
+def test_posting_odd_values_are_dropped(monkeypatch):
+    """모델이 선택지에 없는 업종, 범위를 넘는 시급, 모르는 수습 표현을 내면 비워 둔다 (추측해 채우지 않음)."""
+    from app import ocr
+    monkeypatch.setattr(client, "read_image_json", lambda *a: {"name": "", "industry": "식당", "wage": "1,000,000,000",
+                                                                "probation": "협의", "shifts": None})
+    out = ocr.read_posting(b"", "image/png")
+    assert out["fields"] == {"name": "", "industry": "", "work_desc": "", "wage": None, "probation": "", "schedule": {}}
+    assert out["found"] == 0
+    monkeypatch.setattr(client, "read_image_json", lambda *a: ["목록"])
+    with pytest.raises(client.LLMError):
+        ocr.read_posting(b"", "image/png")
 
 
 def test_ai_judgment_is_cross_checked(c, ai):

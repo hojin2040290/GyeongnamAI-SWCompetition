@@ -656,6 +656,18 @@ class SeekIn(BaseModel):
     biz_no: str = ""
 
 
+@router.post("/seek/read")
+def seek_read(evidence_id: int, u: User = Depends(current_user), s: Session = Depends(get_session)):
+    """지원 전 확인: 올려 둔 채용공고 사진을 AI가 읽어 입력칸 값을 돌려준다 (원본은 /evidence로 먼저 저장)."""
+    ev = s.get(Evidence, evidence_id)
+    if not ev or ev.user_id != u.id or ev.job_id is not None or ev.kind != "notice":
+        raise HTTPException(404, "올린 공고 사진을 찾을 수 없어요")
+    res = core.run_read_image(s, u.id, None, ev.id, "posting")
+    return {"evidence": ev_out(ev), "fields": res.get("fields") or {}, "ai": res.get("ai", False),
+            "found": res.get("found", 0), "total": res.get("total", 6), "reason": res.get("reason", ""),
+            "trace": res["trace"], "trace_at": res.get("trace_at")}
+
+
 @router.post("/seek/check")
 def seek_check(data: SeekIn, u: User = Depends(current_user), s: Session = Depends(get_session)):
     check_choices(industry=data.industry, probation=data.probation)

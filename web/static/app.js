@@ -539,13 +539,44 @@ $('#sheetSave').onclick=()=>{
 const seek={node:$('#seekForm'), schedule:{}, photos:[]};
 bindSeg(seek.node);
 seek.node.querySelector('.schedule-btn').onclick=()=>openSheetFor(seek);
-// 올린 공고 사진은 올리기 칸 바로 아래에 보여 준다 (알림만 잠깐 뜨고 사라져 올렸는지 알 수 없었다)
-$('#seekFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.length) return; let ok=0;
-  for(const f of files){ const fd=new FormData(); fd.append('file',f); fd.append('kind','notice');
-    try{ seek.photos.push(await api('POST','/api/evidence',fd,true)); ok++; seekPhotos(); }catch(err){ toast(`${f.name}: ${err.message}`); } }
-  if(ok) toast(`공고 사진 ${ok}장을 원본으로 보관했어요`); e.target.value=''; };
+// 공고 사진: 원본으로 보관해 올리기 칸 바로 아래에 보여 주고(알림만 잠깐 뜨고 사라져 올렸는지 알 수 없었다),
+// AI가 사진을 읽어 입력칸을 채운다 (계약서 사진 읽기와 같은 길: 원본 저장 → /seek/read가 대기줄에 서서 읽음). 이미 적은 칸은 덮어쓰지 않는다
+$('#seekFile').onchange=async e=>{ const files=[...e.target.files]; if(!files.length) return; e.target.value='';
+  let ok=0, read=0, filled=0, reason='', trace=[]; seek.reading=true;
+  try{ for(const [i,f] of files.entries()){
+    const fd=new FormData(); fd.append('file',f); fd.append('kind','notice'); let ev;
+    try{ ev=await api('POST','/api/evidence',fd,true); seek.photos.push(ev); ok++; seekPhotos(); }catch(err){ toast(`${f.name}: ${err.message}`); continue; }
+    seekNote(`공고 사진을 AI가 읽는 중이에요 (${i+1}/${files.length}장)`, true);
+    const r=await checkAfterSave('#seekOcrLive',()=>api('POST',`/api/seek/read?evidence_id=${ev.id}`));
+    $('#seekOcrLive').innerHTML='';
+    if(!r){ reason='AI가 읽지 못했어요. 칸은 직접 입력해 주세요.'; continue; }
+    trace=trace.concat(r.trace||[]);
+    if(!r.ai){ reason=r.reason; continue; }
+    read++; filled+=seekFill(r.fields||{});
+  } }finally{ seek.reading=false; }
+  if(!ok){ seekNote(''); return; }
+  if(read){ seekNote(filled?`AI가 공고 사진 ${read}장을 읽어 ${filled}개 칸을 채웠어요. 사진과 비교해 틀린 곳을 고쳐 주세요. 빈 칸은 공고에 없거나 읽지 못한 항목이에요.`
+      :`AI가 공고 사진 ${read}장을 읽었지만 새로 채운 칸은 없어요 (이미 적힌 칸은 그대로 둬요). 사진과 비교해 확인해 주세요.`);
+    toast(filled?'공고 사진을 읽어 칸을 채웠어요':'공고 사진을 읽었어요'); }
+  else { seekNote(`공고 사진 ${ok}장을 원본으로 보관했어요. ${reason}`); toast(`공고 사진 ${ok}장을 원본으로 보관했어요`); }
+  if(trace.length) $('#seekOcrLive').innerHTML=traceHTML(trace);
+};
+function seekNote(t, wait=false){ const el=$('#seekOcrNote'); el.textContent=t; el.classList.toggle('hidden',!t); el.classList.toggle('wait',wait); }
+// AI가 읽은 값으로 빈 칸만 채운다 (사용자가 먼저 적은 값, 예시 공고로 채운 값은 그대로). 채운 칸 수를 돌려준다
+function seekFill(d){
+  const n=seek.node; let c=0;
+  const set=(sel,v)=>{ const el=n.querySelector(sel); if(!el || v==null || v==='' || el.value.trim()) return;
+    el.value=v; if(el.tagName==='SELECT' && el.value!==String(v)){ el.value=''; return; }
+    el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); c++; };
+  set('.f-name',d.name); set('.f-type',d.industry); set('.f-work',d.work_desc); set('.f-wage',d.wage);
+  if(d.probation && !segVal(n,'probation')){ setSeg(n,'probation',d.probation); c++; }
+  if(d.schedule && DAY_KEYS.some(k=>d.schedule[k]) && !DAY_KEYS.some(k=>seek.schedule[k])){
+    seek.schedule=JSON.parse(JSON.stringify(d.schedule));
+    n.querySelector('.sched-sum').textContent=schedSummary(seek.schedule); n.querySelector('.sched-go').textContent='수정'; c++; }
+  return c;
+}
 function seekPhotos(){
-  const box=$('#seekPhotos'); box.classList.toggle('hidden', !seek.photos.length || $('#seekUpload').classList.contains('hidden'));
+  const box=$('#seekPhotos'); box.classList.toggle('hidden', !seek.photos.length);
   box.innerHTML=seek.photos.map(p=>{ const url=`/api/evidence/${p.id}/file`, pdf=/\.pdf$/i.test(p.filename);
     return `<a class="up-shot" href="${url}" target="_blank">${pdf?'<span class="up-pdf">PDF</span>':`<img src="${url}" alt="${esc(p.filename)}">`}
       <span class="sub">${esc(p.filename)}<br>${fmtDT(p.uploaded_at,{sec:true,wd:true})} 보관</span></a>`; }).join('');
@@ -660,11 +691,13 @@ async function lastTrace(box, events, month=''){
 }
 $('#seekRun').onclick=async()=>{
   $('#seekErr').textContent='';
+  // 공고 사진을 읽는 동안에는 기다린다 (진행 칸이 두 개 뜨지 않게, 읽은 값이 칸에 다 들어간 뒤 점검하게)
+  if(seek.reading){ toast('AI가 공고 사진을 읽는 중이에요. 끝난 뒤에 눌러 주세요'); return; }
   try{ const r=await agent('#seekLive',()=>api('POST','/api/seek/check',seekInput())); $('#seekLive').innerHTML='';
     $('#seekItems').innerHTML=r.items.map(itemHTML).join('');
     $('#seekQs').innerHTML=r.questions.map(q=>`<li>${esc(q)}</li>`).join('');
     $('#seekTrace').innerHTML=traceHTML(r.trace, r.trace_at);
-    $('#seekForm').classList.add('hidden'); $('#seekUpload').classList.add('hidden'); seekPhotos(); $('#seekResult').classList.remove('hidden');
+    $('#seekForm').classList.add('hidden'); $('#seekUpload').classList.add('hidden'); $('#seekRead').classList.add('hidden'); $('#seekResult').classList.remove('hidden');
     $('#seekClose').classList.toggle('hidden',!state.seekFromApp); window.scrollTo(0,0); refreshNav();
   }catch(e){ $('#seekErr').textContent=e.message; }
 };
@@ -672,9 +705,9 @@ function seekReset(){ $('#seekLive').innerHTML=''; const n=seek.node; n.querySel
   const bh=n.querySelector('.bizno-hint'); bh.textContent=BIZ_HINT; bh.classList.remove('bad');
   n.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed','false')); seek.schedule={};
   n.querySelector('.sched-sum').textContent='요일과 시간을 선택해 주세요'; n.querySelector('.sched-go').textContent='선택';
-  seek.photos=[]; seekBackToForm(); }
+  seek.photos=[]; seekPhotos(); seekNote(''); $('#seekOcrLive').innerHTML=''; seekBackToForm(); }
 // 결과에서 뒤로: 입력한 내용은 그대로 두고 입력 화면으로
-function seekBackToForm(){ $('#seekResult').classList.add('hidden'); $('#seekForm').classList.remove('hidden'); $('#seekUpload').classList.remove('hidden'); seekPhotos(); window.scrollTo(0,0); refreshNav(); }
+function seekBackToForm(){ $('#seekResult').classList.add('hidden'); $('#seekForm').classList.remove('hidden'); $('#seekUpload').classList.remove('hidden'); $('#seekRead').classList.remove('hidden'); window.scrollTo(0,0); refreshNav(); }
 $('#seekAgain').onclick=seekReset;
 $('#seekClose').onclick=()=>{ state.seekFromApp=false; closeOverlay(); };
 $('#seekToWork').onclick=()=>{
@@ -1384,12 +1417,12 @@ $('#guideFileList').addEventListener('click',async e=>{
     const dt=new DataTransfer(); dt.items.add(new File([blob], f.name.split('/').pop(), {type:blob.type||'image/png'}));
     guide.input.files=dt.files; guideClose('#guideFiles');
     guide.input.dispatchEvent(new Event('change',{bubbles:true}));
-    if(f.fill && guide.input.id==='seekFile'){ guideFillNode(seek.node, seek, f.fill); toast('예시 공고의 조건으로 칸을 채웠어요. 확인하고 점검해 보세요'); }
+    // 예시·데모 공고도 내 사진과 똑같이 AI(비전 모델)가 읽어 칸을 채운다 (미리 적어 둔 값으로 채우지 않는다)
   }catch(err){ toast(err.message); b.disabled=false; b.textContent='이 자료 올리기'; }
 });
 $('#guideFilesX').onclick=()=>guideClose('#guideFiles');
 $('#guideOwnFile').onclick=()=>{ const inp=guide.input; guideClose('#guideFiles'); if(!inp) return; guide.bypass=true; inp.click(); setTimeout(()=>{ guide.bypass=false; },0); };
-// 예시 자료에 적힌 조건으로 입력칸 채우기 (공고 입력칸, 일하는 곳 카드 공용: 이름, 업종, 하는 일, 시급, 시작일, 근무 요일과 시간, 수습)
+// 예시 자료에 적힌 조건으로 일하는 곳 카드 채우기 ('이 예시로 채우기' 버튼: 이름, 업종, 하는 일, 시급, 시작일, 근무 요일과 시간, 수습)
 function guideFillNode(n, holder, d){
   const set=(sel,v)=>{ const el=n.querySelector(sel); if(el && v!=null){ el.value=v; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); } };
   set('.f-name',d.name); set('.f-type',d.industry); set('.f-work',d.work_desc); set('.f-wage',d.wage); set('.f-start',d.start_date);

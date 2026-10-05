@@ -33,7 +33,8 @@ KO_NAMES = {
     "run_pay_check": "급여 점검", "run_post_search": "게시물 검색", "run_quit_check": "퇴직 정산 점검",
     "save_warning_message": "사업주 안내 문구 저장", "schedule_followup": "확인 예약", "search_posts": "게시물 검색",
     "set_post_status": "게시물 판별", "settlement": "퇴직 정산 계산", "judgments": "판단", "answer_ids": "답변 번호",
-    "next_tab": "바로 가기 화면",
+    "next_tab": "바로 가기 화면", "read_contract_image": "계약서 사진 읽기", "read_payslip_image": "명세서 사진 읽기",
+    "read_posting_image": "채용공고 사진 읽기",
 }
 _WORD = r"(?<![A-Za-z0-9_])({})(?![A-Za-z0-9_])"
 # 알려진 이름, 그리고 알 수 없어도 snake_case(영어_밑줄)는 내부 이름으로 본다
