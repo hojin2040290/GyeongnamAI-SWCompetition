@@ -251,6 +251,9 @@ $$('.mode').forEach(b => b.addEventListener('click', () => {
 }));
 function startScreen(){
   $('#toLoginWrap').classList.toggle('hidden', !!state.me); $('#obLogoutWrap').classList.toggle('hidden', !state.me);
+  // 로그인한 계정도 일하는 곳이 없으면 이 화면으로 온다: 로그인 전 화면과 같아 보이지 않게 어느 계정인지 적는다
+  $('#obSigned').classList.toggle('hidden', !state.me);
+  $('#obSigned').textContent = state.me ? `${state.me.email} 계정으로 로그인했어요. 지금 상황을 고르고 다음을 눌러 주세요.` : '';
 }
 function afterMode(){
   if (state.mode==='seek') { seekReset(); show('obSeek'); return; }
@@ -296,6 +299,7 @@ $('#logBtn').onclick = async () => {
   try {
     state.me = await api('POST','/api/auth/login',{email:$('#logEmail').value.trim(),password:$('#logPw').value});
     await loadJobs(); guideRefresh();
+    toast(`${state.me.email} 계정으로 로그인했어요`);
     if (!state.jobs.length) show('ob0'); else { closeOverlay(); startApp(); }
   } catch(e) { $('#logErr').textContent=e.message; }
 };
