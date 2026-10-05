@@ -111,7 +111,18 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await r.goto(B+'/'); await r.waitForTimeout(500);
   await r.evaluate(()=>fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({email:'guide_nomode@example.com',password:'test1234',birth_date:'2009-05-20'})}));
+  // 시험 계정처럼 로그인 화면으로 들어온다: 로그인하면 시작 화면이지만 로그인했다는 것이 보여야 한다 (로그인 전 화면과 같아 보이지 않게)
+  await r.evaluate(()=>fetch('/api/auth/logout',{method:'POST'}));
+  await r.goto(B+'/'); await r.waitForTimeout(800);
+  ck('[로그인] 로그인 전 시작 화면에는 로그인 문구 없음', !(await shown(r,'#obSigned')));
+  await r.click('#toLogin'); await r.fill('#logEmail','guide_nomode@example.com'); await r.fill('#logPw','test1234'); await r.click('#logBtn');
+  await r.waitForTimeout(600);
+  ck('[로그인] 상황 고르기 전 계정: 로그인하면 시작 화면에 로그인한 계정과 알림',
+     (await vis(r))==='ob0' && await shown(r,'#obSigned') && (await r.textContent('#obSigned')).includes('guide_nomode@example.com 계정으로 로그인했어요')
+     && (await r.textContent('#toast')).includes('로그인했어요'), await r.textContent('#obSigned'));
+  await r.screenshot({path:'p16_signed.png'});
   await r.goto(B+'/'); await r.waitForTimeout(1500);
+  ck('[로그인] 새로고침해도 로그인한 계정이 보임', await shown(r,'#obSigned'));
   ck('[안내] 상황 고르기 전 계정: 시작 화면에 안내 창과 미션 버튼 없음', (await vis(r))==='ob0' && !(await shown(r,'#guideIntro')) && (await chip(r))==='숨김', await vis(r));
   await r.click('.mode[data-mode="quit"]'); await r.click('#modeNext'); await r.waitForTimeout(600);
   ck('[안내] 기본 정보 화면에도 안내 창 없음', (await vis(r))==='ob1' && !(await shown(r,'#guideIntro')), await vis(r));
