@@ -145,5 +145,15 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   const labels = await t.$$eval('#guideFileList .guide-file', es=>es.map(e=>e.textContent));
   ck('[사례 계정] 업로드에는 그 가게 자료 6장만', jr.status===200 && labels.length===6 && labels.every(x=>x.includes('가상분식')), labels.join(' / '));
   await t.screenshot({path:'p16_case_files.png'});
+  // 조문 원문: 긴 조문은 앞부분만 '…'을 붙여 보여 주고 '전체 보기'로 펼친다 (칸 안 스크롤은 휴대폰에서 끊긴 것처럼 보였다)
+  await t.keyboard.press('Escape').catch(()=>{}); await t.click('#guideFilesX').catch(()=>{});
+  const law = await t.evaluate(()=>{ const long='제29조(청소년 고용 금지)\n'+'① 청소년유해업소의 업주는 청소년을 고용하여서는 아니 된다. '.repeat(12)+'⑤ 마지막 항입니다.';
+    const d=document.createElement('div'); d.id='lawTest'; d.innerHTML=articleHTML({built:true,title:'시험',text:long})+articleHTML({built:true,title:'짧음',text:'제1조(목적) 짧은 조문.'});
+    document.querySelector('#v-check').prepend(d); d.querySelectorAll('details').forEach(x=>x.open=true);
+    const [a,b]=d.querySelectorAll('details.law-text');
+    return {cut:a.querySelector('pre').textContent.endsWith('…') && !a.querySelector('pre').textContent.includes('⑤'), more:!!a.querySelector('.law-more'), shortMore:!!b.querySelector('.law-more')}; });
+  await t.click('#lawTest .law-more');
+  ck('[조문 원문] 긴 조문은 …을 붙여 줄이고 전체 보기로 끝까지 펼침 (짧은 조문은 그대로)', law.cut && law.more && !law.shortMore
+     && await t.isVisible('#lawTest .law-full') && (await t.textContent('#lawTest .law-full')).endsWith('⑤ 마지막 항입니다.') && !(await t.$('#lawTest .law-more')), JSON.stringify(law));
   await b.close(); summary();
 })().catch(e=>{ console.log('중단', e.message); summary(); process.exit(1); });
