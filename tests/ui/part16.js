@@ -59,6 +59,9 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await tab(p,'check'); await p.click('#seekEntry'); await p.waitForTimeout(600);
   await p.click('#seekUpload'); await p.waitForTimeout(400);
   await p.click('[data-guide-file="0"]'); await p.waitForTimeout(800);
+  await until(p, ()=>document.querySelectorAll('#seekPhotos .up-shot').length===1, null, 8000);
+  ck('[지원 전 확인] 올린 공고 사진이 올리기 칸 아래에 바로 보임', await shown(p,'#seekPhotos')
+     && (await p.$$eval('#seekPhotos img', es=>es.filter(i=>i.complete && i.naturalWidth>0).length))===1, await p.textContent('#seekPhotos'));
   await p.click('#seekRun'); await idle(p);
   ck('[안내] 지원 전 확인하면 4/5', await until(p, ()=>document.getElementById('guideChip').textContent.includes('4/5'), null, 10000), await chip(p));
   await p.click('#seekClose'); await p.waitForTimeout(500);

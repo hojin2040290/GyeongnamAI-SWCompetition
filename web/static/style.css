@@ -281,6 +281,12 @@ details.more summary{cursor:pointer;font-weight:500;font-size:14px;color:var(--b
 .err{color:var(--bad);font-size:13.5px;margin:6px 0 0;min-height:1em}
 .row-actions{display:flex;gap:8px;margin-top:10px}
 .row-actions .btn{flex:1}
+/* 올린 사진 칸 (지원 전 확인의 공고 사진): 작은 그림과 이름, 보관 시각. 누르면 원본 */
+.up-shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;margin-top:12px}
+.up-shot{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;min-width:0}
+.up-shot img,.up-pdf{width:100%;aspect-ratio:3/4;object-fit:contain;border-radius:12px;background:#fff;display:block}
+.up-pdf{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink-soft)}
+.up-shot .sub{font-size:11px;line-height:1.4;color:var(--ink-soft);overflow-wrap:anywhere}
 .ev-link{color:var(--blue);font-size:13px;font-weight:600;text-decoration:none}
 .log{font-size:12.5px;color:var(--ink-soft);border-top:1px solid var(--line);padding:6px 0}
 .log b{color:var(--ink)}
