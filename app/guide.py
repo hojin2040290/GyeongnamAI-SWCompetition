@@ -1,6 +1,6 @@
 """처음 쓰는 사람 체험 안내 (새로 가입한 계정만).
 
-- 가입할 때 고른 상황(지원 전, 일하는 중, 그만둠)에 맞는 미션 3개를 보여 준다. 서버가 기록으로 판정한다 (가입한 뒤에 한 일만).
+- 모든 새 계정에 같은 체험 미션 8개(세 상황의 미션을 합친 것)를 보여 준다. 서버가 기록으로 판정한다 (가입한 뒤에 한 일만).
 - 체험하는 동안 업로드를 누르면 '내 기기에서 고르기'와 예시 자료(테스트자료의 가상 자료)를 함께 보여 준다.
 - 데모 모드(DEMO_MODE=true): 체험 안내와 상관없이 모든 계정의 업로드에 데모 자료 전체 (실제 업로드와 사진 읽기 시연용).
 - 미션을 다 하면 설문 안내 (SURVEY_URL). 설문은 일하는 곳 선택 창에도 늘 있다.
@@ -75,30 +75,31 @@ def demo_files() -> dict[str, list[tuple[str, str]]]:
     return {inp: [(n, label) for n, label, fit in DEMO if inp in fit.split()]
             + [(n, label) for n, label, fit in DEMO if inp not in fit.split()] for inp in UPLOAD_INPUTS}
 
-CONTRACT = {"key": "contract", "title": "계약서 사진으로 점검하기", "go": "check",
-            "how": "계약서 탭의 '근로계약서 사진 올리기'로 사진을 올리고(예시 자료도 있어요) '이 내용과 근무 기록으로 점검하기'를 눌러요"}
-# 상황(가입할 때 고른 mode)마다: 제목과 미션 3개 (판정 열쇠, 할 일, 방법, 바로 가기 화면)
-MODES: dict[str, dict] = {
-    "seek": {"title": "아르바이트를 구하고 있어요", "missions": [
-        {"key": "seek", "title": "지원 전 확인으로 공고 조건 점검하기", "go": "seek",
-         "how": "'채용공고 사진 올리기'로 공고를 올리거나(예시 공고는 칸을 채워 줘요) 조건을 적고 '지원 전 확인하기'를 눌러요"},
-        {"key": "job", "title": "일할 곳 등록하기", "go": "job",
-         "how": "확인 결과 아래 '이곳에서 일하게 됐어요, 등록하기'를 누르고 나머지를 확인한 뒤 '시작하기'를 눌러요"},
-        CONTRACT]},
-    "work": {"title": "지금 아르바이트를 하고 있어요", "missions": [
-        {"key": "punch", "title": "출근하기와 퇴근하기 눌러 보기", "go": "home",
-         "how": "홈의 '출근하기'를 누르고 조금 뒤 '퇴근하기'를 눌러요. '방금 출근했어요' 확인 창이 뜨면 확인을 눌러요"},
-        CONTRACT,
-        {"key": "payday", "title": "받은 급여를 올리고 비교하기", "go": "pay",
-         "how": "급여 탭에서 달을 고르고 '명세서나 입금 내역' 칸에 명세서를 올려요. 받은 금액을 확인하고 '저장하고 비교하기'를 눌러요"}]},
-    "quit": {"title": "아르바이트를 그만뒀어요", "missions": [
-        {"key": "quitjob", "title": "그만둔 곳 등록하기", "go": "job",
-         "how": "일하는 곳 등록 화면에서 '그만뒀어요'와 그만둔 날을 적고 '시작하기'를 눌러요"},
-        {"key": "paid", "title": "남은 임금을 받았는지 답하기", "go": "home",
-         "how": "홈의 'AI 에이전트 종합 점검' 카드 안 '퇴직 후 임금 정산'에서 '남은 임금 받았어요'나 '아직 못 받았어요'를 눌러요"},
-        {"key": "report", "title": "상담 사전 자료 만들기", "go": "docs",
-         "how": "자료 탭에서 '상담 사전 자료 만들기'를 눌러요. 다 만들면 자료가 열려요"}]},
-}
+# 체험 미션 8개: 고른 상황(구하는 중, 일하는 중, 그만둠)과 상관없이 모든 새 계정에 같은 미션 (테스터가 핵심 기능을 다 써 보고 설문)
+# (판정 열쇠, 할 일, 방법, 바로 가기 화면). 세 상황의 미션을 합치고 겹치는 '계약서 사진으로 점검'은 하나로
+MISSIONS: list[dict] = [
+    {"key": "seek", "title": "지원 전 확인으로 공고 조건 점검하기", "go": "seek",
+     "how": "'지원 전 확인'(계약서 탭 맨 위)에서 채용공고 사진을 올리거나(예시 공고는 칸을 채워 줘요) 조건을 적고 '지원 전 확인하기'를 눌러요"},
+    {"key": "job", "title": "일할 곳 등록하기", "go": "job",
+     "how": "지원 전 확인 결과 아래 '이곳에서 일하게 됐어요, 등록하기'를 누르거나, 일하는 곳 선택 창에서 일하는 곳을 추가해요"},
+    {"key": "punch", "title": "출근하기와 퇴근하기 눌러 보기", "go": "home",
+     "how": "홈의 '출근하기'를 누르고 조금 뒤 '퇴근하기'를 눌러요. '방금 출근했어요' 확인 창이 뜨면 확인을 눌러요"},
+    {"key": "contract", "title": "계약서 사진으로 점검하기", "go": "check",
+     "how": "계약서 탭의 '근로계약서 사진 올리기'로 사진을 올리고(예시 자료도 있어요) '이 내용과 근무 기록으로 점검하기'를 눌러요"},
+    {"key": "payday", "title": "받은 급여를 올리고 비교하기", "go": "pay",
+     "how": "급여 탭에서 달을 고르고 '명세서나 입금 내역' 칸에 명세서를 올려요. 받은 금액을 확인하고 '저장하고 비교하기'를 눌러요"},
+    {"key": "quitjob", "title": "그만둔 곳 등록하기", "go": "home",
+     "how": "홈 아래의 '이곳을 그만뒀어요'를 눌러 그만둔 날을 저장해요 (그만둔 곳을 새로 등록해도 돼요)"},
+    {"key": "paid", "title": "남은 임금을 받았는지 답하기", "go": "home",
+     "how": "홈의 'AI 에이전트 종합 점검' 카드 안 '퇴직 후 임금 정산'에서 '남은 임금 받았어요'나 '아직 못 받았어요'를 눌러요"},
+    {"key": "report", "title": "상담 사전 자료 만들기", "go": "docs",
+     "how": "자료 탭에서 '상담 사전 자료 만들기'를 눌러요. 다 만들면 자료가 열려요"},
+]
+GUIDE_TITLE = "알바지킴이 체험"
+# 가입할 때 고른 상황 (예전 계정의 mode 값 확인용. 미션은 모두 MISSIONS)
+MODES: dict[str, dict] = {"seek": {"title": "아르바이트를 구하고 있어요", "missions": MISSIONS},
+                          "work": {"title": "지금 아르바이트를 하고 있어요", "missions": MISSIONS},
+                          "quit": {"title": "아르바이트를 그만뒀어요", "missions": MISSIONS}}
 ALLOWED_FILES = {name for files in FILES.values() for name, _ in files} | {JOB_FILL[0]} | {n for n, _, _ in DEMO}
 MARKS = ("intro", "closed", "off")  # 첫 안내 봄, 완료 창 닫음, 안내 끔
 
@@ -184,7 +185,7 @@ def state_of(s: Session, user: User) -> dict:
     missions = [{**m, "done": d} for m, d in zip(mode["missions"], _done_all(s, user, st))]
     marks = _marks(st)
     all_done = all(m["done"] for m in missions)
-    return {"on": True, "mode": st.mode, "title": mode["title"], "missions": missions,
+    return {"on": True, "mode": st.mode, "title": GUIDE_TITLE, "missions": missions,
             "done_count": sum(m["done"] for m in missions), "all_done": all_done,
             "intro_seen": "intro" in marks, "closed": "closed" in marks,
             # 예시 자료는 체험하는 동안만 (다 하고 완료 창을 닫으면 업로드는 바로 내 파일 고르기). 데모 모드면 늘 데모 자료 전체

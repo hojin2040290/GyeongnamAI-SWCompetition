@@ -28,29 +28,39 @@ def _job(c: TestClient, **extra) -> int:
     return r.json()["id"]
 
 
-def test_new_account_gets_missions_for_chosen_mode():
-    for mode, keys in (("seek", ["seek", "job", "contract"]), ("work", ["punch", "contract", "payday"]),
-                       ("quit", ["quitjob", "paid", "report"])):
+KEYS = ["seek", "job", "punch", "contract", "payday", "quitjob", "paid", "report"]
+
+
+def test_new_account_gets_all_missions_whatever_mode():
+    """고른 상황과 상관없이 모든 새 계정이 같은 체험 미션 8개를 받는다 (세 상황의 미션을 합친 것)."""
+    for mode in ("seek", "work", "quit"):
         st = _join(f"guide_{mode}@example.com", mode).get("/api/guide/state").json()
-        assert st["on"] and st["mode"] == mode and [m["key"] for m in st["missions"]] == keys
+        assert st["on"] and [m["key"] for m in st["missions"]] == KEYS and st["done_count"] == 0
         assert not st["intro_seen"] and "contractFile" in st["files"] and st["survey_url"]
 
 
-def test_work_missions_judged_from_records():
-    """출퇴근, 계약서 점검, 받은 급여 저장으로 끝난다. 명세서 사진만 올려서는 급여 미션이 끝나지 않는다."""
+def test_all_missions_judged_from_records():
+    """8개를 모두 기록으로 판정하고, 다 해야 all_done (설문 안내). 명세서 사진만 올려서는 급여 미션이 끝나지 않는다."""
     c = _join("guide_work2@example.com", "work")
+    assert not any(_done(c).values())
+    r = c.post("/api/seek/check", json={"name": "가상안내 공고", "wage": 10320, "schedule": {}})
+    assert r.status_code == 200, r.text
     job = _job(c)
-    assert _done(c) == {"punch": False, "contract": False, "payday": False}
+    assert _done(c)["seek"] and _done(c)["job"]
     c.post(f"/api/jobs/{job}/punch", json={"check": False})
     c.post(f"/api/jobs/{job}/punch", json={"check": False, "confirm": True})
     r = c.post(f"/api/jobs/{job}/payslip/read", files={"file": ("p.png", PNG, "image/png")}, data={"read": "false"})
     assert r.status_code == 200
-    assert _done(c) == {"punch": True, "contract": False, "payday": False}
+    assert _done(c)["punch"] and not _done(c)["payday"]
     c.post(f"/api/jobs/{job}/payslip", data={"month": "2026-08", "amount": "500000", "check": "false"})
     c.post(f"/api/jobs/{job}/check")
-    assert _done(c) == {"punch": True, "contract": True, "payday": True}
+    assert _done(c)["contract"] and _done(c)["payday"] and not c.get("/api/guide/state").json()["all_done"]
+    c.post(f"/api/jobs/{job}/quit", json={"quit_date": "2026-09-27", "check": False})  # 홈의 '이곳을 그만뒀어요'
+    c.post(f"/api/jobs/{job}/paid", json={"paid": False, "check": False})
+    assert _done(c)["quitjob"] and _done(c)["paid"] and not _done(c)["report"]
+    assert c.post(f"/api/jobs/{job}/report").status_code == 200
     st = c.get("/api/guide/state").json()
-    assert st["all_done"] and st["files"]  # 완료 창을 닫기 전까지는 예시 자료를 고를 수 있다
+    assert st["all_done"] and st["done_count"] == 8 and st["files"]  # 완료 창을 닫기 전까지는 예시 자료를 고를 수 있다
     st = c.post("/api/guide/mark", json={"key": "closed"}).json()
     assert st["on"] and st["files"] == {}  # 다 하고 닫으면 업로드는 바로 내 파일 고르기
 
