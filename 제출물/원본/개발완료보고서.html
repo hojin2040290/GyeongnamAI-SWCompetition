@@ -85,39 +85,44 @@ code{font-family:'IBM Plex Sans KR',sans-serif;background:#f1f2f4;padding:0 .8mm
 <h3>Agent Architecture</h3>
 <p>AI는 점검마다 목표와 쓸 수 있는 도구 목록만 받습니다. 어떤 도구를 쓸지 AI가 고르면(vLLM tool calling) 코드가 실행해 결과를 돌려주고, AI는 결과를 보고 다음 행동을 정합니다. LangChain 같은 에이전트 프레임워크 없이 직접 만들었습니다.</p>
 <div class="fig">
-<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans KR" font-size="11">
-<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6b7280"/></marker></defs>
-<rect x="4" y="60" width="118" height="78" rx="9" fill="#f4f5f7"/>
-<text x="63" y="84" text-anchor="middle" font-weight="700" font-size="12">입력</text>
-<text x="63" y="102" text-anchor="middle" fill="#4b5563">퇴근, 급여 저장,</text><text x="63" y="117" text-anchor="middle" fill="#4b5563">그만둔 날, 매일 9시,</text><text x="63" y="132" text-anchor="middle" fill="#4b5563">예약한 날, 답변</text>
-<line x1="124" y1="99" x2="162" y2="99" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
-<rect x="166" y="48" width="150" height="102" rx="9" fill="#111827"/>
-<text x="241" y="72" text-anchor="middle" font-weight="700" font-size="12" fill="#fff">AI (Qwen3.8-27B)</text>
-<text x="241" y="92" text-anchor="middle" fill="#d1d5db">① 계획 세우기</text><text x="241" y="108" text-anchor="middle" fill="#d1d5db">② 도구 고르기</text><text x="241" y="124" text-anchor="middle" fill="#d1d5db">③ 근거를 붙여 판단</text><text x="241" y="140" text-anchor="middle" fill="#d1d5db">④ 행동 정하기</text>
-<line x1="318" y1="82" x2="372" y2="82" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
-<line x1="372" y1="100" x2="320" y2="100" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
-<text x="345" y="76" text-anchor="middle" font-size="9.5" fill="#6b7280">호출</text><text x="345" y="113" text-anchor="middle" font-size="9.5" fill="#6b7280">결과</text>
-<rect x="376" y="48" width="160" height="72" rx="9" fill="#eef2ff"/>
-<text x="456" y="70" text-anchor="middle" font-weight="700" font-size="12" fill="#2f5bea">도구 32개 (코드가 실행)</text>
-<text x="456" y="89" text-anchor="middle" fill="#374151">임금·만 나이·기한 계산,</text><text x="456" y="105" text-anchor="middle" fill="#374151">조문·판례, 기록 조회, 알림</text>
-<line x1="241" y1="152" x2="241" y2="176" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
-<rect x="166" y="180" width="150" height="44" rx="9" fill="#fff7e6"/>
-<text x="241" y="199" text-anchor="middle" font-weight="700" font-size="12" fill="#92400e">검증 장치</text><text x="241" y="215" text-anchor="middle" font-size="9.8" fill="#92400e">계산과 다름·없는 조항·근거 없음</text>
-<path d="M164 202 C 130 202, 130 130, 164 130" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#a)"/>
-<text x="112" y="172" text-anchor="middle" font-size="9.5" fill="#92400e">돌려보내</text><text x="112" y="185" text-anchor="middle" font-size="9.5" fill="#92400e">다시 판단</text>
-<line x1="318" y1="202" x2="372" y2="202" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
-<rect x="376" y="160" width="160" height="64" rx="9" fill="#f4f5f7"/>
-<text x="456" y="182" text-anchor="middle" font-weight="700" font-size="12">행동</text><text x="456" y="200" text-anchor="middle" fill="#4b5563">알림, 질문, 확인 예약,</text><text x="456" y="215" text-anchor="middle" fill="#4b5563">메모, 조언, 결과 저장</text>
-<rect x="562" y="10" width="154" height="60" rx="9" fill="#f4f5f7"/>
-<text x="639" y="31" text-anchor="middle" font-weight="700" font-size="11.5">법 기준표 (DB)</text><text x="639" y="48" text-anchor="middle" font-size="10" fill="#4b5563">법제처 API: 조문·고시·판례</text><text x="639" y="62" text-anchor="middle" font-size="10" fill="#4b5563">기준값: law_params.json</text>
-<rect x="562" y="80" width="154" height="56" rx="9" fill="#f4f5f7"/>
-<text x="639" y="101" text-anchor="middle" font-weight="700" font-size="11.5">사용자 기록 (SQLite)</text><text x="639" y="118" text-anchor="middle" font-size="10" fill="#4b5563">출퇴근, 계약서, 명세서,</text><text x="639" y="131" text-anchor="middle" font-size="10" fill="#4b5563">원본 파일 + SHA-256</text>
-<rect x="562" y="146" width="154" height="78" rx="9" fill="#f4f5f7"/>
-<text x="639" y="167" text-anchor="middle" font-weight="700" font-size="11.5">Memory</text><text x="639" y="184" text-anchor="middle" font-size="10" fill="#4b5563">메모, 질문과 답, 예약,</text><text x="639" y="198" text-anchor="middle" font-size="10" fill="#4b5563">점검 결과, 동작 기록</text><text x="639" y="212" text-anchor="middle" font-size="10" fill="#4b5563">→ 다음 실행에 넘김</text>
-<line x1="538" y1="84" x2="558" y2="60" stroke="#9ca3af" stroke-width="1.2"/><line x1="538" y1="90" x2="558" y2="106" stroke="#9ca3af" stroke-width="1.2"/>
-<line x1="538" y1="192" x2="558" y2="186" stroke="#9ca3af" stroke-width="1.2"/>
+<svg viewBox="0 0 720 236" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans KR" font-size="11">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="#6b7280"/></marker>
+<marker id="o" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#d97706"/></marker></defs>
+<rect x="4" y="10" width="124" height="90" rx="9" fill="#f4f5f7"/>
+<text x="66" y="32" text-anchor="middle" font-weight="700" font-size="12">입력</text>
+<text x="66" y="50" text-anchor="middle" fill="#4b5563">퇴근, 급여 저장,</text><text x="66" y="65" text-anchor="middle" fill="#4b5563">그만둔 날, 매일 9시,</text><text x="66" y="80" text-anchor="middle" fill="#4b5563">예약한 날, 답변</text>
+<rect x="4" y="114" width="124" height="118" rx="9" fill="#eef2ff"/>
+<text x="66" y="135" text-anchor="middle" font-weight="700" font-size="12" fill="#2f5bea">Memory</text>
+<text x="66" y="153" text-anchor="middle" fill="#374151">지난 메모, 질문과 답,</text><text x="66" y="168" text-anchor="middle" fill="#374151">예약한 확인, 진행 상황</text>
+<text x="66" y="190" text-anchor="middle" font-size="9.8" fill="#2f5bea">시작할 때 AI에게 전달</text><text x="66" y="205" text-anchor="middle" font-size="9.8" fill="#2f5bea">실행 중 메모·질문·예약</text><text x="66" y="219" text-anchor="middle" font-size="9.8" fill="#2f5bea">도구로 저장</text>
+<line x1="130" y1="56" x2="164" y2="70" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="132" y1="160" x2="164" y2="126" stroke="#2f5bea" stroke-width="1.6" marker-start="url(#a)" marker-end="url(#a)"/>
+<rect x="168" y="30" width="150" height="112" rx="9" fill="#111827"/>
+<text x="243" y="54" text-anchor="middle" font-weight="700" font-size="12" fill="#fff">AI (Qwen3.8-27B)</text>
+<text x="243" y="76" text-anchor="middle" fill="#d1d5db">① 계획 세우기</text><text x="243" y="93" text-anchor="middle" fill="#d1d5db">② 도구 고르기</text><text x="243" y="110" text-anchor="middle" fill="#d1d5db">③ 근거를 붙여 판단</text><text x="243" y="127" text-anchor="middle" fill="#d1d5db">④ 행동 정하기</text>
+<line x1="320" y1="64" x2="372" y2="64" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="372" y1="88" x2="322" y2="88" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="346" y="58" text-anchor="middle" font-size="9.5" fill="#6b7280">호출</text><text x="346" y="101" text-anchor="middle" font-size="9.5" fill="#6b7280">결과</text>
+<rect x="376" y="30" width="160" height="80" rx="9" fill="#eef2ff"/>
+<text x="456" y="52" text-anchor="middle" font-weight="700" font-size="12" fill="#2f5bea">도구 32개 (코드가 실행)</text>
+<text x="456" y="71" text-anchor="middle" fill="#374151">임금·만 나이·기한 계산,</text><text x="456" y="87" text-anchor="middle" fill="#374151">조문·판례, 기록 조회, 알림,</text><text x="456" y="102" text-anchor="middle" fill="#374151">메모·질문·예약</text>
+<line x1="212" y1="144" x2="212" y2="178" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="206" y="165" text-anchor="end" font-size="9.5" fill="#6b7280">판단</text>
+<line x1="276" y1="180" x2="276" y2="146" stroke="#d97706" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#o)"/>
+<text x="282" y="160" font-size="9.5" fill="#92400e">돌려보내</text><text x="282" y="172" font-size="9.5" fill="#92400e">다시 판단</text>
+<rect x="168" y="182" width="150" height="50" rx="9" fill="#fff7e6"/>
+<text x="243" y="202" text-anchor="middle" font-weight="700" font-size="12" fill="#92400e">검증 장치 (코드)</text><text x="243" y="219" text-anchor="middle" font-size="9.8" fill="#92400e">계산과 다름·없는 조항·근거 없음</text>
+<line x1="320" y1="207" x2="372" y2="207" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="376" y="168" width="160" height="64" rx="9" fill="#f4f5f7"/>
+<text x="456" y="190" text-anchor="middle" font-weight="700" font-size="12">행동</text><text x="456" y="208" text-anchor="middle" fill="#4b5563">결과 저장, 알림, 조언</text><text x="456" y="223" text-anchor="middle" fill="#4b5563">(모르면 묻고 확인 예약)</text>
+<rect x="562" y="22" width="154" height="70" rx="9" fill="#f4f5f7"/>
+<text x="639" y="44" text-anchor="middle" font-weight="700" font-size="11.5">법 기준표 (DB)</text><text x="639" y="62" text-anchor="middle" font-size="10" fill="#4b5563">법제처 API: 조문·고시·판례</text><text x="639" y="77" text-anchor="middle" font-size="10" fill="#4b5563">기준값: law_params.json</text>
+<rect x="562" y="110" width="154" height="84" rx="9" fill="#f4f5f7"/>
+<text x="639" y="132" text-anchor="middle" font-weight="700" font-size="11.5">사용자 기록 (SQLite)</text><text x="639" y="150" text-anchor="middle" font-size="10" fill="#4b5563">출퇴근, 계약서, 명세서,</text><text x="639" y="164" text-anchor="middle" font-size="10" fill="#4b5563">원본 파일 + SHA-256,</text><text x="639" y="178" text-anchor="middle" font-size="10" fill="#4b5563">점검 결과</text>
+<line x1="538" y1="62" x2="558" y2="58" stroke="#9ca3af" stroke-width="1.2"/><line x1="538" y1="96" x2="558" y2="130" stroke="#9ca3af" stroke-width="1.2"/>
+<line x1="538" y1="200" x2="558" y2="176" stroke="#9ca3af" stroke-width="1.2"/>
 </svg>
-<div class="cap">그림 1. 알바지킴이 에이전트 구조. 판단 반복은 최대 30회이고, 매 단계를 화면과 동작 기록에 남깁니다.</div>
+<div class="cap">그림 1. 알바지킴이 에이전트 구조. Memory는 실행을 시작할 때 목표와 함께 AI에게 보내고, 실행 중에는 AI가 메모·질문·예약 도구로 저장합니다. 판단 반복은 최대 30회입니다.</div>
 </div>
 
 <h3>Workflow 예: 그만둔 사업장의 퇴직 정산 점검</h3>
