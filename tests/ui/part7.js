@@ -76,6 +76,8 @@ async function watch(p, name, box, action, shot) {
   if (ask) await watch(p, '에이전트 질문에 답하기', '#askTrace', ()=>ask.click()); else ck('에이전트 질문에 답하기: 질문 카드', false);
   await p.click('#quitOpen'); await p.fill('#quitDateMain', new Date().toISOString().slice(0,10));
   await watch(p, '그만둔 날 저장(퇴직 정산 점검)', '#quitFormLive', ()=>p.click('#quitSave'), 'p7_quit.png');
+  // 그만둔 날 저장 뒤 이어지는 점검이 끝나야 누를 수 있다 (홈의 진행 칸은 한 번에 하나, 도는 중에 누르면 '다른 점검 중' 안내, part19)
+  await p.waitForFunction(()=>!document.querySelector('#v-home .live'), null, {timeout:120000}).catch(()=>{}); await p.waitForTimeout(800);
   await watch(p, '남은 임금 받았어요', '#quitLive', ()=>p.click('#paidYes'));
   ck('오류 없음', !p.errs.length && !p.bad.length, [...p.errs,...p.bad].join('|'));
   summary(); await b.close();

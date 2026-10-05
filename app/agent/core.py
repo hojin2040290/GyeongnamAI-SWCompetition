@@ -336,12 +336,18 @@ def run_open_check(session: Session, user_id: int, job_id: int, limit_hours: int
 
 
 # ---------- 사진 읽기 (비전 모델) ----------
+READ_KINDS = {"contract": ("근로계약서", "read_contract_image"), "payslip": ("급여명세서", "read_payslip_image"),
+              "posting": ("채용공고", "read_posting_image")}
+
+
 @queued("사진 읽기")
-def run_read_image(session: Session, user_id: int, job_id: int, evidence_id: int, kind: str) -> dict:
-    """계약서나 급여명세서 사진을 AI가 읽는다. 읽은 값은 화면에 채워 사용자가 확인한 뒤 저장한다."""
+def run_read_image(session: Session, user_id: int, job_id: int | None, evidence_id: int, kind: str) -> dict:
+    """계약서, 급여명세서, 채용공고(지원 전 확인, 일하는 곳 없음) 사진을 AI가 읽는다.
+    읽은 값은 화면에 채워 사용자가 확인한 뒤 저장한다."""
+    label, tool = READ_KINDS[kind]
     r = Run(session, user_id, job_id, f"read_{kind}")
-    r.log("입력", f"{'근로계약서' if kind == 'contract' else '급여명세서'} 사진")
-    res = r.call("read_contract_image" if kind == "contract" else "read_payslip_image", evidence_id)
+    r.log("입력", f"{label} 사진")
+    res = r.call(tool, evidence_id)
     summary = f"항목 {res.get('found', 0)}개를 읽었어요" if res.get("ai") else res.get("reason", "")
     return r.done(res, summary)
 

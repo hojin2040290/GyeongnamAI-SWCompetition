@@ -62,6 +62,11 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   await until(p, ()=>document.querySelectorAll('#seekPhotos .up-shot').length===1, null, 8000);
   ck('[지원 전 확인] 올린 공고 사진이 올리기 칸 아래에 바로 보임', await shown(p,'#seekPhotos')
      && (await p.$$eval('#seekPhotos img', es=>es.filter(i=>i.complete && i.naturalWidth>0).length))===1, await p.textContent('#seekPhotos'));
+  ck('[지원 전 확인] AI가 공고 사진을 읽는 동안 진행 칸과 도는 표시', await until(p, ()=>!!document.querySelector('#seekOcrLive .live')
+     || document.getElementById('seekOcrNote').classList.contains('wait'), null, 5000));
+  await idle(p);
+  ck('[지원 전 확인] 예시 공고도 AI가 읽어 칸을 채움 (미리 적어 둔 값이 아님)', (await p.textContent('#seekOcrNote')).includes('AI가 공고 사진 1장을 읽어')
+     && (await p.inputValue('#seekForm .f-name')).startsWith('테스트 답변입니다'), await p.textContent('#seekOcrNote'));
   await p.click('#seekRun'); await idle(p);
   ck('[안내] 지원 전 확인하면 4/5', await until(p, ()=>document.getElementById('guideChip').textContent.includes('4/5'), null, 10000), await chip(p));
   await p.click('#seekClose'); await p.waitForTimeout(500);
@@ -92,9 +97,18 @@ const tab = async (p, v) => { await p.click(`#tabs [data-v="${v}"]`); await p.wa
   ck('[안내] 구하는 중: 지원 전 확인 화면과 통합 미션', (await vis(q))==='obSeek' && (await q.textContent('#guideIntroList')).includes('지원 전 확인'), await vis(q));
   await q.click('#guideIntroSkip'); await q.waitForTimeout(600);
   ck('[안내] 안내 없이 쓸게요: 미션 버튼 없음', (await chip(q))==='숨김', await chip(q));
-  const ch2 = q.waitForEvent('filechooser', {timeout:3000}).then(()=>true).catch(()=>false);
-  await q.click('#seekUpload');
-  ck('[안내] 끈 뒤 업로드는 바로 내 파일 고르기', await ch2 && !(await shown(q,'#guideFiles')));
+  const ch2 = q.waitForEvent('filechooser', {timeout:3000}).catch(()=>null);
+  await q.click('#seekUpload'); const fc2 = await ch2;
+  ck('[안내] 끈 뒤 업로드는 바로 내 파일 고르기', !!fc2 && !(await shown(q,'#guideFiles')));
+  // 내 기기의 공고 사진: 원본 보관 → AI(가짜 AI)가 읽어 빈 칸을 채운다 (시험 도구가 한글 경로를 못 읽어 영문 이름으로 복사)
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const own = path.join(os.tmpdir(), 'p16_posting.png'); fs.copyFileSync(path.join(__dirname,'../../테스트자료/알바5개/4_채용공고.png'), own);
+  if(fc2) await fc2.setFiles(own);
+  await until(q, ()=>document.querySelectorAll('#seekPhotos .up-shot').length===1, null, 8000); await idle(q); await q.waitForTimeout(300);
+  ck('[지원 전 확인] 내 기기의 공고 사진을 AI가 읽어 빈 칸을 채움', (await q.inputValue('#seekForm .f-name')).startsWith('테스트 답변입니다')
+     && (await q.textContent('#seekOcrNote')).includes('칸을 채웠어요'), (await q.inputValue('#seekForm .f-name'))+' / '+(await q.textContent('#seekOcrNote')));
+  ck('[지원 전 확인] 다 읽은 뒤 에이전트 동작 보기', await q.isVisible('#seekOcrLive details.trace'));
+  await q.screenshot({path:'p16_seek_ocr.png'});
   // 상황을 고르기 전에 가입된 계정 (시험 계정, app/demo_db.py): 시작 화면에서는 안내를 띄우지 않고, 고른 상황의 미션으로 안내한다
   const r = await page(b);
   await r.goto(B+'/'); await r.waitForTimeout(500);

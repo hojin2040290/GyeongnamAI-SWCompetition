@@ -71,6 +71,11 @@ def clean_contract(item: str, value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(f"[^{rule['chars']}]", "", value or "")).strip()
 
 
+def clean_job(value: str) -> str:
+    """사업장 이름, 하는 일 칸에 쓸 수 없는 글자를 뺀다 (공고 사진에서 읽은 내용을 칸에 채우기 전에)."""
+    return re.sub(r"\s+", " ", re.sub(f"[^{JOB_CHARS}]", "", value or "")).strip()
+
+
 def for_screen() -> dict:
     """화면이 받아 쓰는 규칙."""
     return {"contract": CONTRACT, "job": {"chars": JOB_CHARS, "allowed": JOB_ALLOWED, "fields": JOB},

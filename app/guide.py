@@ -27,7 +27,8 @@ from app.models import CheckRun, GuideState, Job, Payslip, Report, User, WorkRec
 ROOT = Path(__file__).resolve().parent.parent
 MATERIAL = ROOT / "테스트자료"
 
-# 예시 자료의 조건 (가상카페 시험점, 시험 데이터 사례 3): 채용공고나 계약서 예시를 고르면 이 값으로 입력칸을 채운다
+# 예시 자료의 조건 (가상카페 시험점, 시험 데이터 사례 3): 일하는 곳 등록 화면의 '이 예시로 채우기'가 이 값으로 칸을 채운다
+# (사진 읽기가 아니다. 업로드한 사진은 예시 자료도 AI가 읽는다)
 CAFE = {"name": "가상카페 시험점", "industry": "음식점, 카페", "work_desc": "음료 제조, 계산", "wage": 11000,
         "start_date": "2026-08-04", "probation": "no",
         "schedule": {d: {"start": "15:00", "end": "18:30", "brk": "없음"} for d in ("화", "목")}}
@@ -35,7 +36,7 @@ FILLS = {"예시/채용공고_가상카페.png": CAFE, "알바5개/3_근로계�
 
 
 def _posting_fills() -> dict[str, dict]:
-    """데모 채용공고를 고르면 그 가게 조건으로 공고 입력칸을 채운다 (시험 데이터의 일하는 곳 값)."""
+    """가게마다 채용공고의 조건 (시험 데이터의 일하는 곳 값): 사례 계정의 '이 예시로 채우기'용."""
     from app.demo_db import CASES
     keys = ("name", "industry", "work_desc", "wage", "start_date", "probation", "schedule")
     return {f"알바5개/{c['key']}_채용공고.png": {k: c["job"][k] for k in keys} for c in CASES if c["key"] != "3"}
@@ -81,7 +82,7 @@ def demo_files() -> dict[str, list[tuple[str, str]]]:
 # (판정 열쇠, 할 일, 방법, 바로 가기 화면). 일하는 곳이 모두 그만둔 곳이면 출퇴근(punch)은 뺀다 (missions_of)
 MISSIONS: list[dict] = [
     {"key": "seek", "title": "지원 전 확인으로 공고 조건 점검하기", "go": "seek",
-     "how": "'지원 전 확인'(계약서 탭 맨 위)에서 채용공고 사진을 올리거나(예시 공고는 칸을 채워 줘요) 조건을 적고 '지원 전 확인하기'를 눌러요"},
+     "how": "'지원 전 확인'(계약서 탭 맨 위)에서 채용공고 사진을 올리면 AI가 읽어 칸을 채워요. 틀린 곳을 고치고 '지원 전 확인하기'를 눌러요"},
     {"key": "punch", "title": "출근하기와 퇴근하기 눌러 보기", "go": "home",
      "how": "홈의 '출근하기'를 누르고 조금 뒤 '퇴근하기'를 눌러요. '방금 출근했어요' 확인 창이 뜨면 확인을 눌러요"},
     {"key": "contract", "title": "계약서 사진으로 점검하기", "go": "check",
@@ -203,7 +204,7 @@ def _done_all(s: Session, user: User, st: GuideState) -> list[bool]:
 
 
 def _files(source: dict) -> dict:
-    return {inp: [{"name": n, "label": label, "url": f"/api/guide/files/{n}", "fill": FILLS.get(n)} for n, label in files]
+    return {inp: [{"name": n, "label": label, "url": f"/api/guide/files/{n}"} for n, label in files]
             for inp, files in source.items()}
 
 

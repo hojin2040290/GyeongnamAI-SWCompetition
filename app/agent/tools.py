@@ -263,6 +263,10 @@ def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = 
         """급여명세서 사진 읽기 (비전 모델)."""
         return _read_image(evidence_id, ocr.read_payslip)
 
+    def read_posting_image(evidence_id: int) -> dict:
+        """지원 전 확인의 채용공고 사진 읽기 (비전 모델). 읽은 값은 입력칸에 채워 사용자가 확인한다."""
+        return _read_image(evidence_id, ocr.read_posting)
+
     def _read_image(evidence_id: int, reader) -> dict:
         ev = session.get(Evidence, evidence_id)
         if not ev or ev.user_id != user_id:
@@ -380,6 +384,7 @@ def make_tools(session: Session, user_id: int, job_id: int | None, topic: str = 
         "set_reported": set_reported, "warning_message": warning_message, "search_posts": search_posts,
         "preserve_post": preserve_post, "pending_posts": pending_posts,
         "read_contract_image": read_contract_image, "read_payslip_image": read_payslip_image,
+        "read_posting_image": read_posting_image,
     }
 
 
