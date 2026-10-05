@@ -158,7 +158,7 @@ bench/               모델 후보 9개 비교 실험 (Qwen3.8-27B 선정 근거
 
 ## 외부 API (없으면 그 기능만 건너뜀)
 - 법제처 국가법령정보 (`LAW_OC`): `python -m app.law.fetch`로 근로 관련 법령 7개의 현행 조문과 별표, 최저임금 고시, 판례와 해석을 법 기준표에 저장한다. 매일 자동 점검 때 현행 판이 바뀐 법령만 다시 받는다. 최저임금 금액은 고시를 보고 `data/law_params.json`에 적는다.
-- 네이버 검색 (`NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`): 공개 게시물 검색
+- 네이버 검색 (`NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`): 공개 게시물 검색 (연결 코드만 있고, 키를 받지 못해 실제 호출은 확인하지 못함)
 - 게시물 화면 캡처 (선택): `pip install playwright && python -m playwright install chromium`
 
 ## 시연

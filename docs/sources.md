@@ -22,7 +22,7 @@
 | 이름 | 용도 | 출처 | 라이선스·조건 |
 |---|---|---|---|
 | 법제처 국가법령정보 공동활용 OPEN API | 현행 법령 조문과 별표, 최저임금 고시, 판례, 법령해석례, 고용노동부 해석, 노동위원회 결정문 | https://open.law.go.kr | 이용 신청 (등록한 IP에서만 호출) |
-| 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com | 이용 신청 |
+| 네이버 검색 API | 공개 게시물 검색 (연결 코드만 있음. API 키를 받지 못해 실제로 쓰지 못함) | https://developers.naver.com | 이용 신청 |
 | vLLM 0.30.0 (OpenAI 호환 API) | AI 모델 서버 (도구 호출, 사진 읽기) | https://docs.vllm.ai | Apache-2.0 |
 | Qwen3.8-27B (`Qwen/Qwen3.8-27B`) | 모든 AI 작업 (판단, 글쓰기, 도구 선택, 사진 읽기). 후보 9개 비교로 선정 (bench/) | https://huggingface.co/Qwen/Qwen3.8-27B | 모델 카드 확인 필요 |
 
