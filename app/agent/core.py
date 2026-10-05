@@ -489,7 +489,10 @@ OVERVIEW_GOAL = ("홈 화면의 종합 점검이에요. 먼저 get_all_facts로 
                  "담아 주세요. 근거 조항은 get_article로 확인한 조항(get_all_facts의 '관련 조항' 등)을, 사실은 get_all_facts의 "
                  "'사실'에서 가져오세요. 끝내기 전에 모든 정보를 조합해 이 사용자에게 지금 가장 도움이 될 조언을 give_advice로 "
                  "남겨 주세요. 판단에 필요한 정보가 기록에 없으면 추측하지 말고 warn으로 두고, 사용자에게 물어볼 것이 있으면 "
-                 "ask_user로 물어보세요 (이미 답을 기다리는 질문은 다시 묻지 않아요).")
+                 "ask_user로 물어보세요 (이미 답을 기다리는 질문은 다시 묻지 않아요). headline에는 홈 화면 맨 위에 크게 보일 "
+                 "이 사업장의 지금 상황 한 줄 결론을 써 주세요.")
+# 종합 점검의 finish: 판단 하나와 홈에 크게 보일 한 줄 결론 (없으면 화면은 코드가 센 문구를 쓴다)
+OVERVIEW_FINISH = {**JUDGE_ONE, "headline": text(40, "홈 화면 맨 위에 크게 보일 한 줄 결론")}
 
 
 def overview_needed(session: Session, job_id: int) -> bool:
@@ -518,12 +521,16 @@ def run_overview(session: Session, user_id: int, job_id: int, trigger: str = "us
     check.pending_tool = True
     out = None
     if client.available():
-        goal = Goal(OVERVIEW_GOAL, ["get_all_facts", *ADVICE_TOOLS], JUDGE_ONE, list(JUDGE_ONE), check=check,
+        goal = Goal(OVERVIEW_GOAL, ["get_all_facts", *ADVICE_TOOLS], OVERVIEW_FINISH, list(JUDGE_ONE), check=check,
                     review=lambda a: r.tools["review_one"](r.state.get("overview") or tgt, a))
         out = r.agent(goal, {})
     else:
         r.ai_tried, r.ai_error = True, AI_WAITING
     res = apply_one(session, r.state.get("overview") or tgt, out, r.ai_error)
+    res.pop("ai_headline", None)
+    # 한 줄 결론은 검증 장치를 거친 결과가 AI가 낸 결과와 같을 때만 쓴다 (결과가 바뀌었으면 결론이 맞지 않는다)
+    if res.get("ai_reason") and out and res["status"] == out.get("status") and str(out.get("headline", "")).strip():
+        res["ai_headline"] = for_user(scrub(str(out["headline"]).strip()))
     # 에이전트가 이번 점검에서 남긴 메모, 질문, 예약까지 반영한 값 (끝난 직후 '기록이 바뀌었어요'가 되지 않게)
     res["basis_key"] = case.data_key(session, session.get(Job, job_id))
     log_judgments(r, [{**res, "law": "종합 점검"}])
