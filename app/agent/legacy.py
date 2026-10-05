@@ -12,7 +12,7 @@ from app.agent.rewrite import for_user
 from app.agent.safety import internal_names
 from app.models import AgentQuestion, CaseNote, CheckRun, GuardPost, Notification
 
-AI_KEYS = {"ai_reason"}  # 점검 결과 JSON 안의 AI 글 칸
+AI_KEYS = {"ai_reason", "ai_headline"}  # 점검 결과 JSON 안의 AI 글 칸
 
 
 def _walk(v):

@@ -771,7 +771,7 @@ async function loadOverview(){
   if(running) $('#ovLive').innerHTML='';  // 다른 일하는 곳의 진행 칸 (그 점검은 서버에서 그대로 끝난다)
   const v=o.overview;
   ovStatus(v?v.status:'none', v?LABEL[v.status]:'아직 안 함');
-  ovSummary(o.parts);
+  ovSummary(o.parts, v);
   const quit=curJob()?.status==='quit';  // 그만둔 곳: 퇴직 정산 줄은 위 #quitPanel이 버튼과 함께 보여 준다 (두 번 나오지 않게)
   $('#ovParts').innerHTML=o.parts.filter(p=>!(quit && p.name==='퇴직 후 임금 정산')).map(ovRowHTML).join('');
   $('#ovAi').innerHTML=v?aiJudgeHTML(v):o.ai?'':`<div class="ai-judge"><div class="ai-judge-head"><b>AI 에이전트 판단</b></div><p><span class="wait-note">AI 응답 대기 중</span> AI가 연결되면 판단해요.</p></div>`;
@@ -805,12 +805,12 @@ async function runOverview(){
 $('#ovRun').onclick=()=>{ if(!waitOthers()) runOverview(); };
 // 종합 점검 머리줄: 결과 색의 점과 결과 이름 (판단 중이면 도는 표시)
 function ovStatus(status, text){ $('#ovHead').className='ov-head '+status; $('#ovTag').className='tag '+status; $('#ovTag').textContent=text; }
-// 한 줄 결론과 남은 항목: 코드가 항목의 결과를 센다 (AI 판단 글은 아래 'AI 에이전트 판단 보기'에)
-function ovSummary(parts){
+// 한 줄 결론: AI 에이전트가 쓴 결론 (종합 점검의 headline). AI 판단이 없거나 대기면 코드가 항목의 결과를 센다
+// 남은 항목 줄은 코드가 센다 (확인할 것과 아직 안 한 점검을 나눠 적는다)
+function ovSummary(parts, v){
   const of=s=>parts.filter(p=>p.status===s), bad=of('bad'), warn=[...of('warn'),...of('pending')], todo=parts.filter(p=>p.todo);
-  const n=warn.length+todo.length;
-  $('#ovHeadline').textContent=bad.length?`위반이 의심되는 것이 ${bad.length}개 있어요`
-    :n?`확인할 것이 ${n}개 있어요`:'지금은 확인할 것이 없어요';
+  $('#ovHeadline').textContent=v?.ai_headline || (bad.length?`위반이 의심되는 것이 ${bad.length}개 있어요`
+    :warn.length?`확인할 것이 ${warn.length}개 있어요`:todo.length?`아직 안 한 점검이 ${todo.length}개 있어요`:'지금은 확인할 것이 없어요');
   const names=list=>list.map(p=>p.name).join(', ');
   $('#ovSummary').textContent=[bad.length&&`위반 의심: ${names(bad)}`, warn.length&&`확인 필요: ${names(warn)}`,
     todo.length&&`아직 안 한 점검: ${names(todo)}`].filter(Boolean).join(' · ');

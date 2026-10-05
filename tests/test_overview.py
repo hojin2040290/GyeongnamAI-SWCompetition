@@ -41,7 +41,7 @@ def env():
         yield a, j
 
 
-def good_policy(status: str = "warn"):
+def good_policy(status: str = "warn", headline: str = ""):
     """get_all_facts → get_article → give_advice → finish (종합 판단)."""
     def policy(goal, done, tools):
         names = [n for n, _ in done]
@@ -53,7 +53,7 @@ def good_policy(status: str = "warn"):
         if "give_advice" not in names:
             return reply([("give_advice", {"advice": said("모든 기록을 보면 근무 기록을 꾸준히 남기세요"), "next_tab": "pay"})])
         return reply([("finish", {"status": status, "law": view["관련 조항"][0], "fact": view["사실"][:200],
-                                  "reason": said("종합 판단 이유")})])
+                                  "reason": said("종합 판단 이유"), **({"headline": headline} if headline else {})})])
     return policy
 
 
@@ -199,3 +199,19 @@ def test_long_advice_is_sent_back_and_saved_whole(env, monkeypatch):
     errors = [json.dumps(x, ensure_ascii=False) for p in agent.payloads for x in results(p, "give_advice")]
     assert any("자 안으로 줄여" in e for e in errors)
     assert a.get(f"/api/jobs/{j}/overview").json()["advice"]["text"] == short_advice
+
+
+def test_overview_headline_is_written_by_ai(env, monkeypatch):
+    """홈 맨 위의 한 줄 결론은 AI 에이전트가 쓴다 (코드가 센 '확인할 것이 2개 있어요' 같은 정해진 문구가 아니게).
+    검증 장치가 AI 결과를 바꾸면 결론이 맞지 않으므로 쓰지 않고, 화면은 코드가 센 문구로 돌아간다."""
+    a, j = env
+    line = said("아직 기록이 없어 계약서부터")[:40]
+    use(monkeypatch, good_policy("warn", line))
+    ov = a.post(f"/api/jobs/{j}/agent/overview").json()["overview"]
+    assert ov["status"] == "warn" and ov["ai_headline"] == line
+    assert a.get(f"/api/jobs/{j}/overview").json()["overview"]["ai_headline"] == line
+    # 코드가 위반 의심으로 본 기록이 있는데 AI가 정상이라 하면 검증 장치가 결과를 바꾼다: 결론은 남기지 않는다
+    monkeypatch.setattr(overview, "parts", lambda s, uid, jid: [overview._part("2026-08 급여", "bad", "124,872원 적게 받음", "pay")])
+    use(monkeypatch, good_policy("ok", said("문제 없어요")[:40]))
+    ov = a.post(f"/api/jobs/{j}/agent/overview").json()["overview"]
+    assert ov["status"] != "ok" and "ai_headline" not in ov

@@ -164,6 +164,8 @@ def _finish(scene: Scene) -> dict:
         fact = _fit_fact(next((f for f in facts if f), "기록 확인"), spec.get("fact", {}).get("maxLength", 300))
         out.update(status="warn", law=laws[0] if laws else "", fact=fact,
                    reason=scene.text("판단 이유"))
+    if "headline" in spec:  # 종합 점검: 홈에 크게 보일 한 줄 결론
+        out["headline"] = scene.text("한 줄 결론", spec["headline"].get("maxLength", TEXT_MAX))
     if "note" in spec:
         out["note"] = scene.text("한 일 요약")
     if "extra_questions" in spec:
