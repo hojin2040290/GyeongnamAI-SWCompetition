@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 
 from app import notices
 from app.agent import core, legacy
+from app.agent.queue import QUEUE
 from app.calc.timeutil import now_kst
 from app.config import AI_RETRY_MIN, AI_RETRY_PER_DAY, LAW_OC, OPEN_RECORD_ALERT_HOURS, SCHEDULE_HOUR, TIMEZONE
 from app.db import engine
@@ -124,7 +125,7 @@ def retry_waiting() -> dict:
     done: list[str] = []
     with Session(engine) as s:
         try:  # 예전 AI 글 속 서버 내부 이름(warn, quit_check 등)을 LLM이 한국어로 고쳐 쓰게 한다
-            if fixed := legacy.rename_internal(s):
+            if fixed := QUEUE.run(None, "예전 AI 글 고쳐 쓰기", legacy.rename_internal, s):  # LLM을 부르므로 대기줄에 선다
                 done.append(f"예전 AI 글 {fixed}칸 고쳐 씀")
         except Exception:  # noqa: BLE001 (정리가 실패해도 다시 맡기기는 계속)
             log.exception("예전 AI 글 고쳐 쓰기 중 오류")

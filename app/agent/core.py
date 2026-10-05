@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from app import notices
 from app.agent import case
 from app.agent.loop import AI_WAITING, Goal, Tool, run_agent
+from app.agent.queue import queued
 from app.agent.rewrite import for_user
 from app.agent.safety import scrub
 from app.calc import pay as paycalc
@@ -195,6 +196,7 @@ CONTRACT_GOAL = ("이 사업장의 기본 정보, 계약서 내용, 실제 출�
                  "finish의 judgments에 담아 주세요. 위반 의심이 있으면 사용자에게 알림을 보내 주세요.")
 
 
+@queued("계약서 점검")
 def run_contract_check(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "contract_check", trigger)
     r.log("입력", "기본 정보, 계약서, 실제 출퇴근 기록을 법 기준표와 대조")
@@ -208,6 +210,7 @@ def run_contract_check(session: Session, user_id: int, job_id: int, trigger: str
     return r.done({"check_id": check_id, "items": items}, _summary(items))
 
 
+@queued("퇴근 점검")
 def run_shift_check(session: Session, user_id: int, job_id: int, record_id: int) -> dict:
     """퇴근 버튼을 누른 순간: 그날 기록으로 쉬는 시간, 청소년 근로시간 한도, 야간근로를 바로 점검."""
     r = Run(session, user_id, job_id, "shift_check")
@@ -228,6 +231,7 @@ def run_shift_check(session: Session, user_id: int, job_id: int, record_id: int)
     return r.done({"day": day, "items": items}, _summary(items))
 
 
+@queued("지원 전 확인")
 def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
     r = Run(session, user_id, None, "seek_check")
     r.log("입력", f"지원하려는 곳: {data.get('name') or '이름 없음'}")
@@ -245,6 +249,7 @@ def run_seek_check(session: Session, user_id: int, data: dict) -> dict:
 
 
 # ---------- 급여, 퇴직 ----------
+@queued("급여 점검")
 def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "payday", trigger, topic=notices.topic_of("payday", month))
     r.state["resume"] = {"month": month}  # 질문에 답하면 같은 달로 다시 시작
@@ -285,6 +290,7 @@ def run_payday(session: Session, user_id: int, job_id: int, month: str, trigger:
     return r.done({"expected": pay["expected"], "paid": pay["paid"], "compare": cmp}, cmp["text"])
 
 
+@queued("퇴직 정산 점검")
 def run_quit_check(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict | None:
     r = Run(session, user_id, job_id, "quit_check", trigger)
     if not r.tools["settlement"]():
@@ -330,6 +336,7 @@ def run_open_check(session: Session, user_id: int, job_id: int, limit_hours: int
 
 
 # ---------- 사진 읽기 (비전 모델) ----------
+@queued("사진 읽기")
 def run_read_image(session: Session, user_id: int, job_id: int, evidence_id: int, kind: str) -> dict:
     """계약서나 급여명세서 사진을 AI가 읽는다. 읽은 값은 화면에 채워 사용자가 확인한 뒤 저장한다."""
     r = Run(session, user_id, job_id, f"read_{kind}")
@@ -340,6 +347,7 @@ def run_read_image(session: Session, user_id: int, job_id: int, evidence_id: int
 
 
 # ---------- 상담 ----------
+@queued("상담 사전 자료")
 def run_report(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "report", trigger)
     r.log("입력", "상담 사전 자료 만들기")
@@ -362,6 +370,7 @@ def run_report(session: Session, user_id: int, job_id: int, trigger: str = "user
 
 
 # ---------- 신고 후 보호 ----------
+@queued("보복 금지 안내 문구")
 def run_guard_toggle(session: Session, user_id: int, job_id: int, on: bool) -> dict:
     r = Run(session, user_id, job_id, "guard_on" if on else "guard_off")
     r.log("입력", "신고했어요 켬" if on else "신고했어요 끔")
@@ -392,6 +401,7 @@ POST_GOAL = ("판별 대기 게시물을 list_posts로 보고, 신고한 근로�
 POST_TOOLS = ["get_profile", "list_posts", "set_post_status", "get_article", "notify"]
 
 
+@queued("게시물 검색")
 def run_guard_search(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
     r = Run(session, user_id, job_id, "guard_search", trigger)
     no_msg = not r.tools["get_job"]().guard_ai_message
@@ -411,6 +421,7 @@ def run_guard_search(session: Session, user_id: int, job_id: int, trigger: str =
     return r.done({**res, "classify": judged}, res.get("reason") if res.get("skipped") else f"새 게시물 {res['added']}건")
 
 
+@queued("게시물 판별")
 def run_guard_review(session: Session, user_id: int, job_id: int, trigger: str = "user", r: Run | None = None) -> dict:
     """판별 대기 게시물 판별 (게시물을 보존한 뒤, 또는 AI 응답 대기 중이던 일을 다시 맡길 때).
     AI가 쓴 안내 문구가 아직 없으면 함께 맡긴다."""
@@ -435,6 +446,7 @@ def _posts_result(r: Run) -> dict:
     return out
 
 
+@queued("게시물 보존")
 def run_guard_preserve(session: Session, user_id: int, job_id: int, url: str, title: str = "") -> dict:
     r = Run(session, user_id, job_id, "guard_preserve")
     r.log("입력", f"게시물 주소 {url[:120]}")
@@ -448,6 +460,7 @@ ADVICE_TOOLS = ["get_profile", "get_contract", "get_saved_checks", "calc_work_da
                 "list_posts", "get_answers", "counsel_for_age", "get_article", "find_refs"]
 
 
+@queued("종합 조언")
 def run_advice(session: Session, user_id: int, job_id: int, trigger: str = "schedule") -> dict:
     """사용자에게서 얻은 기록과 에이전트가 만든 기록을 종합해 조언한다 (매일 한 번).
     지난 종합 조언 뒤로 달라진 기록이 없으면 AI를 부르지 않는다."""
@@ -487,6 +500,7 @@ def overview_needed(session: Session, job_id: int) -> bool:
     return not last or last.get("status") == engine.PENDING or last.get("basis_key") != case.data_key(session, job)
 
 
+@queued("종합 점검")
 def run_overview(session: Session, user_id: int, job_id: int, trigger: str = "user") -> dict:
     """사업장 하나의 모든 기록을 종합해 판단하고 조언한다. 숫자와 사실은 코드가 정리하고(get_all_facts), 판단과 조언은 AI가 한다.
     AI가 없으면 코드가 정리한 사실만 저장하고 판단은 'AI 응답 대기 중'으로 둔다."""
@@ -519,6 +533,7 @@ def run_overview(session: Session, user_id: int, job_id: int, trigger: str = "us
 
 
 # ---------- 매일 자동 점검 ----------
+@queued("매일 자동 점검")
 def run_daily(session: Session, user_id: int, job_id: int) -> dict:
     """매일 정해진 시각: 오늘 이 사업장에 무엇을 확인하고 알릴지 AI가 정한다. AI가 없으면 정해 둔 조건으로 실행한다."""
     r = Run(session, user_id, job_id, "daily", "schedule")
@@ -596,6 +611,7 @@ def daily_notice(session: Session, user_id: int, job_id: int, ran: list[str], ad
     return t["notify"](f"오늘 자동 점검 ({today.month}월 {today.day}일)", " ".join(lines))
 
 
+@queued("다시 점검")
 def run_again(session: Session, user_id: int, job_id: int, kind: str, month: str, trigger: str) -> dict:
     """점검 하나를 다시 시작한다 (질문에 답했을 때, 예약한 확인의 때가 됐을 때)."""
     if kind == "payday":
@@ -615,11 +631,13 @@ def run_again(session: Session, user_id: int, job_id: int, kind: str, month: str
     return run_contract_check(session, user_id, job_id, trigger)
 
 
+@queued("답을 받아 다시 판단")
 def run_answer(session: Session, user_id: int, job_id: int, event: str, context: dict) -> dict:
     """답을 받아 질문했던 점검을 다시 시작한다 (퇴근 점검은 그 주만 보므로 계약서 점검으로 이어 간다)."""
     return run_again(session, user_id, job_id, RESUME.get(event, "contract_check"), context.get("month", ""), "answer")
 
 
+@queued("예약한 확인", user_of=lambda args: args[1].user_id)
 def run_followup(session: Session, task) -> dict:
     """에이전트가 예약한 확인을 실행한다. 예약한 이유를 이번 실행의 상황에 넘긴다."""
     token = FOLLOWUP_NOTE.set(task.note)
