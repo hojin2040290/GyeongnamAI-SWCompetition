@@ -7,36 +7,12 @@
 ## 0. 테스트하는 법
 
 ### 시험 데이터로 서버 켜기
-프로젝트 폴더에서 아래 명령을 그대로 실행합니다. `.env`를 고치지 않아도 됩니다 (명령 앞의 `TEST_DATA=true`가 먼저 적용).
-
-```bash
-( P=$(mdfind -onlyin ~ 'kMDItemFSName == "GyeongnamAI-SWCompetition" && kMDItemContentType == "public.folder"' | head -1); [ -d "$P" ] || P=$(find ~ -maxdepth 4 -type d -name GyeongnamAI-SWCompetition 2>/dev/null | head -1); cd "$P" || exit 1; TEST_DATA=true .venv/bin/uvicorn app.main:app --port 8080 & UV=$!; trap "kill $UV 2>/dev/null; exit" INT TERM; trap "kill $UV 2>/dev/null" EXIT; sleep 2; ~/tools/cloudflared tunnel --protocol http2 --url http://127.0.0.1:8080 )
-```
-
-Windows(PowerShell)에서는 프로젝트 폴더에서 `$env:TEST_DATA="true"; .venv\Scripts\python.exe -m uvicorn app.main:app --port 8080`로 켭니다 (또는 `.env`에 `TEST_DATA=true`).
-
-- 시험 데이터(`data/test`)가 없으면 서버가 켜지면서 만듭니다. 따로 만드는 명령은 필요 없습니다.
-- 로그에 `저장 위치: 기록 …/data/test/app.db`와 `시험 데이터로 실행 중이에요`가 보이면 시험 데이터입니다.
-- 로그인: `test@example.com`, `test2@example.com` ~ `test5@example.com` / 모두 `test1234` (홍길동, 2009-05-20생, 만 17세, 다섯 계정 내용 같음)
-- 오른쪽 위 사업장 이름을 눌러 알바 5개를 바꿔 가며 봅니다.
-- 평소 데이터(`data/app.db`)는 건드리지 않습니다. 평소 데이터로 켜려면 명령의 `TEST_DATA=true`를 `TEST_DATA=false`로 바꿉니다.
-
-### 처음 상태로 되돌리기
-시험하며 점검 결과, 버튼 입력, 출퇴근 기록, AI 메모가 쌓였을 때 (예: 프롬프트를 고친 뒤 처음 상태에서 다시 판단해 볼 때). 서버를 끄고 실행합니다.
-
-```bash
-cd ~/Documents/GyeongnamAI-SWCompetition && .venv/bin/python -m app.demo_db --force
-```
-Windows: 프로젝트 폴더에서 `.venv\Scripts\python.exe -m app.demo_db --force`
-
-`data/test`만 지우고 다시 만들며, 알바마다 만든 내용, 코드가 계산한 금액, 기대 결과를 터미널에 출력합니다.
-
-### 법 기준표
-시험 데이터를 만들 때 평소 DB(`data/app.db`)의 법 기준표를 읽기만 해서 복사합니다. 출력 첫 줄의 `법 기준표: 평소 DB에서 N건 복사`를 확인합니다.
-- 법 기준표가 없으면 에이전트가 조문을 확인하지 못합니다 (`get_article`이 '법 기준표 미구축').
-- 법 기준표 복사 기능 전에 만든 시험 데이터에는 법 기준표가 없으니 `--force`로 다시 만듭니다.
-- '복사하지 못했어요'가 나오면 평소 DB에도 없는 것이니, 시험 DB에 직접 만듭니다 (`.env`에 `LAW_OC` 필요):
-  `cd ~/Documents/GyeongnamAI-SWCompetition && TEST_DATA=true .venv/bin/python -m app.law.fetch`
+서버 켜는 명령 앞에 `TEST_DATA=true`를 붙이거나 `.env`에 넣습니다 (`TEST_DATA=true .venv/bin/uvicorn app.main:app --port 8080`, Windows는 `$env:TEST_DATA="true"; .venv\Scripts\python.exe -m uvicorn app.main:app --port 8080`).
+- 시험 데이터(`data/test`)가 없으면 서버가 켜지면서 만듭니다. 평소 데이터(`data/app.db`)는 건드리지 않습니다.
+- 로그에 `저장 위치: 기록 …/data/test/app.db`와 `시험 데이터로 실행 중이에요`가 보이면 됩니다.
+- 로그인: `test@example.com`, `test2@example.com` ~ `test5@example.com` / `test1234` (홍길동, 2009-05-20생, 만 17세, 다섯 계정 내용 같음). 오른쪽 위 사업장 이름을 눌러 알바 5개를 바꿔 봅니다.
+- 처음 상태로 되돌리기 (서버를 끄고): `.venv/bin/python -m app.demo_db --force`. 알바마다 만든 내용, 코드가 계산한 금액, 기대 결과를 출력합니다.
+- 법 기준표는 평소 DB에서 복사합니다. 출력 첫 줄이 `법 기준표: 평소 DB에서 N건 복사`가 아니면 실행가이드 3-1절을 봅니다.
 
 ### 시험 데이터에 들어 있는 것
 | 알바 | 시험할 경우 | 넣어 둔 기록과 사진 |

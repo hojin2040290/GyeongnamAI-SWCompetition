@@ -1,62 +1,78 @@
 # 출처와 AI 활용 기록 (별지2 작성용)
 
-## 법 기준값 출처 (data/law_params.json)
-- 고용노동부 공식 블로그, 알바 구하기 전 꼭 알아야 할 노동법 10문10답, 2025.12.4. https://blog.naver.com/molab_suda/224098273869
-- 국가법령정보센터 근로기준법 제104조 제2항, 제40조
-- 최저임금법 제5조 제2항 (수습 감액 요건)
-- 근로기준법 제36조 (금품 청산 14일), 상시 5인 미만 가산수당 미적용 (근로기준법 시행령 별표1)
+## 법 기준값 (data/law_params.json)
+판단에 쓰는 기준값은 코드나 프롬프트에 적지 않고 이 파일에 출처와 함께 둔다. 조문 원문은 법제처 API로 받아 법 기준표(DB)에 저장한다.
 
-## 외부 API
-| 이름 | 용도 | 출처 | 비고 |
-|---|---|---|---|
-| 법제처 국가법령정보 공동활용 OPEN API | 현행법령(시행일) 조문과 별표, 최저임금 고시(행정규칙), 판례, 법제처 법령해석례, 고용노동부 법령해석, 노동위원회 결정문 | https://open.law.go.kr | 이용 신청 필요 (등록한 IP에서만 호출) |
-| 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com | 이용 신청 필요 |
-| vLLM OpenAI 호환 API (/v1/chat/completions), vLLM 0.30.0 | 조항 판단, 도구 호출(tool calling), 계약서와 급여명세서 사진 읽기 | https://docs.vllm.ai | Apache 2.0 |
-| AI 모델: Qwen3.8-27B (`Qwen/Qwen3.8-27B`, 55.6GB) | 위 모든 AI 작업. 후보 9개 비교(bench/)로 선정. 실행: `deploy/start_vllm.sh` | https://huggingface.co/Qwen/Qwen3.8-27B, https://github.com/QwenLM/Qwen3.8 | 모델 카드의 라이선스 (확인 후 기록) |
-
-## 라이브러리
-| 이름 | 용도 | 라이선스 |
+| 기준 | 출처 | 원문 대조 |
 |---|---|---|
-| FastAPI | 웹 서버와 API | MIT |
-| Uvicorn | 웹 서버 실행 | BSD-3-Clause |
-| SQLModel | SQLite 테이블과 조회 | MIT |
-| itsdangerous | 로그인 쿠키 서명 | BSD-3-Clause |
-| python-multipart | 파일 올리기 | Apache-2.0 |
-| Jinja2 | 화면 틀 | BSD-3-Clause |
-| APScheduler (4 미만) | 매일 자동 점검, AI 대기 작업 재시도 | MIT |
-| httpx | 법제처, 네이버, vLLM 호출 | BSD-3-Clause |
-| pytest | 테스트 | MIT |
-| Playwright (선택) | 게시물 화면 캡처 보존, 화면 회귀 시험(tests/ui, Node.js 판), 아이폰·갤럭시 크기 화면 캡처(tests/ui/device_shots.js) | Apache-2.0 |
+| 최저임금 (2026년) | 고용노동부 공식 블로그 「알바 구하기 전 꼭 알아야 할 노동법 10문10답」(2025.12.4, https://blog.naver.com/molab_suda/224098273869) | 필요 (최저임금 고시 원문) |
+| 수습 감액 | 최저임금법 제5조 제2항, 같은 블로그 | 완료 |
+| 연소자 근로 | 같은 블로그 Q5, 청소년 근로권익 안내 | 필요 |
+| 취직인허증 (만 13~14세) | 고용노동부 노동포털 아르바이트 피해 구제방법 | 완료 |
+| 청소년 정의와 고용 금지 | 청소년 보호법 제2조, 제29조 | 필요 |
+| 휴게시간 | 같은 블로그 Q5 | 완료 |
+| 주휴수당 | 같은 블로그 Q4 | 필요 (계산식 원문) |
+| 가산수당 | 근로기준법 제56조, 5인 미만 적용 제외(근로기준법 시행령 별표1) | 완료 |
+| 근로조건 서면 명시 | 같은 블로그 Q3 | 완료 |
+| 퇴직 후 금품 청산 | 근로기준법 제36조 | 완료 |
+| 임금 청구 | 같은 블로그 Q7 | 완료 |
+| 보복 금지 | 국가법령정보센터 조문 | 완료 |
 
-설치한 버전은 `pip freeze`로 확인해 제출 전에 이 표에 옮긴다.
+## 외부 API와 AI 모델
+| 이름 | 용도 | 출처 | 라이선스·조건 |
+|---|---|---|---|
+| 법제처 국가법령정보 공동활용 OPEN API | 현행 법령 조문과 별표, 최저임금 고시, 판례, 법령해석례, 고용노동부 해석, 노동위원회 결정문 | https://open.law.go.kr | 이용 신청 (등록한 IP에서만 호출) |
+| 네이버 검색 API | 공개 게시물 검색 | https://developers.naver.com | 이용 신청 |
+| vLLM 0.30.0 (OpenAI 호환 API) | AI 모델 서버 (도구 호출, 사진 읽기) | https://docs.vllm.ai | Apache-2.0 |
+| Qwen3.8-27B (`Qwen/Qwen3.8-27B`) | 모든 AI 작업 (판단, 글쓰기, 도구 선택, 사진 읽기). 후보 9개 비교로 선정 (bench/) | https://huggingface.co/Qwen/Qwen3.8-27B | 모델 카드 확인 필요 |
 
-## 도구
+## 라이브러리 (개발·시험 환경의 버전)
+| 이름 | 버전 | 용도 | 라이선스 |
+|---|---|---|---|
+| FastAPI | 0.141.1 | 웹 서버와 API | MIT |
+| Uvicorn | 0.54.0 | 웹 서버 실행 | BSD-3-Clause |
+| SQLModel | 0.0.47 | SQLite 테이블과 조회 | MIT |
+| itsdangerous | 2.2.0 | 로그인 쿠키 서명 | BSD-3-Clause |
+| python-multipart | 0.0.32 | 파일 올리기 | Apache-2.0 |
+| Jinja2 | 3.1.6 | 화면 틀 | BSD-3-Clause |
+| APScheduler | 3.11.3 | 매일 자동 점검, 대기 작업 다시 맡기기 | MIT |
+| httpx | 0.28.1 | 법제처, 네이버, vLLM 호출 | BSD-3-Clause |
+| pytest | 9.1.1 | 테스트 | MIT |
+| Playwright (선택) | 1.56.1 (화면 시험) | 게시물 화면 캡처, 화면 시험, 기기 크기 캡처 | Apache-2.0 |
+
+## 그 밖의 자료
 | 이름 | 용도 | 출처 | 라이선스 |
 |---|---|---|---|
-| cloudflared (Cloudflare Tunnel) | 시연 때 내 컴퓨터의 서버를 https 주소로 외부에 열기 | https://github.com/cloudflare/cloudflared | Apache-2.0 |
+| cloudflared | 시연 때 내 컴퓨터의 서버를 https 주소로 열기 | https://github.com/cloudflare/cloudflared | Apache-2.0 |
+| IBM Plex Sans KR | 화면 글꼴 (Google Fonts). 기기 크기 캡처 도구도 같은 글꼴을 받아 씀, 저장소에는 없음 | https://fonts.google.com/specimen/IBM+Plex+Sans+KR | SIL OFL 1.1 |
+| 테스트 자료 (`테스트자료/`) | 가상 인물과 가게로 직접 만든 계약서, 명세서, 입금 내역, 메시지 캡처, 채용공고. 알바 사례 사진은 `tests/ui/make_case_images.js`가 시험 데이터의 계산 값으로 그림 | 직접 제작 | 실존 인물·가게 아님 |
 
-## 글꼴
-IBM Plex Sans KR (Google Fonts, SIL Open Font License). 화면 캡처 도구(tests/ui/fetch_fonts.sh)도 같은 글꼴을 받아 쓴다 (저장소에는 올리지 않음)
-
-## 테스트 자료
-`테스트자료/`의 계약서, 명세서, 입금 내역, 메시지 캡처, 채용공고 그림은 가상 인물과 가게로 직접 만든 것이다 (알바 사례 사진은 `tests/ui/make_case_images.js`로 시험 데이터의 계산 값과 같게 그림. `예시/채용공고_가상카페.png`는 가상카페 사례 조건으로 같은 방식의 HTML을 캡처해 만듦, 스크립트는 저장소에 없음). 실존 인물이나 가게가 아니다.
+## 모델 선정 실험 (bench/)
+| 이름 | 용도 | 출처 | 라이선스 |
+|---|---|---|---|
+| 후보 모델 9개 (`bench/models.json`) | 같은 시험으로 속도, 도구 호출, 판단, 사진 읽기, 한국어 비교 | Hugging Face 각 모델 페이지 | 모델마다 다름 (EXAONE은 비상업용) |
+| huggingface_hub | 후보 모델 확인과 받기 | https://github.com/huggingface/huggingface_hub | Apache-2.0 |
+| vLLM Recipes, 도구 호출 문서 (v0.30.0) | 모델별 실행 옵션, 도구·생각 파서, 대화 틀 | https://github.com/vllm-project/recipes, https://github.com/vllm-project/vllm | Apache-2.0 |
+| 모델 공식 문서 (EXAONE 4.5, Qwen3-VL, Qwen3.8, GLM) | 권장 생성 설정, 생각 끄기 | 각 모델 회사 GitHub | 참고만 (코드 복사 없음) |
 
 ## AI 활용
-| 도구 | 사용한 곳 | 직접 수정한 부분 |
-|---|---|---|
-| Claude (claude.ai, Claude Code) | 초기 코드 구조, 화면 초안, 테스트 작성, 에이전트 반복 구조(계획, 검증 결과로 다시 판단, 질문, 후속 일정, 메모와 조언), 입력 검사와 프롬프트 인젝션 대비, 가짜 AI(시험용), 증거 저장 위치 점검, 실행 가이드 작성, 홈 화면 미니멀 디자인 시안 3종(Claude 디자인 캔버스)과 적용, 처음 쓰는 사람 체험 안내, 데모 모드, 기기 크기 캡처 도구 | 개발하면서 기록 (직접 정한 요구사항과 고친 부분을 적는다) |
+| 도구 | 사용한 곳 |
+|---|---|
+| Claude (claude.ai, Claude Code) | 코드 작성 (서버, 에이전트 반복, 도구, 검증 장치, 화면), 테스트와 화면 시험, 프롬프트 인젝션 대비, 가짜 AI, 문서 작성, 홈 화면 디자인 시안 3종과 적용 |
 
-## 제출 전에 채울 것
-- [ ] 쓴 AI 모델 이름, 크기, 라이선스 (vLLM에 띄운 모델)
-- [ ] `pip freeze` 결과의 라이브러리 버전
-- [ ] AI 활용 표의 '직접 수정한 부분' (요구사항을 정하고 결과를 확인해 고친 내용: 예: 월급날 말일, 쉬는 시간 직접 입력, 이메일 검사 누락 지적, 로그인 상태의 단계 건너뜀 발견)
-- [ ] law_params.json의 기준값 출처를 원문과 다시 대조 (verified=false 항목)
+**직접 정하고 고친 부분**: 요구사항과 판단 규칙은 직접 정했다. AI가 만든 결과는 화면을 직접 눌러 확인하고, 틀린 점을 지적해 고치게 했다. 주요 사례:
 
-## 모델 벤치마크 (bench/, 앱 모델 선정에 씀)
-| 이름 | 용도 | 출처 | 라이선스 |
-|---|---|---|---|
-| huggingface_hub | 벤치마크 후보 모델 확인과 받기 (GPU 서버의 vLLM 가상환경에 이미 있음) | https://github.com/huggingface/huggingface_hub | Apache 2.0 |
-| 후보 모델 9개 (`bench/models.json`) | 같은 시험으로 속도, 도구 호출, 판단, 사진 읽기, 한국어 비교 | Hugging Face 각 모델 페이지 | 모델마다 다름 (벤치마크 결과의 사전 확인에 라이선스를 남김. EXAONE은 비상업용) |
-| vLLM Recipes (모델별 실행 방법) | 후보 모델의 실행 옵션, 도구·생각 파서, 생각 끄기 방법, 최소 버전 (`bench/models.json`의 docs) | https://github.com/vllm-project/recipes | Apache 2.0 |
-| vLLM 도구 호출 문서와 대화 틀 (v0.30.0) | Llama 4, Gemma 4 도구 호출 파서와 대화 틀 파일 (실행할 때 설치된 vLLM 버전의 파일을 받음) | https://github.com/vllm-project/vllm/blob/v0.30.0/docs/features/tool_calling.md | Apache 2.0 |
-| 모델 공식 문서 (EXAONE 4.5, Qwen3-VL, Qwen3.8, GLM) | 권장 생성 설정(temperature 등), 생각 끄기, 실행 옵션 | https://github.com/LG-AI-EXAONE/EXAONE-4.5, https://github.com/QwenLM/Qwen3-VL, https://github.com/QwenLM/Qwen3.8, https://github.com/zai-org/GLM-4.5 | 문서마다 다름 (참고만, 코드 복사 없음) |
+| 분류 | 직접 정하거나 지적한 내용 |
+|---|---|
+| 구조 | 정해진 순서로 도구를 부르는 구조는 에이전트가 아니라고 보고, AI가 목표와 도구 목록만 받아 스스로 고르는 구조로 바꿈 |
+| 역할 분담 | 숫자 계산은 코드만, 법 조문과 기준값은 법제처 API와 출처 있는 파일에서만 가져오게 정함 |
+| AI 글 | 조언이 400자에서 잘려 끝나는 문제를 찾아 글자 수 제한을 도구 설명에 두게 함. AI 글에 서버 내부 이름이 보이는 문제를 찾아 LLM이 다시 쓰게 함 |
+| 입력 | 월급날 말일, 쉬는 시간 직접 입력, "55만원" 같은 금액 입력, 이메일 검사가 한 곳에서 빠진 것을 지적 |
+| 화면 흐름 | 로그인 상태에서 단계를 건너뛰는 문제, 진행 칸이 두 개 겹치는 문제, 종합 점검이 끝없이 다시 도는 문제를 발견 |
+| 운영 | 실제 AI가 느려 100초에 끊기는 문제를 발견해 뒤에서 실행하게 함. 에이전트 실행을 사용자마다 대기줄로 차례로 돌게 정함 |
+| 디자인 | 미니멀 디자인 시안 3종 중 하나를 골라 적용, '사건' 대신 'AI 에이전트 진행 상황', '보복 대응' 대신 '신고 후 보호'로 문구를 정함 |
+
+## 제출 전에 확인할 것
+- [ ] Qwen3.8-27B 모델 카드의 라이선스
+- [ ] 위 표에서 원문 대조가 '필요'인 4개 기준값을 원문과 대조 (`data/law_params.json`의 `verified`)
+- [ ] 시연할 컴퓨터의 라이브러리 버전이 위 표와 다르면 고치기 (`pip freeze`)
