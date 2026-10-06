@@ -43,6 +43,12 @@ li{font-size:33px;line-height:1.55;color:#374151;margin:10px 0}
 .sq div{font-size:22px;line-height:1.5;color:#374151;margin:6px 0}
 .sq i{font-style:normal;font-weight:600;color:#111827;margin-right:12px}
 .ft .card{padding:24px 32px;gap:6px}.ft h3{font-size:28px}.ft li{font-size:23px;line-height:1.4;margin:4px 0}
+.ba p{font-size:24px;line-height:1.45}.sm h3{font-size:31px}.sm p{font-size:25px}
+.shots{display:flex;align-items:center;justify-content:center;gap:28px}
+.shots figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+.shots img{height:468px;width:auto;border-radius:18px;box-shadow:0 0 0 2px #e5e7eb}
+.shots figcaption{font-size:22px;color:#6b7280}
+.shots span{font-size:40px;color:#9ca3af}
 svg text{font-family:'IBM Plex Sans KR',sans-serif}
 </style></head><body>
 
@@ -206,11 +212,17 @@ svg text{font-family:'IBM Plex Sans KR',sans-serif}
 <!-- 9. 기술 -->
 <section class="s">
   <div><div class="k">핵심 구현 · 실제 모델로 부딪힌 문제</div><h2>문제를 구조로 풀었습니다</h2></div>
-  <div class="grid" style="grid-template-columns:1fr 1fr;gap:28px;font-size:1px">
-    <div class="card" style="padding:52px 50px"><h3>모델 선정: 후보 9개 → Qwen3.8-27B</h3><p>같은 시험으로 속도, 도구 호출, 판단, 사진 읽기, 한국어를 비교</p></div>
-    <div class="card" style="padding:52px 50px"><h3>100초에 끊기는 요청</h3><p>AI 점검은 서버가 뒤에서 실행하고, 화면은 작업 번호로 결과를 물음</p></div>
-    <div class="card" style="padding:52px 50px"><h3>AI 글의 품질</h3><p>잘린 글, 한자, 내부 이름은 몰래 고치지 않고 AI가 다시 쓰게 함</p></div>
-    <div class="card" style="padding:52px 50px"><h3>모델이 없어도 동작</h3><p>기록 · 계산은 계속되고, AI 판단은 대기했다가 연결되면 다시 맡김</p></div>
+  <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1.55fr);gap:28px;height:660px">
+    <div style="display:flex;flex-direction:column;gap:24px">
+      <div class="card sm" style="padding:30px 40px;flex:1;justify-content:center"><h3>모델 선정: 후보 9개 → Qwen3.8-27B</h3><p>같은 시험으로 속도, 도구 호출, 판단, 사진 읽기, 한국어를 비교</p></div>
+      <div class="card sm" style="padding:30px 40px;flex:1;justify-content:center"><h3>100초에 끊기는 요청</h3><p>AI 점검은 서버가 뒤에서 실행하고, 화면은 작업 번호로 결과를 물음</p></div>
+      <div class="card sm" style="padding:30px 40px;flex:1;justify-content:center"><h3>AI 글의 품질</h3><p>잘린 글, 한자, 내부 이름은 몰래 고치지 않고 AI가 다시 쓰게 함</p></div>
+    </div>
+    <div class="card ba" style="padding:28px 40px;gap:10px">
+      <h3>사용자 의견 반영: 미니멀 디자인</h3>
+      <p>요즘 디자인 흐름인 미니멀한 화면이 좋겠다는 의견을 반영해 고쳤습니다. 어두운 카드와 색 알약 대신 흰 카드와 여백, 검정 주 버튼, 색 점 상태로 바꾸고, 종합 점검은 한 줄 결론을 맨 위에 둡니다.</p>
+      <div class="shots"><figure><img src="img/홈_미니멀_전.png"><figcaption>변경 전</figcaption></figure><span>→</span><figure><img src="img/홈_미니멀_후.png"><figcaption>변경 후</figcaption></figure></div>
+    </div>
   </div>
   <div class="note">기존자산: 오픈소스 라이브러리, vLLM, Qwen3.8, 법제처 API · 신규개발: 앱 전체 (대회 전 코드 없음, 첫 코드 커밋 9/29)</div>
   <div class="no">9</div>
