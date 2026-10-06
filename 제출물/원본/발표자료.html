@@ -49,6 +49,10 @@ li{font-size:33px;line-height:1.55;color:#374151;margin:10px 0}
 .shots img{height:468px;width:auto;border-radius:18px;box-shadow:0 0 0 2px #e5e7eb}
 .shots figcaption{font-size:22px;color:#6b7280}
 .shots span{font-size:40px;color:#9ca3af}
+.demo .step{padding:24px 28px;gap:20px;align-items:center}.demo .step b{font-size:36px;min-width:36px}
+.demo .step div{font-size:30px}.demo .step span{font-size:23px;margin-top:6px}
+.vid{height:100%;aspect-ratio:1206/2622;border:3px dashed #4b5563;border-radius:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#9ca3af;font-size:28px;font-weight:600}
+.vid span{font-size:20px;font-weight:400;color:#6b7280}
 svg text{font-family:'IBM Plex Sans KR',sans-serif}
 </style></head><body>
 
@@ -158,15 +162,20 @@ svg text{font-family:'IBM Plex Sans KR',sans-serif}
 <!-- 6. 시연 -->
 <section class="s dark">
   <div><div class="k">실제 시연 · 2분 30초 (제출 영상)</div><h2>가상 사용자 홍길동(만 17세)의 가상분식 기록 (test2 계정)</h2></div>
-  <div class="grid" style="grid-template-columns:1fr 1fr;gap:22px">
+  <div style="display:flex;gap:40px;height:690px">
+    <div style="flex:1;display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div class="grid demo" style="grid-template-columns:1fr 1fr;gap:16px;flex:1">
     <div class="step"><b>1</b><div>홈 · 종합 점검<span>출퇴근 기록 15건을 에이전트가 모아 점검하고 한 줄 결론을 씀</span></div></div>
     <div class="step"><b>2</b><div>출근 · 퇴근<span>서버가 받은 시각으로 기록, 퇴근하면 에이전트가 그날 근무를 점검</span></div></div>
     <div class="step"><b>3</b><div>계약서 사진 읽기 → 점검<span>청소년 야간근로 · 하루 근로시간 한도 판단과 근거 조항</span></div></div>
     <div class="step"><b>4</b><div>에이전트 동작 보기<span>계획 → 도구 선택 · 실행 → 판단 → 검증 장치 → 다시 판단</span></div></div>
     <div class="step"><b>5</b><div>명세서 사진 읽기 → 급여 비교<span>코드 계산 878,232원 vs 받은 금액 753,360원 → 124,872원 적게 받음</span></div></div>
     <div class="step"><b>6</b><div>상담 사전 자료<span>기록 · 계산 · AI 판단 · 증거 목록(SHA-256)을 한 문서로</span></div></div>
+      </div>
+      <div class="note" style="color:#9ca3af">입력 → AI 판단 → 도구 실행 → 결과가 한 화면에서 이어집니다.</div>
+    </div>
+    <div class="vid">시연 영상<span>세로 1206 × 2622</span></div>
   </div>
-  <div class="note" style="color:#9ca3af">입력 → AI 판단 → 도구 실행 → 결과가 한 화면에서 이어집니다.</div>
   <div class="no">6</div>
 </section>
 
